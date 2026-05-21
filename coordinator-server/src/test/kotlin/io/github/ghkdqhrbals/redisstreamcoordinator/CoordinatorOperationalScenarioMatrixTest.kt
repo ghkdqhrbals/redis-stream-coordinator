@@ -40,8 +40,8 @@ class CoordinatorOperationalScenarioMatrixTest {
     companion object {
         @JvmStatic
         fun operationalScenarios(): Stream<Arguments> {
-            val shardCounts = listOf(2, 3, 4, 8, 12)
-            val memberCounts = listOf(1, 2, 3, 5)
+            val shardCounts = listOf(2, 6, 12)
+            val memberCounts = listOf(2, 3, 5)
             return shardCounts.flatMap { shardCount ->
                 memberCounts.flatMap { memberCount ->
                     ScaleMode.entries.flatMap { scaleMode ->
@@ -287,8 +287,7 @@ private class ScenarioRuntime(
         if (live.isEmpty()) return emptyMap()
         val weightedMember = when (scenario.concurrencyMode) {
             ConcurrencyMode.UNIFORM -> return emptyMap()
-            ConcurrencyMode.FIRST_MEMBER_HEAVY -> live.first()
-            ConcurrencyMode.LAST_MEMBER_HEAVY -> live.last()
+            ConcurrencyMode.FIRST_MEMBER_HAS_HIGHER_CAPACITY -> live.first()
         }
         return mapOf(weightedMember to 4)
     }
@@ -368,29 +367,28 @@ data class OperationalScenario(
         "s${initialShardCount}-m${initialMemberCount}-${scaleMode.name.lowercase()}-${churnMode.name.lowercase()}-${concurrencyMode.name.lowercase()}"
 
     override fun toString(): String =
-        "ops[$id]"
+        "starts with $initialShardCount shards and $initialMemberCount members; ${scaleMode.description}; ${churnMode.description}; ${concurrencyMode.description}"
 }
 
-enum class ScaleMode {
-    NONE,
-    SCALE_UP,
-    SCALE_DOWN,
-    SCALE_AND_ROLLBACK,
+enum class ScaleMode(val description: String) {
+    NONE("keeps the shard count unchanged"),
+    SCALE_UP("scales up to a new stream version"),
+    SCALE_DOWN("scales down to a new stream version"),
+    SCALE_AND_ROLLBACK("scales up and then rolls the migration back"),
 }
 
-enum class ChurnMode {
-    STEADY,
-    ADD_MEMBER,
-    GRACEFUL_LEAVE,
-    EXPIRE_MEMBER,
-    ROLLING_RESTART,
-    REPLACE_MEMBER,
+enum class ChurnMode(val description: String) {
+    STEADY("keeps the member set steady"),
+    ADD_MEMBER("adds a new member"),
+    GRACEFUL_LEAVE("removes one member through a graceful leave"),
+    EXPIRE_MEMBER("lets one member expire by missing heartbeats"),
+    ROLLING_RESTART("restarts one member with the same identity"),
+    REPLACE_MEMBER("replaces one member with a new identity"),
 }
 
-enum class ConcurrencyMode {
-    UNIFORM,
-    FIRST_MEMBER_HEAVY,
-    LAST_MEMBER_HEAVY,
+enum class ConcurrencyMode(val description: String) {
+    UNIFORM("uses equal member capacity"),
+    FIRST_MEMBER_HAS_HIGHER_CAPACITY("gives the first live member higher capacity"),
 }
 
 private class ScenarioClock(

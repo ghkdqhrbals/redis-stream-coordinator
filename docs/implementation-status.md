@@ -416,7 +416,7 @@ Implemented tests:
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
-* 1,440 Kafka-style operational matrix scenarios cover shard counts, member counts, scale up/down/rollback, steady/add/leave/expire/restart/replace churn, and uniform/skewed member capacity.
+* 432 focused Kafka-style operational matrix scenarios cover shard counts, member counts, scale up/down/rollback, steady/add/leave/expire/restart/replace churn, and uniform/skewed member capacity with descriptive scenario names.
 * In-memory state store supports create/get/save/list.
 * Coordinator state survives service instance replacement when the same state store is reused.
 * Redis state projection splits aggregate state into member, target, current assignment, migration, and active migration sections.

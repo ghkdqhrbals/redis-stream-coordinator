@@ -67,6 +67,9 @@ def render_page(title: str, body: str, nav: str) -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{escaped_title}</title>
     <style>
+      * {{
+        box-sizing: border-box;
+      }}
       :root {{
         color-scheme: light;
         --fg: #172026;
@@ -82,44 +85,39 @@ def render_page(title: str, body: str, nav: str) -> str:
         color: var(--fg);
         background: #ffffff;
         line-height: 1.62;
+        overflow-x: hidden;
       }}
       header {{
         border-bottom: 1px solid var(--border);
         background: var(--panel);
       }}
       .wrap {{
-        max-width: 1120px;
+        max-width: 920px;
         margin: 0 auto;
-        padding: 24px;
-      }}
-      .layout {{
-        display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
-        gap: 36px;
-        align-items: start;
+        padding: 24px clamp(16px, 4vw, 32px);
       }}
       nav {{
-        position: sticky;
-        top: 16px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 16px;
-        background: #ffffff;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 28px;
+        padding-bottom: 12px;
       }}
       nav a {{
-        display: block;
+        display: inline-block;
         color: var(--accent);
         text-decoration: none;
-        margin: 8px 0;
+        margin: 0 16px 8px 0;
+        overflow-wrap: anywhere;
       }}
       main {{
         min-width: 0;
+        max-width: 100%;
       }}
       h1, h2, h3 {{
         line-height: 1.25;
+        overflow-wrap: anywhere;
       }}
       h1 {{
-        font-size: 2.2rem;
+        font-size: clamp(1.75rem, 6vw, 2.35rem);
         margin-top: 0;
       }}
       h2 {{
@@ -132,9 +130,13 @@ def render_page(title: str, body: str, nav: str) -> str:
       }}
       a {{
         color: var(--accent);
+        overflow-wrap: anywhere;
       }}
       table {{
+        display: block;
         width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
         border-collapse: collapse;
         margin: 1rem 0;
       }}
@@ -142,6 +144,7 @@ def render_page(title: str, body: str, nav: str) -> str:
         border: 1px solid var(--border);
         padding: 8px 10px;
         vertical-align: top;
+        overflow-wrap: anywhere;
       }}
       th {{
         background: var(--panel);
@@ -150,8 +153,10 @@ def render_page(title: str, body: str, nav: str) -> str:
         background: var(--code);
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
       }}
       pre {{
+        max-width: 100%;
         overflow-x: auto;
         background: var(--code);
         border-radius: 8px;
@@ -167,13 +172,17 @@ def render_page(title: str, body: str, nav: str) -> str:
         color: var(--muted);
         background: var(--panel);
       }}
-      @media (max-width: 820px) {{
-        .layout {{
-          display: block;
+      img, svg {{
+        max-width: 100%;
+        height: auto;
+      }}
+      @media (max-width: 640px) {{
+        .wrap {{
+          padding-top: 18px;
+          padding-bottom: 18px;
         }}
-        nav {{
-          position: static;
-          margin-bottom: 24px;
+        th, td {{
+          min-width: 140px;
         }}
       }}
     </style>
@@ -184,7 +193,7 @@ def render_page(title: str, body: str, nav: str) -> str:
         <strong>Redis Stream Coordinator Design Docs</strong>
       </div>
     </header>
-    <div class="wrap layout">
+    <div class="wrap">
       <nav aria-label="Design document navigation">
 {nav}
       </nav>
