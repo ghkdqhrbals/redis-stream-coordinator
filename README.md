@@ -21,21 +21,12 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 
 ## Documentation
 
-The detailed design starts at [`redis-stream-coordinator/PRD.md`](redis-stream-coordinator/PRD.md).
-
-* [Context, Goals, Non-Goals](redis-stream-coordinator/prd/01-context-goals.md)
-* [Coordinator Architecture](redis-stream-coordinator/prd/02-coordinator-architecture.md)
-* [Group Metadata and Assignment Model](redis-stream-coordinator/prd/03-group-assignment-model.md)
-* [Stream Version Migration, Routing, and Admin API](redis-stream-coordinator/prd/04-stream-version-migration.md)
-* [Member Data-Plane Boundary](redis-stream-coordinator/prd/05-processing-reliability.md)
-* [Coordinator Data, Configuration, and Observability](redis-stream-coordinator/prd/06-data-config-observability.md)
-* [MVP Scope, Tradeoffs, Risks, and Open Questions](redis-stream-coordinator/prd/07-mvp-risks-open-questions.md)
-* [KIP-848 Implementation Coverage](redis-stream-coordinator/prd/08-kip848-implementation-coverage.md)
-* [Coordinator API Endpoints](redis-stream-coordinator/prd/09-api-endpoints.md)
+* [Implementation Status](docs/implementation-status.md)
+* [IntelliJ Setup](docs/intellij-setup.md)
 
 ## Current Status
 
-This repository currently focuses on product requirements and architecture design before implementation code. The goal is to define a practical reference for coordinator-driven shard count management, producer routing, consumer assignment, migration, and observability for Redis Stream based systems.
+This repository now includes an early Spring Boot/Kotlin coordinator server module. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, and a Codex review workflow.
 
 ## License
 

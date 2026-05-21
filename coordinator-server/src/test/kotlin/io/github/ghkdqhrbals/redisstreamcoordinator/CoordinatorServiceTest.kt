@@ -20,6 +20,7 @@ class CoordinatorServiceTest {
                 consumerMaxConcurrency = 4,
             ),
         ),
+        stateStore = InMemoryCoordinatorStateStore(),
         redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
         clock = Clock.fixed(Instant.parse("2026-05-21T00:00:00Z"), ZoneOffset.UTC),
     )
