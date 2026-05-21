@@ -92,7 +92,7 @@ jobs:
           TEST_EXIT_CODE: ${{ steps.gradle_test.outputs.exit_code }}
           TEST_LOG_TAIL: ${{ steps.gradle_test.outputs.log_tail }}
           TEST_REPORT_ARTIFACT_URL: ${{ steps.upload_test_report.outputs.artifact-url }}
-          TEST_REPORT_PAGE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}/
+          TEST_REPORT_PAGE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}/index.html
         with:
           github-token: ${{ github.token }}
           script: |
