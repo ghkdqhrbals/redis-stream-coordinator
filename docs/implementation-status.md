@@ -8,8 +8,8 @@ The repository now has a Spring Boot 4 / Kotlin / Java 24 Gradle module named `c
 
 The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, and basic monitoring responses.
 
-The coordinator state is currently stored in memory. Redis persistence is not implemented yet.
-The module is connected to a local three-node Redis Cluster for connectivity and future metadata-store work.
+The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
+The module is connected to a local three-node Redis Cluster for connectivity and metadata-store work.
 
 ## Build and Tooling
 
@@ -36,6 +36,23 @@ Verified:
 
 All passed.
 
+Local note: Gradle/Kotlin DSL currently fails when launched directly on Java 25, so the local test command uses JDK 17 as the Gradle launcher while the project still compiles with the configured Java 24 toolchain:
+
+```bash
+env JAVA_HOME=/Users/gyuminhwangbo/Library/Java/JavaVirtualMachines/corretto-17.0.10/Contents/Home ./gradlew :coordinator-server:test
+```
+
+Redis integration tests are gated so the default suite does not require Docker:
+
+```bash
+docker compose up -d
+REDIS_COORDINATOR_INTEGRATION_TESTS=true \
+  env JAVA_HOME=/Users/gyuminhwangbo/Library/Java/JavaVirtualMachines/corretto-17.0.10/Contents/Home \
+  ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest
+```
+
+On pull requests, the `PR test results` workflow runs PR code in a read-only test job, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, and updates a PR comment from a separate job that only has comment-related write permissions.
+
 ## Implemented Module
 
 Module:
@@ -53,6 +70,7 @@ Main files:
 * `CoordinatorErrors.kt`
 * `RedisStreamCoordinatorApplication.kt`
 * `application.yaml`
+* `CoordinatorStateStore.kt`
 * root `compose.yaml`
 
 ## Implemented API Surface
@@ -105,6 +123,11 @@ Implemented:
 * Optional Basic Auth for member heartbeat API via config.
 * Spring Data Redis dependency and Redis Cluster connectivity health check.
 * Lettuce node address mapping for local Docker Redis Cluster access from the host JVM.
+* `CoordinatorStateStore` abstraction with memory and Redis implementations.
+* Redis-backed group metadata persistence when `coordinator.store.type=redis`.
+* Redis projected keys for member metadata, target assignments, current assignments, active migration, and migration history.
+* Redis group-scoped aggregate/projection keys are replaced through one Lua script to avoid reader-visible partial projection updates.
+* Redis-backed saves use a coordinator `storeRevision` compare-and-set guard and retry mutation requests on transient state conflicts.
 
 ## Verified Runtime Smoke Test
 
@@ -140,7 +163,7 @@ Status:
   * `localhost:7003`
 * [x] All 16384 hash slots are assigned across the three nodes.
 * [x] Spring Boot module connects to the cluster through Lettuce.
-* [ ] Coordinator metadata is persisted to Redis keys.
+* [x] Coordinator group metadata can be persisted to Redis keys when `coordinator.store.type=redis`.
 
 Verified:
 
@@ -339,21 +362,22 @@ Expected response:
 * [x] Add Spring Redis Cluster configuration.
 * [x] Add Lettuce address mapping for host-to-Docker cluster access.
 * [x] Add Redis health check in coordinator health endpoint.
-* [ ] Add Redis integration tests.
+* [x] Add gated Redis integration tests.
 
 ### Phase 5: Redis-Backed Coordinator Store
 
-* [ ] Introduce `CoordinatorStateStore` abstraction.
-* [ ] Move current in-memory state behind `InMemoryCoordinatorStateStore`.
-* [ ] Implement Redis group metadata key.
-* [ ] Implement Redis member metadata keys.
-* [ ] Implement Redis target assignment key.
-* [ ] Implement Redis current assignment keys.
-* [ ] Implement Redis active migration key.
-* [ ] Implement Redis migration history keys.
+* [x] Introduce `CoordinatorStateStore` abstraction.
+* [x] Move current in-memory state behind `InMemoryCoordinatorStateStore`.
+* [x] Implement Redis group metadata key.
+* [x] Implement Redis member metadata keys.
+* [x] Implement Redis target assignment key.
+* [x] Implement Redis current assignment keys.
+* [x] Implement Redis active migration key.
+* [x] Implement Redis migration history keys.
+* [x] Implement Redis store revision key for stale write detection.
 * [ ] Implement Redis admin audit log.
-* [ ] Add optimistic concurrency or Lua transaction boundaries for coordinator mutations.
-* [ ] Add store-level tests.
+* [x] Add optimistic concurrency or Lua transaction boundaries for coordinator mutations.
+* [x] Add store-level tests.
 
 ### Phase 6: Redis Stream Shard Operations
 
@@ -382,19 +406,38 @@ Implemented tests:
 * First heartbeat assigns all readable shards to the first member.
 * New member receives moved shard as `pendingShards` until previous owner reports revoke.
 * Scale request creates next stream version and exposes old/new readable versions.
+* Duplicate group creation is rejected.
+* Invalid heartbeat path/body member mismatch is rejected.
+* Missing group heartbeat is rejected as `UNKNOWN_MEMBER_ID`.
+* Unknown member cannot leave by sending `memberEpoch=-1`.
+* Expired member is removed from target assignment and shards are reassigned after lease expiry.
+* Consumer concurrency policy changes rebalance target assignments by member weight.
+* Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
+* Rollback restores previous stream version and rejects unknown migration IDs.
+* Expired member can rejoin with `memberEpoch=0`.
+* In-memory state store supports create/get/save/list.
+* Coordinator state survives service instance replacement when the same state store is reused.
+* Redis state projection splits aggregate state into member, target, current assignment, migration, and active migration sections.
+* Redis key helper keeps group-scoped keys in a single Redis Cluster hash slot and preserves configured prefix formatting.
+* Redis-backed store rejects stale coordinator snapshots instead of overwriting newer state.
+* HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
+* Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
 
-Test file:
+Test files:
 
 ```text
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorServiceTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
 ```
 
 ## Not Implemented Yet
 
 Remaining work:
 
-* Redis-backed coordinator metadata store.
+* Full Redis-backed coordinator metadata store.
 * Redis key model from PRD:
   * group metadata
   * members
@@ -421,21 +464,11 @@ Explicitly still out of scope for the coordinator:
 * Handler execution.
 * Idempotency marker management.
 
-## Important Worktree Note
-
-The current worktree has deletions for the old PRD document directory:
-
-```text
-redis-stream-coordinator/
-```
-
-Those deletions were present during implementation and were not intentionally handled as part of the server work. Before committing, decide whether to restore those PRD files or intentionally remove them.
-
 ## Suggested Next Step
 
-Next implementation step should be to introduce a `CoordinatorStateStore` abstraction and provide:
+Next implementation step should be to harden Redis-backed operations:
 
-1. `InMemoryCoordinatorStateStore` as the current default.
-2. `RedisCoordinatorStateStore` backed by Redis keys from the PRD.
-
-That keeps the HTTP and reconciliation logic stable while moving persistence behind a store boundary.
+1. Keep group metadata as the aggregate source of truth during the transition.
+2. Add Redis integration tests that run against the local three-node cluster by default in CI.
+3. Add producer routing metadata API/cache.
+4. Promote projected Redis keys to read paths once the read model is ready.

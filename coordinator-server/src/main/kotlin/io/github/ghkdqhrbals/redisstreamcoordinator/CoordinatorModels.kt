@@ -153,6 +153,7 @@ data class MemberMetadata(
 data class GroupMetadata(
     val streamPrefix: String,
     val consumerGroup: String,
+    var storeRevision: Long = 0,
     var groupEpoch: Long,
     var metadataVersion: Long,
     var assignmentEpoch: Long,

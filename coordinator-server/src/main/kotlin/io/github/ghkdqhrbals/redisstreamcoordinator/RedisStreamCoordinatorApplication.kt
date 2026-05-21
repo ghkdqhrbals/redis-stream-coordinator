@@ -26,6 +26,7 @@ data class CoordinatorProperties(
     val memberLeaseTtl: Duration = Duration.ofSeconds(15),
     val api: Api = Api(),
     val redisCluster: RedisCluster = RedisCluster(),
+    val store: Store = Store(),
     val defaults: Defaults = Defaults(),
 ) {
     data class Api(
@@ -37,6 +38,16 @@ data class CoordinatorProperties(
     data class RedisCluster(
         val nodeMappings: List<NodeMapping> = emptyList(),
     )
+
+    data class Store(
+        val type: StoreType = StoreType.MEMORY,
+        val keyPrefix: String = "redis-stream:coord",
+    )
+
+    enum class StoreType {
+        MEMORY,
+        REDIS,
+    }
 
     data class NodeMapping(
         val advertisedHost: String,
