@@ -12,7 +12,7 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -55,13 +55,51 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Prepare browsable Test HTML report
+        id: test_report_html
+        if: always()
+        shell: bash
+        run: |
+          destination="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}"
+          report_dir="coordinator-server/build/reports/tests/test"
+          publish_dir="public-test-report"
+
+          mkdir -p "$publish_dir"
+          if [ -d "$report_dir" ]; then
+            cp -R "$report_dir"/. "$publish_dir"/
+          else
+            cat > "$publish_dir/index.html" <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8"><title>Coordinator Test Report</title></head>
+            <body>
+              <h1>Coordinator Test Report</h1>
+              <p>No Gradle Test HTML report was produced. Check the workflow log for the failure details.</p>
+            </body>
+          </html>
+          HTML
+          fi
+
+          echo "url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${destination}/index.html" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Test HTML report
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: public-test-report
+          destination_dir: pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}
+          keep_files: true
+          commit_message: "Publish PR test report for ${{ github.event.pull_request.head.sha }}"
+
       - name: Prepare PR test result comment
         if: always()
         uses: actions/github-script@v7
         env:
           TEST_EXIT_CODE: ${{ steps.gradle_test.outputs.exit_code }}
           TEST_LOG_TAIL: ${{ steps.gradle_test.outputs.log_tail }}
-          TEST_REPORT_ARTIFACT_URL: ${{ steps.upload_test_report.outputs.artifact-url }}
+          TEST_REPORT_HTML_URL: ${{ steps.test_report_html.outputs.url }}
         with:
           script: |
             const fs = require('fs');
@@ -71,7 +109,7 @@ jobs:
             const exitCode = process.env.TEST_EXIT_CODE || 'unknown';
             const passed = exitCode === '0';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const artifactUrl = process.env.TEST_REPORT_ARTIFACT_URL || `${runUrl}#artifacts`;
+            const htmlReportUrl = process.env.TEST_REPORT_HTML_URL || runUrl;
             const logTail = process.env.TEST_LOG_TAIL || '(no test output captured)';
             const testResultsDir = 'coordinator-server/build/test-results/test';
 
@@ -172,7 +210,7 @@ jobs:
               `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
               `- Exit code: \`${exitCode}\``,
               `- Run: ${runUrl}`,
-              `- Downloadable report artifact: [coordinator-gradle-test-report](${artifactUrl})`,
+              `- Test HTML report: [Open browsable report](${htmlReportUrl})`,
               `- Scenario totals: ${passCount} passed, ${scenarios.totals.failures} failed, ${scenarios.totals.errors} errored, ${scenarios.totals.skipped} skipped`,
               '',
               '### Scenario Tests',
