@@ -44,6 +44,18 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           exit "$status"
 
+      - name: Upload Gradle test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coordinator-gradle-test-report
+          path: |
+            coordinator-server/build/reports/tests/test/**
+            coordinator-server/build/test-results/test/TEST-*.xml
+            gradle-test.log
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Post PR test result
         if: always()
         uses: actions/github-script@v7
@@ -53,11 +65,102 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
+            const fs = require('fs');
+            const path = require('path');
+
             const marker = '<!-- pr-test-results -->';
             const exitCode = process.env.TEST_EXIT_CODE || 'unknown';
             const passed = exitCode === '0';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const artifactUrl = `${runUrl}#artifacts`;
             const logTail = process.env.TEST_LOG_TAIL || '(no test output captured)';
+            const testResultsDir = 'coordinator-server/build/test-results/test';
+
+            function decodeXml(value) {
+              return value
+                .replace(/&quot;/g, '"')
+                .replace(/&apos;/g, "'")
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&');
+            }
+
+            function attrs(tag) {
+              return Object.fromEntries(
+                [...tag.matchAll(/([A-Za-z_:][-A-Za-z0-9_:.]*)="([^"]*)"/g)]
+                  .map(([, key, value]) => [key, decodeXml(value)])
+              );
+            }
+
+            function scenarioRows() {
+              if (!fs.existsSync(testResultsDir)) {
+                return {
+                  totals: { tests: 0, failures: 0, errors: 0, skipped: 0 },
+                  markdown: '_No JUnit XML files were produced. The build may have failed before test execution._',
+                };
+              }
+
+              const suites = fs.readdirSync(testResultsDir)
+                .filter((file) => file.startsWith('TEST-') && file.endsWith('.xml'))
+                .sort()
+                .map((file) => {
+                  const xml = fs.readFileSync(path.join(testResultsDir, file), 'utf8');
+                  const suiteAttrs = attrs(xml.match(/<testsuite\b[^>]*>/)?.[0] || '');
+                  const testcases = [...xml.matchAll(/<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g)]
+                    .map((match) => {
+                      const testcaseAttrs = attrs(`<testcase ${match[1] || match[3] || ''}>`);
+                      const body = match[2] || '';
+                      const status = body.includes('<failure') ? 'failed'
+                        : body.includes('<error') ? 'error'
+                        : body.includes('<skipped') ? 'skipped'
+                        : 'passed';
+                      return {
+                        className: testcaseAttrs.classname || suiteAttrs.name || file,
+                        name: testcaseAttrs.name || '(unnamed scenario)',
+                        status,
+                      };
+                    });
+                  return {
+                    name: suiteAttrs.name || file.replace(/^TEST-/, '').replace(/\.xml$/, ''),
+                    tests: Number(suiteAttrs.tests || testcases.length || 0),
+                    failures: Number(suiteAttrs.failures || 0),
+                    errors: Number(suiteAttrs.errors || 0),
+                    skipped: Number(suiteAttrs.skipped || 0),
+                    testcases,
+                  };
+                });
+
+              const totals = suites.reduce((acc, suite) => ({
+                tests: acc.tests + suite.tests,
+                failures: acc.failures + suite.failures,
+                errors: acc.errors + suite.errors,
+                skipped: acc.skipped + suite.skipped,
+              }), { tests: 0, failures: 0, errors: 0, skipped: 0 });
+
+              const statusLabel = { passed: 'PASS', skipped: 'SKIP', failed: 'FAIL', error: 'ERROR' };
+              const markdown = suites.map((suite) => {
+                const className = suite.name.split('.').pop();
+                const rows = suite.testcases
+                  .map((testcase) => `- [${statusLabel[testcase.status]}] \`${testcase.name}\``)
+                  .join('\n');
+                return [
+                  `<details${suite.failures || suite.errors ? ' open' : ''}>`,
+                  `<summary><strong>${className}</strong> (${suite.tests} tests, ${suite.skipped} skipped)</summary>`,
+                  '',
+                  rows || '- _No scenario names found in this suite._',
+                  '',
+                  '</details>',
+                ].join('\n');
+              }).join('\n\n');
+
+              return { totals, markdown };
+            }
+
+            const scenarios = scenarioRows();
+            const passCount = Math.max(
+              scenarios.totals.tests - scenarios.totals.failures - scenarios.totals.errors - scenarios.totals.skipped,
+              0
+            );
             const body = [
               marker,
               `## ${passed ? 'Passed' : 'Failed'}: PR test results`,
@@ -66,6 +169,12 @@ jobs:
               `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
               `- Exit code: \`${exitCode}\``,
               `- Run: ${runUrl}`,
+              `- HTML/JUnit report artifact: [coordinator-gradle-test-report](${artifactUrl})`,
+              `- Scenario totals: ${passCount} passed, ${scenarios.totals.failures} failed, ${scenarios.totals.errors} errored, ${scenarios.totals.skipped} skipped`,
+              '',
+              '### Scenario Tests',
+              '',
+              scenarios.markdown,
               '',
               '<details>',
               '<summary>Last 80 log lines</summary>',

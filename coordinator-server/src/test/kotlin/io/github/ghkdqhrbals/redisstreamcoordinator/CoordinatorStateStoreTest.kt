@@ -64,6 +64,61 @@ class CoordinatorStateStoreTest {
         assertEquals(heartbeat.memberEpoch, members.members.single().memberEpoch)
     }
 
+    @Test
+    fun `redis coordinator keys keep group scoped keys in the same cluster hash slot`() {
+        val keys = RedisCoordinatorStateKeys("redis-stream:coord:")
+            .forGroup(GroupKey("orders", "orders-consumer"))
+
+        assertEquals("redis-stream:coord:{orders:orders-consumer}:group", keys.group)
+        assertEquals("redis-stream:coord:{orders:orders-consumer}:members", keys.members)
+        assertEquals("redis-stream:coord:{orders:orders-consumer}:target-assignments", keys.targetAssignments)
+        assertEquals("redis-stream:coord:{orders:orders-consumer}:current-assignments", keys.currentAssignments)
+        assertEquals("redis-stream:coord:{orders:orders-consumer}:migrations", keys.migrations)
+        assertEquals("redis-stream:coord:{orders:orders-consumer}:active-migration", keys.activeMigration)
+    }
+
+    @Test
+    fun `redis projection splits aggregate state into PRD key model sections`() {
+        val key = GroupKey("orders", "orders-consumer")
+        val group = groupMetadata(key)
+        val member = MemberMetadata(
+            memberId = "member-a",
+            memberName = "member-a",
+            state = MemberState.ACTIVE,
+            memberEpoch = 2,
+            metadataVersion = 3,
+            assignedMaxConcurrency = 4,
+            runtimeMaxConcurrency = 4,
+            activeConsumerWorkers = 1,
+            currentAssignment = setOf(ShardId(1, 0)),
+            revoking = emptySet(),
+            lastHeartbeatAt = Instant.now(clock),
+            memberLeaseExpiresAt = Instant.now(clock).plusSeconds(15),
+        )
+        val migration = Migration(
+            migrationId = "mig-1",
+            fromVersion = 1,
+            toVersion = 2,
+            fromShardCount = 4,
+            toShardCount = 8,
+            state = MigrationState.ACTIVE,
+            createdAt = Instant.now(clock),
+            updatedAt = Instant.now(clock),
+        )
+        group.members[member.memberId] = member
+        group.targetAssignments[member.memberId] = mutableSetOf(ShardId(1, 0), ShardId(1, 1))
+        group.migrations[migration.migrationId] = migration
+        group.activeMigrationId = migration.migrationId
+
+        val projection = group.toRedisStateProjection()
+
+        assertEquals(setOf("member-a"), projection.members.keys)
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), projection.targetAssignments.getValue("member-a"))
+        assertEquals(setOf(ShardId(1, 0)), projection.currentAssignments.getValue("member-a"))
+        assertEquals(setOf("mig-1"), projection.migrations.keys)
+        assertEquals("mig-1", projection.activeMigrationId)
+    }
+
     private fun service(store: CoordinatorStateStore): CoordinatorService =
         CoordinatorService(
             properties = properties,

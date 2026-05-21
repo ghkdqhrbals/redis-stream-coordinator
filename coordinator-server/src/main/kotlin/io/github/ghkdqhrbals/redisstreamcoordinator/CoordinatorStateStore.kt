@@ -44,34 +44,106 @@ class RedisCoordinatorStateStore(
     private val objectMapper: ObjectMapper,
     private val properties: CoordinatorProperties,
 ) : CoordinatorStateStore {
+    private val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
+
     override fun contains(key: GroupKey): Boolean =
-        redisTemplate.hasKey(groupKey(key))
+        redisTemplate.hasKey(keys.forGroup(key).group)
 
     override fun get(key: GroupKey): GroupMetadata? =
-        redisTemplate.opsForValue().get(groupKey(key))?.let { objectMapper.readValue<GroupMetadata>(it) }
+        redisTemplate.opsForValue().get(keys.forGroup(key).group)?.let { objectMapper.readValue<GroupMetadata>(it) }
 
     override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean {
-        val stored = redisTemplate.opsForValue().setIfAbsent(groupKey(key), objectMapper.writeValueAsString(group))
+        val groupKeys = keys.forGroup(key)
+        val stored = redisTemplate.opsForValue().setIfAbsent(groupKeys.group, objectMapper.writeValueAsString(group))
         if (stored == true) {
-            redisTemplate.opsForSet().add(groupsIndexKey(), groupKey(key))
+            redisTemplate.opsForSet().add(keys.groupsIndex, groupKeys.group)
+            writeProjectedKeys(groupKeys, group)
         }
         return stored == true
     }
 
     override fun save(key: GroupKey, group: GroupMetadata) {
-        redisTemplate.opsForValue().set(groupKey(key), objectMapper.writeValueAsString(group))
-        redisTemplate.opsForSet().add(groupsIndexKey(), groupKey(key))
+        val groupKeys = keys.forGroup(key)
+        redisTemplate.opsForValue().set(groupKeys.group, objectMapper.writeValueAsString(group))
+        redisTemplate.opsForSet().add(keys.groupsIndex, groupKeys.group)
+        writeProjectedKeys(groupKeys, group)
     }
 
     override fun list(): List<GroupMetadata> =
-        redisTemplate.opsForSet().members(groupsIndexKey())
+        redisTemplate.opsForSet().members(keys.groupsIndex)
             .orEmpty()
             .mapNotNull { redisTemplate.opsForValue().get(it) }
             .map { objectMapper.readValue<GroupMetadata>(it) }
 
-    private fun groupKey(key: GroupKey): String =
-        "${properties.store.keyPrefix}:{${key.streamPrefix}:${key.consumerGroup}}:group"
+    private fun writeProjectedKeys(keys: RedisCoordinatorGroupKeys, group: GroupMetadata) {
+        val projection = group.toRedisStateProjection()
+        replaceHash(keys.members, projection.members)
+        replaceHash(keys.targetAssignments, projection.targetAssignments)
+        replaceHash(keys.currentAssignments, projection.currentAssignments)
+        replaceHash(keys.migrations, projection.migrations)
 
-    private fun groupsIndexKey(): String =
-        "${properties.store.keyPrefix}:groups"
+        projection.activeMigrationId?.let {
+            redisTemplate.opsForValue().set(keys.activeMigration, it)
+        } ?: redisTemplate.delete(keys.activeMigration)
+    }
+
+    private fun replaceHash(key: String, values: Map<String, Any>) {
+        redisTemplate.delete(key)
+        if (values.isNotEmpty()) {
+            redisTemplate.opsForHash<String, String>().putAll(
+                key,
+                values.mapValues { (_, value) -> objectMapper.writeValueAsString(value) },
+            )
+        }
+    }
 }
+
+data class RedisCoordinatorStateProjection(
+    val members: Map<String, MemberMetadata>,
+    val targetAssignments: Map<String, Set<ShardId>>,
+    val currentAssignments: Map<String, Set<ShardId>>,
+    val migrations: Map<String, Migration>,
+    val activeMigrationId: String?,
+)
+
+fun GroupMetadata.toRedisStateProjection(): RedisCoordinatorStateProjection =
+    RedisCoordinatorStateProjection(
+        members = members.toSortedMap(),
+        targetAssignments = targetAssignments
+            .mapValues { (_, shards) -> shards.toSortedSet() }
+            .toSortedMap(),
+        currentAssignments = members
+            .mapValues { (_, member) -> member.currentAssignment.toSortedSet() }
+            .toSortedMap(),
+        migrations = migrations.toSortedMap(),
+        activeMigrationId = activeMigrationId,
+    )
+
+class RedisCoordinatorStateKeys(
+    keyPrefix: String,
+) {
+    private val prefix = keyPrefix.trimEnd(':')
+
+    val groupsIndex: String = "$prefix:groups"
+
+    fun forGroup(key: GroupKey): RedisCoordinatorGroupKeys {
+        val tag = "{${key.streamPrefix}:${key.consumerGroup}}"
+        return RedisCoordinatorGroupKeys(
+            group = "$prefix:$tag:group",
+            members = "$prefix:$tag:members",
+            targetAssignments = "$prefix:$tag:target-assignments",
+            currentAssignments = "$prefix:$tag:current-assignments",
+            migrations = "$prefix:$tag:migrations",
+            activeMigration = "$prefix:$tag:active-migration",
+        )
+    }
+}
+
+data class RedisCoordinatorGroupKeys(
+    val group: String,
+    val members: String,
+    val targetAssignments: String,
+    val currentAssignments: String,
+    val migrations: String,
+    val activeMigration: String,
+)
