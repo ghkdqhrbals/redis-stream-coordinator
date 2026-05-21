@@ -217,7 +217,7 @@ class CoordinatorService(
         }
 
         val now = Instant.now(clock)
-        expireMembers(group, now)
+        val membersExpired = expireMembers(group, now)
         val existing = group.members[memberId]
         val member = when {
             request.memberEpoch == 0L -> registerOrRejoinMember(group, memberId, request, now)
@@ -225,8 +225,15 @@ class CoordinatorService(
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
             request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
             existing == null -> return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
-            existing.state == MemberState.FENCED || request.memberEpoch > existing.memberEpoch ->
+            existing.state == MemberState.FENCED ||
+                existing.state == MemberState.EXPIRED ||
+                request.memberEpoch > existing.memberEpoch ||
+                (request.memberEpoch > 0 && request.memberEpoch < existing.memberEpoch) -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
                 return fencedHeartbeat(group, request, memberId, existing)
+            }
             else -> existing
         }
 

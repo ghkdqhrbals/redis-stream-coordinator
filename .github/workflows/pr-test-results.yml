@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: gh-pages-publish
+  cancel-in-progress: false
+
 jobs:
   test:
     if: github.event.pull_request.draft == false
@@ -129,11 +133,12 @@ jobs:
               );
             }
 
-            function scenarioRows() {
+            function readSuites() {
               if (!fs.existsSync(testResultsDir)) {
                 return {
                   totals: { tests: 0, failures: 0, errors: 0, skipped: 0 },
-                  markdown: '_No JUnit XML files were produced. The build may have failed before test execution._',
+                  suites: [],
+                  failedCases: [],
                 };
               }
 
@@ -174,33 +179,22 @@ jobs:
                 skipped: acc.skipped + suite.skipped,
               }), { tests: 0, failures: 0, errors: 0, skipped: 0 });
 
-              const statusLabel = { passed: 'PASS', skipped: 'SKIP', failed: 'FAIL', error: 'ERROR' };
-              const maxRowsPerSuite = 80;
-              const markdown = suites.map((suite) => {
-                const className = suite.name.split('.').pop();
-                const visibleTestcases = suite.testcases.slice(0, maxRowsPerSuite);
-                const rows = visibleTestcases
-                  .map((testcase) => `- [${statusLabel[testcase.status]}] \`${testcase.name}\``)
-                  .join('\n');
-                const hiddenCount = Math.max(suite.testcases.length - visibleTestcases.length, 0);
-                return [
-                  `<details${suite.failures || suite.errors ? ' open' : ''}>`,
-                  `<summary><strong>${className}</strong> (${suite.tests} tests, ${suite.skipped} skipped)</summary>`,
-                  '',
-                  rows || '- _No scenario names found in this suite._',
-                  hiddenCount > 0 ? `\n_${hiddenCount} additional scenarios are available in the browsable HTML report._` : '',
-                  '',
-                  '</details>',
-                ].join('\n');
-              }).join('\n\n');
+              const failedCases = suites.flatMap((suite) =>
+                suite.testcases
+                  .filter((testcase) => testcase.status === 'failed' || testcase.status === 'error')
+                  .map((testcase) => `${suite.name.split('.').pop()}: ${testcase.name}`)
+              );
 
-              return { totals, markdown };
+              return { totals, suites, failedCases };
             }
 
-            const scenarios = scenarioRows();
+            const results = readSuites();
             const passCount = Math.max(
-              scenarios.totals.tests - scenarios.totals.failures - scenarios.totals.errors - scenarios.totals.skipped,
+              results.totals.tests - results.totals.failures - results.totals.errors - results.totals.skipped,
               0
+            );
+            const operationalSuite = results.suites.find((suite) =>
+              suite.name.endsWith('CoordinatorOperationalScenarioMatrixTest')
             );
             const body = [
               marker,
@@ -208,26 +202,30 @@ jobs:
               '',
               `- Commit: \`${context.payload.pull_request.head.sha}\``,
               `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
-              `- Exit code: \`${exitCode}\``,
-              `- Run: ${runUrl}`,
-              `- Test HTML report: [Open browsable report](${htmlReportUrl})`,
-              `- Scenario totals: ${passCount} passed, ${scenarios.totals.failures} failed, ${scenarios.totals.errors} errored, ${scenarios.totals.skipped} skipped`,
-              '',
-              '### Scenario Tests',
-              '',
-              scenarios.markdown,
-              '',
-              '<details>',
-              '<summary>Last 80 log lines</summary>',
-              '',
-              '```text',
-              logTail.slice(-12000),
-              '```',
-              '</details>',
-            ].join('\n');
+              `- Result: ${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`,
+              operationalSuite ? `- Operational scenario matrix: ${operationalSuite.tests} scenarios` : '- Operational scenario matrix: not found',
+              `- Links: [workflow run](${runUrl}) / [Test HTML report](${htmlReportUrl})`,
+            ];
+
+            if (results.failedCases.length > 0) {
+              body.push('', '### Failed Cases', '', ...results.failedCases.slice(0, 20).map((testcase) => `- \`${testcase}\``));
+            }
+
+            if (!passed) {
+              body.push(
+                '',
+                '<details open>',
+                '<summary>Last 80 log lines</summary>',
+                '',
+                '```text',
+                logTail.slice(-12000),
+                '```',
+                '</details>',
+              );
+            }
 
             fs.mkdirSync('pr-test-result-comment', { recursive: true });
-            fs.writeFileSync('pr-test-result-comment/body.md', body);
+            fs.writeFileSync('pr-test-result-comment/body.md', body.join('\n'));
 
       - name: Upload PR test result comment
         if: always()

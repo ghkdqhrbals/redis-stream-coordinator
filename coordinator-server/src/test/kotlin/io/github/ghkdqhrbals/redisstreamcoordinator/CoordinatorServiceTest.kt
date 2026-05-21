@@ -277,6 +277,122 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `replacement coordinator resumes pending revoke after previous coordinator stops`() {
+        val sharedStore = InMemoryCoordinatorStateStore()
+        val firstCoordinator = service(clock, sharedStore)
+        firstCoordinator.createGroup("failover", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = firstCoordinator.heartbeat(
+            "failover",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        firstCoordinator.heartbeat(
+            "failover",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+
+        val memberB = firstCoordinator.heartbeat(
+            "failover",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        assertEquals(setOf(ShardId(1, 1)), memberB.assignment.pendingShards)
+
+        val replacementCoordinator = service(clock, sharedStore)
+        val revokeAck = replacementCoordinator.heartbeat(
+            "failover",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberA.memberEpoch,
+                ownedShards = setOf(ShardId(1, 0)),
+                revokingShards = listOf(RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED)),
+            ),
+        )
+        val assignedToB = replacementCoordinator.heartbeat(
+            "failover",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch),
+        )
+
+        assertEquals(setOf(ShardId(1, 0)), revokeAck.assignment.assignedShards)
+        assertEquals(setOf(ShardId(1, 1)), assignedToB.assignment.assignedShards)
+        assertTrue(replacementCoordinator.assignments("failover", "orders-consumer").invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `stale member epoch after acknowledged rebalance is fenced`() {
+        service.createGroup("stale-epoch", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "stale-epoch",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val acknowledged = service.heartbeat(
+            "stale-epoch",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+
+        val stale = service.heartbeat(
+            "stale-epoch",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = acknowledged.memberEpoch - 1, ownedShards = memberA.assignment.assignedShards),
+        )
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, stale.status)
+        assertEquals(acknowledged.memberEpoch, stale.memberEpoch)
+        assertTrue(stale.assignment.assignedShards.isEmpty())
+        assertTrue(stale.assignment.pendingShards.isEmpty())
+    }
+
+    @Test
+    fun `expired old consumer returning with stale ownership is fenced`() {
+        service.createGroup("expired-return", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "expired-return",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "expired-return",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        clock.advance(Duration.ofSeconds(16))
+        val memberB = service.heartbeat(
+            "expired-return",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+
+        val staleMemberA = service.heartbeat(
+            "expired-return",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        val assignments = service.assignments("expired-return", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, staleMemberA.status)
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), memberB.assignment.assignedShards)
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-b"))
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
     fun `scale creates next stream version and includes old and new readable versions`() {
         service.createGroup("summary", "summary-consumer", createGroupRequest(initialShardCount = 2))
 
@@ -298,6 +414,9 @@ class CoordinatorServiceTest {
     }
 
     private fun service(clock: Clock): CoordinatorService =
+        service(clock, InMemoryCoordinatorStateStore())
+
+    private fun service(clock: Clock, stateStore: CoordinatorStateStore): CoordinatorService =
         CoordinatorService(
             properties = CoordinatorProperties(
                 heartbeatInterval = Duration.ofSeconds(3),
@@ -307,7 +426,7 @@ class CoordinatorServiceTest {
                     consumerMaxConcurrency = 4,
                 ),
             ),
-            stateStore = InMemoryCoordinatorStateStore(),
+            stateStore = stateStore,
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
             clock = clock,
         )
