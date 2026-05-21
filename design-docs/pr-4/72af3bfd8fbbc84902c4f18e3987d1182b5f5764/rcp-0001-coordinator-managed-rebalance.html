@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RCP-0001: Coordinator-Managed Redis Stream Rebalance Protocol</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #0f766e;
+        --code: #eef3f7;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.98rem, 0.92rem + 0.25vw, 1.05rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.62;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .wrap {
+        width: min(100%, 920px);
+        margin: 0 auto;
+        padding: clamp(18px, 4vw, 32px);
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 28px;
+        padding-bottom: 12px;
+      }
+      nav a {
+        color: var(--accent);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+      }
+      h1, h2, h3 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.75rem, 1.36rem + 1.65vw, 2.35rem);
+        margin-top: 0;
+      }
+      h2 {
+        margin-top: 2.1rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.35rem;
+      }
+      h3 {
+        margin-top: 1.6rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .responsive-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 8px;
+        padding: 16px;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 1rem 0;
+        padding: 0.3rem 1rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(7.5rem, 34%) minmax(0, 1fr);
+          gap: 12px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 18px;
+          padding-bottom: 18px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <strong>Redis Stream Coordinator Design Docs</strong>
+      </div>
+    </header>
+    <div class="wrap">
+      <nav aria-label="Design document navigation">
+        <a href="index.html">Redis Stream Coordinator Design Docs</a>
+        <a href="rcp-0001-coordinator-managed-rebalance.html">RCP-0001: Coordinator-Managed Redis Stream Rebalance Protocol</a>
+      </nav>
+      <main>
+<h1 id="rcp-0001-coordinator-managed-redis-stream-rebalance-protocol">RCP-0001: Coordinator-Managed Redis Stream Rebalance Protocol</h1>
+<h2 id="status">Status</h2>
+<p>Draft implementation on <code>feature/coordinator</code>.</p>
+<h2 id="summary">Summary</h2>
+<p>Redis Stream Coordinator moves shard ownership and rebalance decisions from
+consumer clients into a coordinator service. The shape is intentionally close to
+Kafka KIP-848: members heartbeat with their current epoch and owned shards, the
+coordinator persists the target assignment, and consumers incrementally converge
+without a stop-the-world group sync.</p>
+<p>Reference: <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A%2BThe%2BNext%2BGeneration%2Bof%2Bthe%2BConsumer%2BRebalance%2BProtocol">KIP-848: The Next Generation of the Consumer Rebalance Protocol</a>.</p>
+<h2 id="motivation">Motivation</h2>
+<p>A single Redis Stream key can become a BigKey and is pinned to one Redis Cluster
+hash slot. A production workload needs a control plane that can split a logical
+stream across many stream keys, move consumers safely when capacity changes, and
+change shard counts without losing ownership guarantees.</p>
+<p>Client-side assignment alone is hard to operate because each consumer must
+understand the full group state, membership changes, and stream version
+migrations. A coordinator-owned assignment model makes the operational state
+inspectable and gives the cluster one source of truth for fencing, migration,
+and convergence.</p>
+<h2 id="goals">Goals</h2>
+<ul>
+<li>Persist group metadata, member metadata, target assignments, current ownership,
+  and active migrations outside of a single coordinator process.</li>
+<li>Support incremental shard movement when members join, leave, expire, restart,
+  or change capacity.</li>
+<li>Fence stale members after they have already acknowledged a newer member epoch.</li>
+<li>Resume a pending revoke and assignment handoff after coordinator process
+  replacement.</li>
+<li>Protect Redis-backed state updates with optimistic revision checks so multiple
+  coordinators cannot silently overwrite each other.</li>
+<li>Publish design documents as browsable HTML separately from the code tree.</li>
+</ul>
+<h2 id="non-goals">Non-Goals</h2>
+<ul>
+<li>Reimplement Redis Stream storage or consumer group internals.</li>
+<li>Guarantee exactly-once user processing. The protocol only controls shard
+  ownership and handoff.</li>
+<li>Remove the need for consumers to drain in-flight records before revoking a
+  shard.</li>
+<li>Provide a full producer SDK in this proposal.</li>
+</ul>
+<h2 id="public-interfaces">Public Interfaces</h2>
+<h3 id="admin-api">Admin API</h3>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Method"><code>POST</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
+<td data-label="Purpose">Create a logical stream group.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
+<td data-label="Purpose">Read group metadata and assignment summaries.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>POST</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale</code></td>
+<td data-label="Purpose">Start a new stream version with a target shard count.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>PATCH</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency</code></td>
+<td data-label="Purpose">Update capacity weights used by assignment.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}</code></td>
+<td data-label="Purpose">Inspect a migration.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>POST</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}/rollback</code></td>
+<td data-label="Purpose">Roll back an active migration.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="member-api">Member API</h3>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Method"><code>POST</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat</code></td>
+<td data-label="Purpose">Join, heartbeat, report ownership, report revoke progress, or leave.</td>
+</tr>
+</tbody>
+</table>
+<p>Heartbeat statuses:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Status"><code>OK</code></td>
+<td data-label="Meaning">The heartbeat was accepted and includes the current assignment view.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>UNKNOWN_MEMBER_ID</code></td>
+<td data-label="Meaning">The group/member is not known in the requested context.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>FENCED_MEMBER_EPOCH</code></td>
+<td data-label="Meaning">The member has a stale or invalid epoch and must drop ownership before rejoining.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>UNSUPPORTED_PROTOCOL</code></td>
+<td data-label="Meaning">The client protocol version is not supported.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>INVALID_REQUEST</code></td>
+<td data-label="Meaning">The path member id and body member id do not match.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="monitoring-api">Monitoring API</h3>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/health</code></td>
+<td data-label="Purpose">Coordinator and Redis health.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/groups</code></td>
+<td data-label="Purpose">List known groups.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members</code></td>
+<td data-label="Purpose">Inspect member state.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments</code></td>
+<td data-label="Purpose">Inspect target/current assignments and invariant violations.</td>
+</tr>
+<tr>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations</code></td>
+<td data-label="Purpose">List migrations.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="protocol-model">Protocol Model</h2>
+<h3 id="group-epoch-and-assignment-epoch">Group Epoch and Assignment Epoch</h3>
+<p><code>groupEpoch</code> advances whenever membership, migration, capacity policy, or member
+expiration changes the group. <code>assignmentEpoch</code> follows <code>groupEpoch</code> after
+target assignment recomputation. A member can heartbeat with its last accepted
+epoch until the coordinator responds with the new assignment epoch. After that
+acknowledgement, an older duplicate heartbeat is fenced.</p>
+<p>Capacity policy changes have one extra rule: if the policy update does not move
+any target shard, only <code>metadataVersion</code> advances. If it does move target
+assignments, <code>groupEpoch</code> and <code>assignmentEpoch</code> advance exactly once for that
+rebalance.</p>
+<h3 id="member-lifecycle">Member Lifecycle</h3>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>State</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="State"><code>STARTING</code></td>
+<td data-label="Description">A member has joined but has not fully converged.</td>
+</tr>
+<tr>
+<td data-label="State"><code>ACTIVE</code></td>
+<td data-label="Description">A member is live and can own target shards.</td>
+</tr>
+<tr>
+<td data-label="State"><code>LEAVING</code></td>
+<td data-label="Description">A member is voluntarily leaving and should release ownership.</td>
+</tr>
+<tr>
+<td data-label="State"><code>EXPIRED</code></td>
+<td data-label="Description">The lease elapsed. The member no longer blocks reassignment.</td>
+</tr>
+<tr>
+<td data-label="State"><code>FENCED</code></td>
+<td data-label="Description">The member must stop using its current identity and rejoin.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="assignment-handoff">Assignment Handoff</h3>
+<p>The coordinator computes <code>targetAssignments</code>. Members report
+<code>currentAssignment</code> and <code>revokingShards</code>. A shard that moves to a new member is
+returned as <code>pending</code> until the previous live owner reports it as revoked or the
+previous owner expires. This prevents two active members from consuming the same
+shard during normal handoff.</p>
+<h3 id="stream-version-migration">Stream Version Migration</h3>
+<p>Scaling creates a new stream version instead of rewriting existing stream keys.
+During an active migration, both the previous and new stream versions are
+readable. Rollback removes the new version from the readable set and restores
+the previous active write version.</p>
+<h2 id="operational-edge-cases">Operational Edge Cases</h2>
+<h3 id="coordinator-dies-during-rebalance">Coordinator Dies During Rebalance</h3>
+<p>The coordinator persists group state before replying to heartbeats. A replacement
+coordinator loads the same store, sees the pending revoke, and continues the
+handoff from the latest target/current assignment state.</p>
+<p>Covered by test:</p>
+<ul>
+<li><code>replacement coordinator resumes pending revoke after previous coordinator stops</code></li>
+</ul>
+<h3 id="old-consumer-returns-with-stale-epoch">Old Consumer Returns With Stale Epoch</h3>
+<p>If a delayed consumer repeats a heartbeat with an epoch older than the member
+epoch already acknowledged by the coordinator, the coordinator returns
+<code>FENCED_MEMBER_EPOCH</code> and no assignment. The member must drop ownership and
+rejoin with epoch <code>0</code>.</p>
+<p>When a member joins or rejoins with epoch <code>0</code>, the coordinator ignores any
+reported <code>ownedShards</code> or <code>revokingShards</code> in that heartbeat. A join starts from
+empty local ownership and must converge from the coordinator response.</p>
+<p>Covered by tests:</p>
+<ul>
+<li><code>stale member epoch after acknowledged rebalance is fenced</code></li>
+<li><code>expired old consumer returning with stale ownership is fenced</code></li>
+<li><code>expired member rejoining with epoch zero does not restore stale ownership</code></li>
+</ul>
+<h3 id="race-between-coordinators">Race Between Coordinators</h3>
+<p>The Redis state store uses a <code>storeRevision</code> key and a Lua upsert script. A save
+based on an old revision fails instead of overwriting newer state. Service
+operations retry transient conflicts and return <code>STATE_VERSION_CONFLICT</code> if the
+state keeps changing.</p>
+<p>Covered by tests:</p>
+<ul>
+<li><code>redis store rejects stale coordinator snapshot instead of overwriting latest state</code></li>
+<li>service operations using <code>withStateConflictRetry</code></li>
+</ul>
+<h3 id="unsupported-or-old-protocol-client">Unsupported or Old Protocol Client</h3>
+<p>A heartbeat with an unsupported protocol version returns <code>UNSUPPORTED_PROTOCOL</code>
+and receives no assignment. A mismatched path/body member id returns
+<code>INVALID_REQUEST</code>.</p>
+<p>Covered by tests:</p>
+<ul>
+<li><code>heartbeat with mismatched path member id is rejected</code></li>
+<li>HTTP integration coverage for heartbeat/admin auth behavior</li>
+</ul>
+<h2 id="test-plan">Test Plan</h2>
+<p>The implementation uses TDD for newly found gaps and keeps broad scenario
+coverage for operational behavior.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Area</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Area">Operational scenario matrix</td>
+<td data-label="Coverage">432 focused cases covering shard counts, member counts, scale up/down/rollback, churn, expiry, rolling restart, replacement, and capacity skew with descriptive scenario names.</td>
+</tr>
+<tr>
+<td data-label="Area">Coordinator failover</td>
+<td data-label="Coverage">Replacement coordinator resumes pending revoke and assignment after process replacement.</td>
+</tr>
+<tr>
+<td data-label="Area">Stale consumer fencing</td>
+<td data-label="Coverage">Old member epochs and expired owners are fenced instead of mutating current ownership.</td>
+</tr>
+<tr>
+<td data-label="Area">Redis state race</td>
+<td data-label="Coverage">Optimistic revision conflict rejects stale snapshots.</td>
+</tr>
+<tr>
+<td data-label="Area">HTTP contract</td>
+<td data-label="Coverage">Admin/member API validation and auth behavior.</td>
+</tr>
+<tr>
+<td data-label="Area">Redis integration</td>
+<td data-label="Coverage">Redis-backed projection and optimistic concurrency are available as environment-gated integration tests.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reread-gap-checklist">Reread Gap Checklist</h2>
+<p>The design reread found these gaps and their current resolution status:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Gap</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Gap">Stale member heartbeat accepted after a newer epoch was already acknowledged.</td>
+<td data-label="Status">Fixed in implementation.</td>
+<td data-label="Notes">Stale positive epochs are fenced; normal first heartbeat after a rebalance is still accepted until the new epoch is acknowledged.</td>
+</tr>
+<tr>
+<td data-label="Gap">Coordinator replacement during pending revoke was not explicitly tested.</td>
+<td data-label="Status">Fixed in tests.</td>
+<td data-label="Notes">Shared store failover test covers the handoff continuation.</td>
+</tr>
+<tr>
+<td data-label="Gap">Expired old consumer could report stale ownership.</td>
+<td data-label="Status">Fixed in implementation and tests.</td>
+<td data-label="Notes">Expired members with positive epochs are fenced and do not block the replacement owner.</td>
+</tr>
+<tr>
+<td data-label="Gap">Epoch-zero rejoin could restore stale ownership from the request body.</td>
+<td data-label="Status">Fixed in implementation and tests.</td>
+<td data-label="Notes">Join/rejoin heartbeats ignore reported owned/revoking shards and start from empty local ownership.</td>
+</tr>
+<tr>
+<td data-label="Gap">Capacity policy updates could over-advance group epoch or advance it without assignment movement.</td>
+<td data-label="Status">Fixed in implementation and tests.</td>
+<td data-label="Notes">No-move policy updates advance metadata only; assignment-moving policy updates advance the group epoch once.</td>
+</tr>
+<tr>
+<td data-label="Gap">PR test comments were too verbose.</td>
+<td data-label="Status">Fixed in workflow.</td>
+<td data-label="Notes">The PR comment now keeps totals and links only; full scenario names live in the Test HTML report.</td>
+</tr>
+<tr>
+<td data-label="Gap">Design docs lived only as implementation notes.</td>
+<td data-label="Status">Fixed by process.</td>
+<td data-label="Notes">Markdown source is stored on the separate <code>design-docs</code> branch and rendered by a dedicated action.</td>
+</tr>
+<tr>
+<td data-label="Gap">Migration completion/deprecation flow is incomplete.</td>
+<td data-label="Status">Open.</td>
+<td data-label="Notes"><code>DRAINING</code> and <code>DEPRECATED</code> states exist, but there is no explicit API or retention policy to finish a successful migration.</td>
+</tr>
+<tr>
+<td data-label="Gap">Always-on Redis integration in CI is incomplete.</td>
+<td data-label="Status">Open.</td>
+<td data-label="Notes">Redis integration tests are currently gated by <code>REDIS_COORDINATOR_INTEGRATION_TESTS=true</code>; a future CI job should run a Redis service and enable them.</td>
+</tr>
+<tr>
+<td data-label="Gap">Producer routing contract is not first-class.</td>
+<td data-label="Status">Open.</td>
+<td data-label="Notes">Producers can infer active write version from group metadata, but a dedicated route metadata endpoint/SDK is not defined.</td>
+</tr>
+<tr>
+<td data-label="Gap">Audit trail is not persisted.</td>
+<td data-label="Status">Open.</td>
+<td data-label="Notes">Requests include <code>requestedBy</code> and <code>reason</code>, but migration/change history does not retain a full audit event log yet.</td>
+</tr>
+<tr>
+<td data-label="Gap">Operational metrics are minimal.</td>
+<td data-label="Status">Open.</td>
+<td data-label="Notes">Health exists; rebalance latency, fenced member count, conflict retry count, and migration age should be exported.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="rejected-alternatives">Rejected Alternatives</h2>
+<h3 id="client-side-assignment-only">Client-Side Assignment Only</h3>
+<p>Rejected because every consumer would need to rebuild the full group view and
+handle migration race conditions locally. This makes inspection and recovery
+harder.</p>
+<h3 id="in-place-resharding">In-Place Resharding</h3>
+<p>Rejected because existing Redis Stream keys cannot be repartitioned without
+producer/consumer coordination. Versioned stream keys allow old and new shard
+layouts to coexist during migration.</p>
+<h3 id="accept-any-lower-member-epoch">Accept Any Lower Member Epoch</h3>
+<p>Rejected after the stale consumer reread. Accepting every lower epoch lets a
+delayed heartbeat mutate ownership after the coordinator has already advanced the
+member. The final rule accepts the last known epoch until a new epoch is
+acknowledged, then fences older duplicates.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>The current member protocol version is <code>1</code>. Unsupported versions receive
+<code>UNSUPPORTED_PROTOCOL</code>. Future protocol changes should add explicit version
+negotiation before adding required heartbeat fields.</p>
+      </main>
+    </div>
+  </body>
+</html>
