@@ -45,6 +45,7 @@ jobs:
     needs: codex
     permissions:
       issues: write
+      pull-requests: write
     steps:
       - name: Post Codex review
         uses: actions/github-script@v7

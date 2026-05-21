@@ -209,6 +209,7 @@ jobs:
     permissions:
       actions: read
       issues: write
+      pull-requests: write
     steps:
       - name: Download prepared PR test result comment
         uses: actions/download-artifact@v4
