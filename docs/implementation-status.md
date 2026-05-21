@@ -51,7 +51,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true \
   ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest
 ```
 
-On pull requests, the `PR test results` workflow uploads the Gradle HTML/JUnit report as the `coordinator-gradle-test-report` artifact and updates a PR comment with every executed test scenario grouped by test class.
+On pull requests, the `PR test results` workflow publishes the Gradle test HTML report to GitHub Pages, uploads the same report as the `coordinator-gradle-test-report` artifact, and updates a PR comment with every executed test scenario grouped by test class.
 
 ## Implemented Module
 

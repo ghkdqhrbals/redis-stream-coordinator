@@ -12,9 +12,10 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
+      actions: read
     steps:
       - uses: actions/checkout@v5
         with:
@@ -57,6 +58,33 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Prepare browsable test report
+        if: always()
+        shell: bash
+        run: |
+          report_dir="public-test-report"
+          mkdir -p "$report_dir"
+          if [ -d coordinator-server/build/reports/tests/test ]; then
+            cp -R coordinator-server/build/reports/tests/test/. "$report_dir/"
+          else
+            cat > "$report_dir/index.html" <<'HTML'
+          <!doctype html>
+          <title>Test report unavailable</title>
+          <h1>Test report unavailable</h1>
+          <p>The Gradle test HTML report was not produced. Check the workflow logs.</p>
+          HTML
+          fi
+
+      - name: Publish browsable test report
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ github.token }}
+          publish_branch: gh-pages
+          publish_dir: ./public-test-report
+          destination_dir: pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}
+          keep_files: true
+
       - name: Post PR test result
         if: always()
         uses: actions/github-script@v7
@@ -64,6 +92,7 @@ jobs:
           TEST_EXIT_CODE: ${{ steps.gradle_test.outputs.exit_code }}
           TEST_LOG_TAIL: ${{ steps.gradle_test.outputs.log_tail }}
           TEST_REPORT_ARTIFACT_URL: ${{ steps.upload_test_report.outputs.artifact-url }}
+          TEST_REPORT_PAGE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}/
         with:
           github-token: ${{ github.token }}
           script: |
@@ -75,6 +104,7 @@ jobs:
             const passed = exitCode === '0';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const artifactUrl = process.env.TEST_REPORT_ARTIFACT_URL || `${runUrl}#artifacts`;
+            const reportPageUrl = process.env.TEST_REPORT_PAGE_URL;
             const logTail = process.env.TEST_LOG_TAIL || '(no test output captured)';
             const testResultsDir = 'coordinator-server/build/test-results/test';
 
@@ -171,7 +201,8 @@ jobs:
               `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
               `- Exit code: \`${exitCode}\``,
               `- Run: ${runUrl}`,
-              `- HTML/JUnit report artifact: [coordinator-gradle-test-report](${artifactUrl})`,
+              `- Browsable test HTML report: [open report](${reportPageUrl})`,
+              `- Downloadable report artifact: [coordinator-gradle-test-report](${artifactUrl})`,
               `- Scenario totals: ${passCount} passed, ${scenarios.totals.failures} failed, ${scenarios.totals.errors} errored, ${scenarios.totals.skipped} skipped`,
               '',
               '### Scenario Tests',
