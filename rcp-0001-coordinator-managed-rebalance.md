@@ -98,6 +98,11 @@ target assignment recomputation. A member can heartbeat with its last accepted
 epoch until the coordinator responds with the new assignment epoch. After that
 acknowledgement, an older duplicate heartbeat is fenced.
 
+Capacity policy changes have one extra rule: if the policy update does not move
+any target shard, only `metadataVersion` advances. If it does move target
+assignments, `groupEpoch` and `assignmentEpoch` advance exactly once for that
+rebalance.
+
 ### Member Lifecycle
 
 | State | Description |
@@ -193,6 +198,7 @@ The design reread found these gaps and their current resolution status:
 | Stale member heartbeat accepted after a newer epoch was already acknowledged. | Fixed in implementation. | Stale positive epochs are fenced; normal first heartbeat after a rebalance is still accepted until the new epoch is acknowledged. |
 | Coordinator replacement during pending revoke was not explicitly tested. | Fixed in tests. | Shared store failover test covers the handoff continuation. |
 | Expired old consumer could report stale ownership. | Fixed in implementation and tests. | Expired members with positive epochs are fenced and do not block the replacement owner. |
+| Capacity policy updates could over-advance group epoch or advance it without assignment movement. | Fixed in implementation and tests. | No-move policy updates advance metadata only; assignment-moving policy updates advance the group epoch once. |
 | PR test comments were too verbose. | Fixed in workflow. | The PR comment now keeps totals and links only; full scenario names live in the Test HTML report. |
 | Design docs lived only as implementation notes. | Fixed by process. | Markdown source is stored on the separate `design-docs` branch and rendered by a dedicated action. |
 | Migration completion/deprecation flow is incomplete. | Open. | `DRAINING` and `DEPRECATED` states exist, but there is no explicit API or retention policy to finish a successful migration. |
