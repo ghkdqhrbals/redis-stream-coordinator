@@ -33,6 +33,31 @@ class RenderDesignDocsTest(unittest.TestCase):
             self.assertIn('href="nested/guide.html"', index_html)
             self.assertIn('href="../index.html"', nested_html)
 
+    def test_tables_collapse_with_cell_labels_on_small_viewports(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            (source / "index.md").write_text(
+                "\n".join([
+                    "# Responsive Table",
+                    "",
+                    "| Scenario | Expected behavior |",
+                    "| --- | --- |",
+                    "| Coordinator restart | Rebooks pending revocations without duplicate owners. |",
+                ]),
+                encoding="utf-8",
+            )
+
+            self._run_renderer(source, output)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn('<table class="responsive-table">', html)
+            self.assertIn('data-label="Scenario"', html)
+            self.assertIn('data-label="Expected behavior"', html)
+            self.assertIn("@media (max-width: 720px)", html)
+            self.assertIn("grid-template-columns: minmax(7.5rem, 34%) minmax(0, 1fr)", html)
+            self.assertNotIn("overflow-x: hidden", html)
+
     def _run_renderer(self, source: Path, output: Path) -> None:
         import sys
 

@@ -7,6 +7,7 @@ import argparse
 import html
 import os
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -58,6 +59,122 @@ def rewrite_markdown_links(
     return re.sub(r'href="([^"]+)"', replace, body)
 
 
+def render_start_tag(tag: str, attrs: list[tuple[str, str | None]], self_closing: bool = False) -> str:
+    rendered_attrs = []
+    for name, value in attrs:
+        if value is None:
+            rendered_attrs.append(f" {name}")
+        else:
+            rendered_attrs.append(f' {name}="{html.escape(value, quote=True)}"')
+    closing = " /" if self_closing else ""
+    return f"<{tag}{''.join(rendered_attrs)}{closing}>"
+
+
+def add_or_append_class(attrs: list[tuple[str, str | None]], class_name: str) -> list[tuple[str, str | None]]:
+    next_attrs = []
+    found = False
+    for name, value in attrs:
+        if name == "class":
+            classes = value.split() if value else []
+            if class_name not in classes:
+                classes.append(class_name)
+            next_attrs.append((name, " ".join(classes)))
+            found = True
+        else:
+            next_attrs.append((name, value))
+    if not found:
+        next_attrs.append(("class", class_name))
+    return next_attrs
+
+
+def has_attr(attrs: list[tuple[str, str | None]], attr_name: str) -> bool:
+    return any(name == attr_name for name, _ in attrs)
+
+
+class ResponsiveTableParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.output: list[str] = []
+        self.in_table = False
+        self.in_thead = False
+        self.in_header_cell = False
+        self.header_chunks: list[str] = []
+        self.headers: list[str] = []
+        self.cell_index = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "table":
+            self.in_table = True
+            self.headers = []
+            self.cell_index = 0
+            attrs = add_or_append_class(attrs, "responsive-table")
+        elif self.in_table and tag == "thead":
+            self.in_thead = True
+        elif self.in_table and tag == "tr":
+            self.cell_index = 0
+        elif self.in_table and self.in_thead and tag == "th":
+            self.in_header_cell = True
+            self.header_chunks = []
+        elif self.in_table and tag == "td":
+            if self.cell_index < len(self.headers) and not has_attr(attrs, "data-label"):
+                attrs = attrs + [("data-label", self.headers[self.cell_index])]
+            self.cell_index += 1
+
+        self.output.append(render_start_tag(tag, attrs))
+
+    def handle_endtag(self, tag: str) -> None:
+        if self.in_table and self.in_thead and tag == "th":
+            label = re.sub(r"\s+", " ", "".join(self.header_chunks)).strip()
+            self.headers.append(label)
+            self.in_header_cell = False
+            self.header_chunks = []
+
+        self.output.append(f"</{tag}>")
+
+        if self.in_table and tag == "thead":
+            self.in_thead = False
+        elif tag == "table":
+            self.in_table = False
+            self.in_thead = False
+            self.in_header_cell = False
+            self.header_chunks = []
+            self.headers = []
+            self.cell_index = 0
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.output.append(render_start_tag(tag, attrs, self_closing=True))
+
+    def handle_data(self, data: str) -> None:
+        if self.in_header_cell:
+            self.header_chunks.append(data)
+        self.output.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        entity = f"&{name};"
+        if self.in_header_cell:
+            self.header_chunks.append(html.unescape(entity))
+        self.output.append(entity)
+
+    def handle_charref(self, name: str) -> None:
+        entity = f"&#{name};"
+        if self.in_header_cell:
+            self.header_chunks.append(html.unescape(entity))
+        self.output.append(entity)
+
+    def handle_comment(self, data: str) -> None:
+        self.output.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self.output.append(f"<!{decl}>")
+
+
+def make_tables_responsive(body: str) -> str:
+    parser = ResponsiveTableParser()
+    parser.feed(body)
+    parser.close()
+    return "".join(parser.output)
+
+
 def render_page(title: str, body: str, nav: str) -> str:
     escaped_title = html.escape(title)
     return f"""<!doctype html>
@@ -69,6 +186,10 @@ def render_page(title: str, body: str, nav: str) -> str:
     <style>
       * {{
         box-sizing: border-box;
+      }}
+      html {{
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
       }}
       :root {{
         color-scheme: light;
@@ -82,30 +203,31 @@ def render_page(title: str, body: str, nav: str) -> str:
       body {{
         margin: 0;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.98rem, 0.92rem + 0.25vw, 1.05rem);
         color: var(--fg);
         background: #ffffff;
         line-height: 1.62;
-        overflow-x: hidden;
       }}
       header {{
         border-bottom: 1px solid var(--border);
         background: var(--panel);
       }}
       .wrap {{
-        max-width: 920px;
+        width: min(100%, 920px);
         margin: 0 auto;
-        padding: 24px clamp(16px, 4vw, 32px);
+        padding: clamp(18px, 4vw, 32px);
       }}
       nav {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
         border-bottom: 1px solid var(--border);
         margin-bottom: 28px;
         padding-bottom: 12px;
       }}
       nav a {{
-        display: inline-block;
         color: var(--accent);
         text-decoration: none;
-        margin: 0 16px 8px 0;
         overflow-wrap: anywhere;
       }}
       main {{
@@ -117,7 +239,7 @@ def render_page(title: str, body: str, nav: str) -> str:
         overflow-wrap: anywhere;
       }}
       h1 {{
-        font-size: clamp(1.75rem, 6vw, 2.35rem);
+        font-size: clamp(1.75rem, 1.36rem + 1.65vw, 2.35rem);
         margin-top: 0;
       }}
       h2 {{
@@ -132,13 +254,12 @@ def render_page(title: str, body: str, nav: str) -> str:
         color: var(--accent);
         overflow-wrap: anywhere;
       }}
-      table {{
-        display: block;
+      .responsive-table {{
         width: 100%;
         max-width: 100%;
-        overflow-x: auto;
         border-collapse: collapse;
         margin: 1rem 0;
+        table-layout: auto;
       }}
       th, td {{
         border: 1px solid var(--border);
@@ -164,6 +285,7 @@ def render_page(title: str, body: str, nav: str) -> str:
       }}
       pre code {{
         padding: 0;
+        white-space: pre;
       }}
       blockquote {{
         margin: 1rem 0;
@@ -176,13 +298,72 @@ def render_page(title: str, body: str, nav: str) -> str:
         max-width: 100%;
         height: auto;
       }}
-      @media (max-width: 640px) {{
+      @media (max-width: 720px) {{
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {{
+          display: block;
+          width: 100%;
+        }}
+        .responsive-table {{
+          border: 1px solid var(--border);
+        }}
+        .responsive-table thead {{
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }}
+        .responsive-table tr + tr {{
+          border-top: 2px solid var(--border);
+        }}
+        .responsive-table td {{
+          display: grid;
+          grid-template-columns: minmax(7.5rem, 34%) minmax(0, 1fr);
+          gap: 12px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }}
+        .responsive-table td:first-child {{
+          border-top: 0;
+        }}
+        .responsive-table td::before {{
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }}
+        pre {{
+          white-space: pre-wrap;
+        }}
+        pre code {{
+          white-space: inherit;
+        }}
+      }}
+      @media (max-width: 480px) {{
         .wrap {{
           padding-top: 18px;
           padding-bottom: 18px;
         }}
-        th, td {{
-          min-width: 140px;
+        nav {{
+          display: block;
+        }}
+        nav a {{
+          display: block;
+          margin-bottom: 8px;
+        }}
+        .responsive-table td {{
+          grid-template-columns: 1fr;
+          gap: 2px;
         }}
       }}
     </style>
@@ -248,6 +429,7 @@ def main() -> None:
             file_name,
             output_paths,
         )
+        body = make_tables_responsive(body)
         target = destination / file_name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(render_page(title, body, nav_for(file_name)), encoding="utf-8")
