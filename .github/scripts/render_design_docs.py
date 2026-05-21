@@ -197,7 +197,7 @@ def render_page(title: str, body: str, nav: str) -> str:
         --muted: #5f6c75;
         --border: #d6dde3;
         --panel: #f7f9fb;
-        --accent: #0f766e;
+        --accent: #1428a0;
         --code: #eef3f7;
       }}
       body {{

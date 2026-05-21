@@ -58,6 +58,18 @@ class RenderDesignDocsTest(unittest.TestCase):
             self.assertIn("grid-template-columns: minmax(7.5rem, 34%) minmax(0, 1fr)", html)
             self.assertNotIn("overflow-x: hidden", html)
 
+    def test_uses_samsung_blue_as_accent_color(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            (source / "index.md").write_text("# Design Doc\n", encoding="utf-8")
+
+            self._run_renderer(source, output)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("--accent: #1428a0;", html)
+            self.assertNotIn("--accent: #0f766e;", html)
+
     def _run_renderer(self, source: Path, output: Path) -> None:
         import sys
 
