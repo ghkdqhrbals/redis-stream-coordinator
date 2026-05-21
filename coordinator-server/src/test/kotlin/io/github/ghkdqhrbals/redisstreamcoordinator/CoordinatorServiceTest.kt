@@ -162,12 +162,48 @@ class CoordinatorServiceTest {
         )
 
         assertTrue(update.groupEpoch > before.groupEpoch)
+        assertEquals(before.groupEpoch + 1, update.groupEpoch)
         assertEquals(update.groupEpoch, after.assignmentEpoch)
         assertEquals(after.assignmentEpoch, memberA.memberEpoch)
         assertEquals(after.assignmentEpoch, memberB.memberEpoch)
         assertEquals(2, memberA.assignment.assignedShards.size)
         assertEquals(6, memberB.assignment.pendingShards.size)
         assertTrue(memberB.assignment.assignedShards.isEmpty())
+    }
+
+    @Test
+    fun `consumer concurrency policy update without assignment movement does not advance assignment epoch`() {
+        service.createGroup("policy-metadata", "events-consumer", createGroupRequest(initialShardCount = 2))
+        val first = service.heartbeat(
+            "policy-metadata",
+            "events-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "policy-metadata",
+            "events-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+        val before = service.getGroup("policy-metadata", "events-consumer")
+
+        val update = service.updateConsumerConcurrency(
+            "policy-metadata",
+            "events-consumer",
+            UpdateConsumerConcurrencyRequest(
+                defaultMaxConcurrency = 8,
+                requestedBy = "test",
+                reason = "single member capacity metadata only",
+            ),
+        )
+        val after = service.getGroup("policy-metadata", "events-consumer")
+
+        assertEquals(before.groupEpoch, update.groupEpoch)
+        assertEquals(before.groupEpoch, after.groupEpoch)
+        assertEquals(before.assignmentEpoch, after.assignmentEpoch)
+        assertTrue(after.metadataVersion > before.metadataVersion)
+        assertEquals(mapOf("member-a" to 2), after.targetAssignmentSummary)
     }
 
     @Test

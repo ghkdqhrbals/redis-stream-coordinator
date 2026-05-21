@@ -129,12 +129,13 @@ class CoordinatorService(
             val now = Instant.now(clock)
             val previousTargetAssignments = group.targetAssignmentSnapshot()
             group.consumerConcurrencyPolicy = nextPolicy
-            bumpMetadata(group, now, bumpGroupEpoch = true)
             group.members.values.forEach { it.assignedMaxConcurrency = group.assignedMaxConcurrency(it.memberName) }
             reconcile(group, now)
             if (group.targetAssignmentSnapshot() != previousTargetAssignments) {
-                group.groupEpoch += 1
-                group.assignmentEpoch = group.groupEpoch
+                bumpMetadata(group, now, bumpGroupEpoch = true)
+                reconcile(group, now)
+            } else {
+                bumpMetadata(group, now, bumpGroupEpoch = false)
             }
             stateStore.save(group.key(), group)
         }
