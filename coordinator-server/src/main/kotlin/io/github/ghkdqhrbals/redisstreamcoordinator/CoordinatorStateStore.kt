@@ -16,6 +16,8 @@ interface CoordinatorStateStore {
     fun list(): List<GroupMetadata>
 }
 
+class CoordinatorStateConflictException(message: String) : RuntimeException(message)
+
 @Component
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "memory", matchIfMissing = true)
 class InMemoryCoordinatorStateStore : CoordinatorStateStore {
@@ -28,9 +30,14 @@ class InMemoryCoordinatorStateStore : CoordinatorStateStore {
         groups[key]
 
     override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean =
-        groups.putIfAbsent(key, group) == null
+        if (groups.putIfAbsent(key, group.also { it.storeRevision = 1 }) == null) {
+            true
+        } else {
+            false
+        }
 
     override fun save(key: GroupKey, group: GroupMetadata) {
+        group.storeRevision += 1
         groups[key] = group
     }
 
@@ -79,9 +86,14 @@ class RedisCoordinatorStateStore(
         group: GroupMetadata,
         onlyIfAbsent: Boolean,
     ): Boolean {
+        val previousRevision = group.storeRevision
+        val nextRevision = if (onlyIfAbsent) 1 else previousRevision + 1
+        group.storeRevision = nextRevision
         val projection = group.toRedisStateProjection()
         val args = mutableListOf(
             if (onlyIfAbsent) "NX" else "UPSERT",
+            previousRevision.toString(),
+            nextRevision.toString(),
             objectMapper.writeValueAsString(group),
             projection.activeMigrationId.orEmpty(),
         )
@@ -99,10 +111,23 @@ class RedisCoordinatorStateStore(
                 keys.currentAssignments,
                 keys.migrations,
                 keys.activeMigration,
+                keys.revision,
             ),
             *args.toTypedArray(),
         )
-        return result == 1L
+        return when (result) {
+            1L -> true
+            0L -> {
+                group.storeRevision = previousRevision
+                false
+            }
+            else -> {
+                group.storeRevision = previousRevision
+                throw CoordinatorStateConflictException(
+                    "Redis coordinator state changed before save for ${keys.group}; expected store revision $previousRevision",
+                )
+            }
+        }
     }
 
     private fun appendHashArgs(args: MutableList<String>, values: Map<String, Any>) {
@@ -120,9 +145,21 @@ class RedisCoordinatorStateStore(
               return 0
             end
 
-            redis.call('SET', KEYS[1], ARGV[2])
+            if ARGV[1] ~= 'NX' then
+              local currentRevision = redis.call('GET', KEYS[7])
+              if currentRevision == false then
+                if redis.call('EXISTS', KEYS[1]) == 1 and ARGV[2] ~= '0' then
+                  return -1
+                end
+              elseif currentRevision ~= ARGV[2] then
+                return -1
+              end
+            end
 
-            local argIndex = 4
+            redis.call('SET', KEYS[1], ARGV[4])
+            redis.call('SET', KEYS[7], ARGV[3])
+
+            local argIndex = 6
             local function replaceHash(key)
               redis.call('DEL', key)
               local count = tonumber(ARGV[argIndex])
@@ -138,10 +175,10 @@ class RedisCoordinatorStateStore(
             replaceHash(KEYS[4])
             replaceHash(KEYS[5])
 
-            if ARGV[3] == '' then
+            if ARGV[5] == '' then
               redis.call('DEL', KEYS[6])
             else
-              redis.call('SET', KEYS[6], ARGV[3])
+              redis.call('SET', KEYS[6], ARGV[5])
             end
 
             return 1
@@ -188,6 +225,7 @@ class RedisCoordinatorStateKeys(
             currentAssignments = "$prefix:$tag:current-assignments",
             migrations = "$prefix:$tag:migrations",
             activeMigration = "$prefix:$tag:active-migration",
+            revision = "$prefix:$tag:revision",
         )
     }
 }
@@ -199,4 +237,5 @@ data class RedisCoordinatorGroupKeys(
     val currentAssignments: String,
     val migrations: String,
     val activeMigration: String,
+    val revision: String,
 )

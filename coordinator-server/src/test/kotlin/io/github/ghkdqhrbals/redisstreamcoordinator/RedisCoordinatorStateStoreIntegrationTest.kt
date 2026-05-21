@@ -9,8 +9,10 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import java.time.Instant
 
 @EnabledIfEnvironmentVariable(named = "REDIS_COORDINATOR_INTEGRATION_TESTS", matches = "true")
 @SpringBootTest(
@@ -24,6 +26,9 @@ import kotlin.test.assertTrue
 class RedisCoordinatorStateStoreIntegrationTest {
     @Autowired
     private lateinit var coordinator: CoordinatorService
+
+    @Autowired
+    private lateinit var stateStore: CoordinatorStateStore
 
     @Autowired
     private lateinit var redisTemplate: StringRedisTemplate
@@ -46,6 +51,7 @@ class RedisCoordinatorStateStoreIntegrationTest {
                     keys.currentAssignments,
                     keys.migrations,
                     keys.activeMigration,
+                    keys.revision,
                 ),
             )
             redisTemplate.opsForSet().remove(stateKeys.groupsIndex, keys.group)
@@ -97,6 +103,35 @@ class RedisCoordinatorStateStoreIntegrationTest {
         assertEquals(migration.migrationId, redisTemplate.opsForValue().get(keys.activeMigration))
     }
 
+    @Test
+    fun `redis store rejects stale coordinator snapshot instead of overwriting latest state`() {
+        val key = GroupKey("redis-it-conflict", "orders-consumer")
+        touchedGroups += key
+
+        coordinator.createGroup(key.streamPrefix, key.consumerGroup, createGroupRequest(initialShardCount = 2))
+        val firstSnapshot = assertNotNull(stateStore.get(key))
+        val staleSnapshot = assertNotNull(stateStore.get(key))
+
+        firstSnapshot.members["member-a"] = member("member-a")
+        firstSnapshot.targetAssignments["member-a"] = mutableSetOf(ShardId(1, 0))
+        firstSnapshot.metadataVersion += 1
+        stateStore.save(key, firstSnapshot)
+
+        staleSnapshot.members["member-b"] = member("member-b")
+        staleSnapshot.targetAssignments["member-b"] = mutableSetOf(ShardId(1, 1))
+        staleSnapshot.metadataVersion += 1
+
+        assertFailsWith<CoordinatorStateConflictException> {
+            stateStore.save(key, staleSnapshot)
+        }
+
+        val stored = assertNotNull(stateStore.get(key))
+        assertEquals(setOf("member-a"), stored.members.keys)
+        assertEquals(setOf("member-a"), stored.targetAssignments.keys)
+        assertEquals(firstSnapshot.storeRevision, stored.storeRevision)
+        assertTrue(firstSnapshot.storeRevision > staleSnapshot.storeRevision)
+    }
+
     private fun createGroupRequest(initialShardCount: Int): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
@@ -122,5 +157,21 @@ class RedisCoordinatorStateStoreIntegrationTest {
                 availableConcurrency = 4,
             ),
             ownedShards = ownedShards,
+        )
+
+    private fun member(memberId: String): MemberMetadata =
+        MemberMetadata(
+            memberId = memberId,
+            memberName = memberId,
+            state = MemberState.ACTIVE,
+            memberEpoch = 1,
+            metadataVersion = 1,
+            assignedMaxConcurrency = 4,
+            runtimeMaxConcurrency = 4,
+            activeConsumerWorkers = 0,
+            currentAssignment = emptySet(),
+            revoking = emptySet(),
+            lastHeartbeatAt = Instant.parse("2026-05-21T00:00:00Z"),
+            memberLeaseExpiresAt = Instant.parse("2026-05-21T00:00:15Z"),
         )
 }

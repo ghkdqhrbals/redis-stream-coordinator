@@ -76,6 +76,7 @@ class CoordinatorStateStoreTest {
         assertEquals("redis-stream:coord::{orders:orders-consumer}:current-assignments", keys.currentAssignments)
         assertEquals("redis-stream:coord::{orders:orders-consumer}:migrations", keys.migrations)
         assertEquals("redis-stream:coord::{orders:orders-consumer}:active-migration", keys.activeMigration)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:revision", keys.revision)
     }
 
     @Test

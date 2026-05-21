@@ -127,6 +127,7 @@ Implemented:
 * Redis-backed group metadata persistence when `coordinator.store.type=redis`.
 * Redis projected keys for member metadata, target assignments, current assignments, active migration, and migration history.
 * Redis group-scoped aggregate/projection keys are replaced through one Lua script to avoid reader-visible partial projection updates.
+* Redis-backed saves use a coordinator `storeRevision` compare-and-set guard and retry mutation requests on transient state conflicts.
 
 ## Verified Runtime Smoke Test
 
@@ -373,6 +374,7 @@ Expected response:
 * [x] Implement Redis current assignment keys.
 * [x] Implement Redis active migration key.
 * [x] Implement Redis migration history keys.
+* [x] Implement Redis store revision key for stale write detection.
 * [ ] Implement Redis admin audit log.
 * [x] Add optimistic concurrency or Lua transaction boundaries for coordinator mutations.
 * [x] Add store-level tests.
@@ -417,6 +419,7 @@ Implemented tests:
 * Coordinator state survives service instance replacement when the same state store is reused.
 * Redis state projection splits aggregate state into member, target, current assignment, migration, and active migration sections.
 * Redis key helper keeps group-scoped keys in a single Redis Cluster hash slot and preserves configured prefix formatting.
+* Redis-backed store rejects stale coordinator snapshots instead of overwriting newer state.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
 * Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
@@ -463,9 +466,9 @@ Explicitly still out of scope for the coordinator:
 
 ## Suggested Next Step
 
-Next implementation step should be to harden the Redis store:
+Next implementation step should be to harden Redis-backed operations:
 
 1. Keep group metadata as the aggregate source of truth during the transition.
 2. Add Redis integration tests that run against the local three-node cluster by default in CI.
 3. Add producer routing metadata API/cache.
-4. Promote projected Redis keys to read paths once the write model is transactionally safe.
+4. Promote projected Redis keys to read paths once the read model is ready.
