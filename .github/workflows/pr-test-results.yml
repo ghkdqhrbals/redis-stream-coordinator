@@ -137,16 +137,20 @@ jobs:
               }), { tests: 0, failures: 0, errors: 0, skipped: 0 });
 
               const statusLabel = { passed: 'PASS', skipped: 'SKIP', failed: 'FAIL', error: 'ERROR' };
+              const maxRowsPerSuite = 80;
               const markdown = suites.map((suite) => {
                 const className = suite.name.split('.').pop();
-                const rows = suite.testcases
+                const visibleTestcases = suite.testcases.slice(0, maxRowsPerSuite);
+                const rows = visibleTestcases
                   .map((testcase) => `- [${statusLabel[testcase.status]}] \`${testcase.name}\``)
                   .join('\n');
+                const hiddenCount = Math.max(suite.testcases.length - visibleTestcases.length, 0);
                 return [
                   `<details${suite.failures || suite.errors ? ' open' : ''}>`,
                   `<summary><strong>${className}</strong> (${suite.tests} tests, ${suite.skipped} skipped)</summary>`,
                   '',
                   rows || '- _No scenario names found in this suite._',
+                  hiddenCount > 0 ? `\n_${hiddenCount} additional scenarios are available in the browsable HTML report._` : '',
                   '',
                   '</details>',
                 ].join('\n');
