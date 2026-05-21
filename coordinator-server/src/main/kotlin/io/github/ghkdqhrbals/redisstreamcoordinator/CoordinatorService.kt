@@ -245,8 +245,10 @@ class CoordinatorService(
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
         member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
-        member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else request.ownedShards
-        member.revoking = request.revokingShards
+        val reportedOwnedShards = if (request.memberEpoch == 0L) emptySet() else request.ownedShards
+        val reportedRevokingShards = if (request.memberEpoch == 0L) emptyList() else request.revokingShards
+        member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else reportedOwnedShards
+        member.revoking = reportedRevokingShards
             .filterNot { it.state == RevokingShardState.REVOKED && it.inFlight == 0 }
             .map { it.shard }
             .toSet()

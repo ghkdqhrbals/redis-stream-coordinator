@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import html
+import os
 import re
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import markdown
 
@@ -18,14 +20,42 @@ def title_for(markdown_text: str, fallback: str) -> str:
     return fallback
 
 
-def output_name(markdown_path: Path) -> str:
-    if markdown_path.name == "index.md":
-        return "index.html"
-    return f"{markdown_path.stem}.html"
+def output_path(source: Path, markdown_path: Path) -> Path:
+    return markdown_path.relative_to(source).with_suffix(".html")
 
 
-def rewrite_markdown_links(body: str) -> str:
-    return re.sub(r'href="([^"#]+)\.md(#[^"]*)?"', r'href="\1.html\2"', body)
+def relative_href(from_output: Path, to_output: Path) -> str:
+    start = from_output.parent if str(from_output.parent) != "." else Path(".")
+    return os.path.relpath(to_output, start=start).replace(os.sep, "/")
+
+
+def rewrite_markdown_links(
+    body: str,
+    source_markdown: Path,
+    current_output: Path,
+    output_paths: dict[Path, Path],
+) -> str:
+    def replace(match: re.Match[str]) -> str:
+        raw_href = html.unescape(match.group(1))
+        parsed = urlsplit(raw_href)
+        if parsed.scheme or parsed.netloc or parsed.path.startswith("/") or not parsed.path.endswith(".md"):
+            return match.group(0)
+
+        target_markdown = (source_markdown.parent / parsed.path).resolve()
+        target_output = output_paths.get(target_markdown)
+        if target_output is None:
+            return match.group(0)
+
+        rewritten = urlunsplit((
+            "",
+            "",
+            relative_href(current_output, target_output),
+            parsed.query,
+            parsed.fragment,
+        ))
+        return f'href="{html.escape(rewritten, quote=True)}"'
+
+    return re.sub(r'href="([^"]+)"', replace, body)
 
 
 def render_page(title: str, body: str, nav: str) -> str:
@@ -185,29 +215,41 @@ def main() -> None:
         raise SystemExit(f"No Markdown design documents found in {source}")
 
     pages = []
+    output_paths = {}
     for markdown_path in markdown_files:
         text = markdown_path.read_text(encoding="utf-8")
         title = title_for(text, markdown_path.stem.replace("-", " ").title())
-        pages.append((markdown_path, title, output_name(markdown_path)))
+        resolved_markdown_path = markdown_path.resolve()
+        rendered_path = output_path(source, markdown_path)
+        output_paths[resolved_markdown_path] = rendered_path
+        pages.append((markdown_path, title, rendered_path))
 
-    nav = "\n".join(
-        f'        <a href="{html.escape(file_name)}">{html.escape(title)}</a>'
-        for _, title, file_name in pages
-    )
+    def nav_for(current_output: Path) -> str:
+        return "\n".join(
+            f'        <a href="{html.escape(relative_href(current_output, file_name))}">{html.escape(title)}</a>'
+            for _, title, file_name in pages
+        )
 
     renderer = markdown.Markdown(extensions=["extra", "tables", "toc", "fenced_code", "sane_lists"])
     for markdown_path, title, file_name in pages:
         text = markdown_path.read_text(encoding="utf-8")
-        body = rewrite_markdown_links(renderer.reset().convert(text))
-        (destination / file_name).write_text(render_page(title, body, nav), encoding="utf-8")
+        body = rewrite_markdown_links(
+            renderer.reset().convert(text),
+            markdown_path.resolve(),
+            file_name,
+            output_paths,
+        )
+        target = destination / file_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render_page(title, body, nav_for(file_name)), encoding="utf-8")
 
     if not (destination / "index.html").exists():
         first_page = pages[0][2]
         (destination / "index.html").write_text(
             render_page(
                 "Redis Stream Coordinator Design Docs",
-                f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page)}">Open the design document</a>.</p>',
-                nav,
+                f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page.as_posix())}">Open the design document</a>.</p>',
+                nav_for(Path("index.html")),
             ),
             encoding="utf-8",
         )

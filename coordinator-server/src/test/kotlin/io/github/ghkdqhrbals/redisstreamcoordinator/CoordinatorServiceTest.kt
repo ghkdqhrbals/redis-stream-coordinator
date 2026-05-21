@@ -429,6 +429,50 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `expired member rejoining with epoch zero does not restore stale ownership`() {
+        service.createGroup("expired-rejoin", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "expired-rejoin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "expired-rejoin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        clock.advance(Duration.ofSeconds(16))
+        val memberB = service.heartbeat(
+            "expired-rejoin",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "expired-rejoin",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch, ownedShards = memberB.assignment.assignedShards),
+        )
+
+        val rejoinedA = service.heartbeat(
+            "expired-rejoin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0, ownedShards = memberA.assignment.assignedShards),
+        )
+        val assignments = service.assignments("expired-rejoin", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.OK, rejoinedA.status)
+        assertTrue(rejoinedA.assignment.assignedShards.isEmpty())
+        assertEquals(emptySet(), assignments.currentAssignments.getValue("member-a"))
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-b"))
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
     fun `scale creates next stream version and includes old and new readable versions`() {
         service.createGroup("summary", "summary-consumer", createGroupRequest(initialShardCount = 2))
 

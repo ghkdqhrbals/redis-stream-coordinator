@@ -81,6 +81,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install Markdown
 
+      - name: Run renderer unit tests
+        run: |
+          python .github/scripts/test_render_design_docs.py
+
       - name: Render Markdown to HTML
         run: |
           python .github/scripts/render_design_docs.py design-docs-source public-design-docs
