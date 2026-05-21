@@ -1,0 +1,103 @@
+name: PR test results
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+
+      - name: Set up Java 24
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "24"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run coordinator tests
+        id: gradle_test
+        shell: bash
+        run: |
+          set +e
+          ./gradlew :coordinator-server:test :coordinator-server:build --no-daemon 2>&1 | tee gradle-test.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "exit_code=$status"
+            echo "log_tail<<EOF"
+            tail -n 80 gradle-test.log
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Post PR test result
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          TEST_EXIT_CODE: ${{ steps.gradle_test.outputs.exit_code }}
+          TEST_LOG_TAIL: ${{ steps.gradle_test.outputs.log_tail }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const marker = '<!-- pr-test-results -->';
+            const exitCode = process.env.TEST_EXIT_CODE || 'unknown';
+            const passed = exitCode === '0';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const logTail = process.env.TEST_LOG_TAIL || '(no test output captured)';
+            const body = [
+              marker,
+              `## ${passed ? 'Passed' : 'Failed'}: PR test results`,
+              '',
+              `- Commit: \`${context.payload.pull_request.head.sha}\``,
+              `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
+              `- Exit code: \`${exitCode}\``,
+              `- Run: ${runUrl}`,
+              '',
+              '<details>',
+              '<summary>Last 80 log lines</summary>',
+              '',
+              '```text',
+              logTail.slice(-12000),
+              '```',
+              '</details>',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const previous = comments.find((comment) =>
+              comment.user.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }

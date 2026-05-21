@@ -38,6 +38,9 @@ coordinator:
         advertised-port: 7003
         connect-host: 127.0.0.1
         connect-port: 7003
+  store:
+    type: memory
+    key-prefix: redis-stream:coord
   defaults:
     initial-shard-count: 12
     consumer-max-concurrency: 12

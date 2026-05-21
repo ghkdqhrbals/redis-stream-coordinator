@@ -6,20 +6,18 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class CoordinatorService(
     private val properties: CoordinatorProperties,
+    private val stateStore: CoordinatorStateStore,
     private val redisConnectionFactory: ObjectProvider<RedisConnectionFactory>,
     private val clock: Clock = Clock.systemUTC(),
 ) {
-    private val groups = ConcurrentHashMap<GroupKey, GroupMetadata>()
-
     @Synchronized
     fun createGroup(streamPrefix: String, consumerGroup: String, request: CreateGroupRequest): GroupResponse {
         val key = GroupKey(streamPrefix, consumerGroup)
-        if (groups.containsKey(key)) {
+        if (stateStore.contains(key)) {
             throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
         }
 
@@ -43,14 +41,21 @@ class CoordinatorService(
             createdAt = now,
             updatedAt = now,
         )
-        groups[key] = group
+        if (!stateStore.putIfAbsent(key, group)) {
+            throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
+        }
         reconcile(group, now)
+        stateStore.save(key, group)
         return group.toResponse()
     }
 
     @Synchronized
     fun getGroup(streamPrefix: String, consumerGroup: String): GroupResponse =
-        requireGroup(streamPrefix, consumerGroup).also { expireMembers(it, Instant.now(clock)) }.toResponse()
+        requireGroup(streamPrefix, consumerGroup).let { group ->
+            expireMembers(group, Instant.now(clock))
+            stateStore.save(group.key(), group)
+            group.toResponse()
+        }
 
     @Synchronized
     fun scaleGroup(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
@@ -65,6 +70,7 @@ class CoordinatorService(
         val fromVersion = group.activeWriteVersion
         val fromShardCount = group.shardCountsByVersion.getValue(fromVersion)
         if (fromShardCount == request.targetShardCount) {
+            stateStore.save(group.key(), group)
             return Migration(
                 migrationId = "noop",
                 fromVersion = fromVersion,
@@ -97,6 +103,7 @@ class CoordinatorService(
         request.consumerConcurrencyPolicy?.let { group.consumerConcurrencyPolicy = it }
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
+        stateStore.save(group.key(), group)
         return migration
     }
 
@@ -112,6 +119,7 @@ class CoordinatorService(
             group.consumerConcurrencyPolicy = nextPolicy
             bumpMetadata(group, Instant.now(clock), bumpGroupEpoch = false)
             group.members.values.forEach { it.assignedMaxConcurrency = group.assignedMaxConcurrency(it.memberName) }
+            stateStore.save(group.key(), group)
         }
 
         return ConsumerConcurrencyResponse(
@@ -153,6 +161,7 @@ class CoordinatorService(
         group.shardCountsByVersion.remove(migration.toVersion)
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
+        stateStore.save(group.key(), group)
         return migration
     }
 
@@ -210,6 +219,7 @@ class CoordinatorService(
         if (member.state == MemberState.ACTIVE || member.state == MemberState.STARTING) {
             member.memberEpoch = group.assignmentEpoch
         }
+        stateStore.save(group.key(), group)
 
         val target = group.targetAssignments[memberId].orEmpty()
         val blocked = blockedShards(group, memberId)
@@ -256,13 +266,18 @@ class CoordinatorService(
     @Synchronized
     fun listGroups(): GroupsResponse {
         val now = Instant.now(clock)
-        return GroupsResponse(groups.values.map { expireMembers(it, now); it.toResponse() })
+        return GroupsResponse(stateStore.list().map {
+            expireMembers(it, now)
+            stateStore.save(it.key(), it)
+            it.toResponse()
+        })
     }
 
     @Synchronized
     fun listMembers(streamPrefix: String, consumerGroup: String): MembersResponse {
         val group = requireGroup(streamPrefix, consumerGroup)
         expireMembers(group, Instant.now(clock))
+        stateStore.save(group.key(), group)
         return MembersResponse(group.members.values.sortedBy { it.memberId })
     }
 
@@ -270,6 +285,7 @@ class CoordinatorService(
     fun assignments(streamPrefix: String, consumerGroup: String): AssignmentsResponse {
         val group = requireGroup(streamPrefix, consumerGroup)
         expireMembers(group, Instant.now(clock))
+        stateStore.save(group.key(), group)
         return AssignmentsResponse(
             targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
             currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
@@ -288,8 +304,11 @@ class CoordinatorService(
     }
 
     private fun requireGroup(streamPrefix: String, consumerGroup: String): GroupMetadata =
-        groups[GroupKey(streamPrefix, consumerGroup)]
+        stateStore.get(GroupKey(streamPrefix, consumerGroup))
             ?: throw CoordinatorException(HttpStatus.NOT_FOUND, "GROUP_NOT_FOUND", "Group not found")
+
+    private fun GroupMetadata.key(): GroupKey =
+        GroupKey(streamPrefix, consumerGroup)
 
     private fun registerOrRejoinMember(
         group: GroupMetadata,
