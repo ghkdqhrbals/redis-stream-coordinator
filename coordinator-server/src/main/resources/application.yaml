@@ -1,0 +1,43 @@
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+spring:
+  data:
+    redis:
+      cluster:
+        nodes:
+          - localhost:7001
+          - localhost:7002
+          - localhost:7003
+
+coordinator:
+  id: local-coordinator
+  heartbeat-interval: 5s
+  member-lease-ttl: 15s
+  api:
+    admin-username: admin
+    admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
+    authenticate-member-api: false
+  redis-cluster:
+    node-mappings:
+      - advertised-host: redis-node-1
+        advertised-port: 7001
+        connect-host: 127.0.0.1
+        connect-port: 7001
+      - advertised-host: redis-node-2
+        advertised-port: 7002
+        connect-host: 127.0.0.1
+        connect-port: 7002
+      - advertised-host: redis-node-3
+        advertised-port: 7003
+        connect-host: 127.0.0.1
+        connect-port: 7003
+  defaults:
+    initial-shard-count: 12
+    consumer-max-concurrency: 12
