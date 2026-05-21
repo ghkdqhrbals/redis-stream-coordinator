@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - CoordinatorOperationalScenarioMatrixTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>CoordinatorOperationalScenarioMatrixTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/io.github.ghkdqhrbals.redisstreamcoordinator.html">io.github.ghkdqhrbals.redisstreamcoordinator</a> &gt; CoordinatorOperationalScenarioMatrixTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">432</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.702s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a href="#">Tests</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Method name</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[100]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[101]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[102]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[103]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[104]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[105]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[106]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[107]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[108]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[109]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[10]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[110]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[111]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[112]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[113]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[114]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[115]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[116]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[117]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[118]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[119]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[11]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[120]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[121]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[122]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[123]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[124]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[125]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[126]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[127]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[128]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[129]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[12]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[130]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[131]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[132]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[133]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[134]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[135]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[136]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[137]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[138]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[139]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[13]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[140]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[141]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[142]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[143]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[144]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[145]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[146]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[147]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[148]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[149]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[14]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[150]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[151]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[152]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[153]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[154]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[155]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[156]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[157]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[158]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[159]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[15]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[160]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[161]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[162]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[163]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[164]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[165]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[166]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[167]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[168]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[169]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[16]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[170]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[171]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[172]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[173]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[174]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[175]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[176]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[177]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[178]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[179]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[17]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[180]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[181]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[182]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[183]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[184]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[185]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[186]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[187]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[188]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[189]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[18]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[190]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[191]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 2 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[192]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[193]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[194]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[195]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[196]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[197]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[198]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[199]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[19]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[1]</td>
+<td class="success">0.026s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[200]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[201]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[202]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[203]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[204]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[205]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[206]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[207]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[208]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[209]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[20]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[210]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[211]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[212]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[213]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[214]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[215]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[216]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[217]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[218]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[219]</td>
+<td class="success">0.005s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[21]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[220]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[221]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[222]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[223]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[224]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[225]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[226]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[227]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[228]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[229]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[22]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[230]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[231]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[232]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[233]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[234]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[235]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[236]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[237]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[238]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[239]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[23]</td>
+<td class="success">0.005s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 3 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[240]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[241]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[242]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[243]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[244]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[245]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[246]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[247]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[248]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[249]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[24]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[250]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[251]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[252]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[253]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[254]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[255]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[256]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[257]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[258]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[259]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[25]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[260]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[261]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[262]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[263]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[264]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[265]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[266]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[267]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[268]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[269]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[26]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[270]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[271]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[272]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[273]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[274]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[275]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[276]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[277]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[278]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[279]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[27]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[280]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[281]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[282]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[283]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[284]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[285]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[286]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[287]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 6 shards and 5 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[288]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[289]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[28]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[290]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[291]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[292]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[293]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[294]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[295]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[296]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[297]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[298]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[299]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[29]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[2]</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[300]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[301]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[302]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[303]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[304]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[305]</td>
+<td class="success">0.008s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[306]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[307]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[308]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[309]</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[30]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[310]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[311]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[312]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[313]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[314]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[315]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[316]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[317]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[318]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[319]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[31]</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[320]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[321]</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[322]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[323]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[324]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[325]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[326]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[327]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[328]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[329]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[32]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[330]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[331]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[332]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[333]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[334]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[335]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 2 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[336]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[337]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[338]</td>
+<td class="success">0.012s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[339]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[33]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[340]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[341]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[342]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[343]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[344]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[345]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[346]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[347]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[348]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[349]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[34]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[350]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[351]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[352]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[353]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[354]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[355]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[356]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[357]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[358]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[359]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[35]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[360]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[361]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[362]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[363]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[364]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[365]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[366]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[367]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[368]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[369]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[36]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[370]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[371]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[372]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[373]</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[374]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[375]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[376]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[377]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[378]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[379]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[37]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[380]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[381]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[382]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[383]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 3 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[384]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[385]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[386]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[387]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[388]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[389]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[38]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[390]</td>
+<td class="success">0.005s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[391]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[392]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[393]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[394]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[395]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[396]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[397]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[398]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[399]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[39]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[3]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[400]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[401]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[402]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[403]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[404]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[405]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[406]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[407]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[408]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[409]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[40]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[410]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[411]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[412]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[413]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[414]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[415]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[416]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[417]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[418]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[419]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[41]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[420]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[421]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[422]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[423]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[424]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[425]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[426]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[427]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[428]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[429]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[42]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[430]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[431]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 12 shards and 5 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[432]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[43]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[44]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[45]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[46]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[47]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[48]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[49]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[4]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[50]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[51]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[52]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[53]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[54]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[55]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[56]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[57]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[58]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[59]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[5]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; keeps the shard count unchanged; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[60]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[61]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[62]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[63]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[64]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[65]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[66]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[67]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[68]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[69]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[6]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[70]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[71]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[72]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[73]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[74]</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[75]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[76]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[77]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[78]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[79]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[7]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[80]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[81]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[82]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[83]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales down to a new stream version; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[84]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[85]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[86]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[87]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; adds a new member; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[88]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; removes one member through a graceful leave; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[89]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[8]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; removes one member through a graceful leave; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[90]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[91]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; lets one member expire by missing heartbeats; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[92]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[93]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; restarts one member with the same identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[94]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; replaces one member with a new identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[95]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 3 members; scales up and then rolls the migration back; replaces one member with a new identity; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[96]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; keeps the member set steady; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[97]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; keeps the member set steady; gives the first live member higher capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[98]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 5 members; keeps the shard count unchanged; adds a new member; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[99]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">starts with 2 shards and 2 members; keeps the shard count unchanged; restarts one member with the same identity; uses equal member capacity</td>
+<td class="success">coordinator handles kafka style operational scenario matrix(OperationalScenario)[9]</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 8.14.5</a> at May 21, 2026, 8:14:49 PM</p>
+</div>
+</div>
+</body>
+</html>
