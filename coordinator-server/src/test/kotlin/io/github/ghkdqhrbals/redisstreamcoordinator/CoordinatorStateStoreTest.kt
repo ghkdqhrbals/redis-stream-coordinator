@@ -66,15 +66,16 @@ class CoordinatorStateStoreTest {
 
     @Test
     fun `redis coordinator keys keep group scoped keys in the same cluster hash slot`() {
-        val keys = RedisCoordinatorStateKeys("redis-stream:coord:")
-            .forGroup(GroupKey("orders", "orders-consumer"))
+        val stateKeys = RedisCoordinatorStateKeys("redis-stream:coord:")
+        val keys = stateKeys.forGroup(GroupKey("orders", "orders-consumer"))
 
-        assertEquals("redis-stream:coord:{orders:orders-consumer}:group", keys.group)
-        assertEquals("redis-stream:coord:{orders:orders-consumer}:members", keys.members)
-        assertEquals("redis-stream:coord:{orders:orders-consumer}:target-assignments", keys.targetAssignments)
-        assertEquals("redis-stream:coord:{orders:orders-consumer}:current-assignments", keys.currentAssignments)
-        assertEquals("redis-stream:coord:{orders:orders-consumer}:migrations", keys.migrations)
-        assertEquals("redis-stream:coord:{orders:orders-consumer}:active-migration", keys.activeMigration)
+        assertEquals("redis-stream:coord::groups", stateKeys.groupsIndex)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:group", keys.group)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:members", keys.members)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:target-assignments", keys.targetAssignments)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:current-assignments", keys.currentAssignments)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:migrations", keys.migrations)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:active-migration", keys.activeMigration)
     }
 
     @Test

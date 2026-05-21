@@ -51,7 +51,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true \
   ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest
 ```
 
-On pull requests, the `PR test results` workflow publishes the Gradle test HTML report to GitHub Pages, uploads the same report as the `coordinator-gradle-test-report` artifact, and updates a PR comment with every executed test scenario grouped by test class.
+On pull requests, the `PR test results` workflow runs with read-only repository contents permission, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, and updates a PR comment with every executed test scenario grouped by test class.
 
 ## Implemented Module
 
@@ -126,6 +126,7 @@ Implemented:
 * `CoordinatorStateStore` abstraction with memory and Redis implementations.
 * Redis-backed group metadata persistence when `coordinator.store.type=redis`.
 * Redis projected keys for member metadata, target assignments, current assignments, active migration, and migration history.
+* Redis group-scoped aggregate/projection keys are replaced through one Lua script to avoid reader-visible partial projection updates.
 
 ## Verified Runtime Smoke Test
 
@@ -373,7 +374,7 @@ Expected response:
 * [x] Implement Redis active migration key.
 * [x] Implement Redis migration history keys.
 * [ ] Implement Redis admin audit log.
-* [ ] Add optimistic concurrency or Lua transaction boundaries for coordinator mutations.
+* [x] Add optimistic concurrency or Lua transaction boundaries for coordinator mutations.
 * [x] Add store-level tests.
 
 ### Phase 6: Redis Stream Shard Operations
@@ -409,12 +410,13 @@ Implemented tests:
 * Unknown member cannot leave by sending `memberEpoch=-1`.
 * Expired member is removed from target assignment and shards are reassigned after lease expiry.
 * Consumer concurrency policy changes rebalance target assignments by member weight.
+* Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
 * In-memory state store supports create/get/save/list.
 * Coordinator state survives service instance replacement when the same state store is reused.
 * Redis state projection splits aggregate state into member, target, current assignment, migration, and active migration sections.
-* Redis key helper keeps group-scoped keys in a single Redis Cluster hash slot.
+* Redis key helper keeps group-scoped keys in a single Redis Cluster hash slot and preserves configured prefix formatting.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
 * Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
@@ -464,6 +466,6 @@ Explicitly still out of scope for the coordinator:
 Next implementation step should be to harden the Redis store:
 
 1. Keep group metadata as the aggregate source of truth during the transition.
-2. Add optimistic concurrency or Lua transaction boundaries around coordinator mutations.
-3. Add Redis integration tests that run against the local three-node cluster.
+2. Add Redis integration tests that run against the local three-node cluster by default in CI.
+3. Add producer routing metadata API/cache.
 4. Promote projected Redis keys to read paths once the write model is transactionally safe.

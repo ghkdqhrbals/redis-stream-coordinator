@@ -2,6 +2,7 @@ package io.github.ghkdqhrbals.redisstreamcoordinator
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
@@ -54,19 +55,17 @@ class RedisCoordinatorStateStore(
 
     override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean {
         val groupKeys = keys.forGroup(key)
-        val stored = redisTemplate.opsForValue().setIfAbsent(groupKeys.group, objectMapper.writeValueAsString(group))
-        if (stored == true) {
+        val stored = writeGroupScopedState(groupKeys, group, onlyIfAbsent = true)
+        if (stored) {
             redisTemplate.opsForSet().add(keys.groupsIndex, groupKeys.group)
-            writeProjectedKeys(groupKeys, group)
         }
-        return stored == true
+        return stored
     }
 
     override fun save(key: GroupKey, group: GroupMetadata) {
         val groupKeys = keys.forGroup(key)
-        redisTemplate.opsForValue().set(groupKeys.group, objectMapper.writeValueAsString(group))
+        writeGroupScopedState(groupKeys, group, onlyIfAbsent = false)
         redisTemplate.opsForSet().add(keys.groupsIndex, groupKeys.group)
-        writeProjectedKeys(groupKeys, group)
     }
 
     override fun list(): List<GroupMetadata> =
@@ -75,26 +74,80 @@ class RedisCoordinatorStateStore(
             .mapNotNull { redisTemplate.opsForValue().get(it) }
             .map { objectMapper.readValue<GroupMetadata>(it) }
 
-    private fun writeProjectedKeys(keys: RedisCoordinatorGroupKeys, group: GroupMetadata) {
+    private fun writeGroupScopedState(
+        keys: RedisCoordinatorGroupKeys,
+        group: GroupMetadata,
+        onlyIfAbsent: Boolean,
+    ): Boolean {
         val projection = group.toRedisStateProjection()
-        replaceHash(keys.members, projection.members)
-        replaceHash(keys.targetAssignments, projection.targetAssignments)
-        replaceHash(keys.currentAssignments, projection.currentAssignments)
-        replaceHash(keys.migrations, projection.migrations)
+        val args = mutableListOf(
+            if (onlyIfAbsent) "NX" else "UPSERT",
+            objectMapper.writeValueAsString(group),
+            projection.activeMigrationId.orEmpty(),
+        )
+        appendHashArgs(args, projection.members)
+        appendHashArgs(args, projection.targetAssignments)
+        appendHashArgs(args, projection.currentAssignments)
+        appendHashArgs(args, projection.migrations)
 
-        projection.activeMigrationId?.let {
-            redisTemplate.opsForValue().set(keys.activeMigration, it)
-        } ?: redisTemplate.delete(keys.activeMigration)
+        val result = redisTemplate.execute(
+            UPSERT_GROUP_STATE_SCRIPT,
+            listOf(
+                keys.group,
+                keys.members,
+                keys.targetAssignments,
+                keys.currentAssignments,
+                keys.migrations,
+                keys.activeMigration,
+            ),
+            *args.toTypedArray(),
+        )
+        return result == 1L
     }
 
-    private fun replaceHash(key: String, values: Map<String, Any>) {
-        redisTemplate.delete(key)
-        if (values.isNotEmpty()) {
-            redisTemplate.opsForHash<String, String>().putAll(
-                key,
-                values.mapValues { (_, value) -> objectMapper.writeValueAsString(value) },
-            )
+    private fun appendHashArgs(args: MutableList<String>, values: Map<String, Any>) {
+        args += values.size.toString()
+        values.forEach { (field, value) ->
+            args += field
+            args += objectMapper.writeValueAsString(value)
         }
+    }
+
+    companion object {
+        private val UPSERT_GROUP_STATE_SCRIPT = DefaultRedisScript(
+            """
+            if ARGV[1] == 'NX' and redis.call('EXISTS', KEYS[1]) == 1 then
+              return 0
+            end
+
+            redis.call('SET', KEYS[1], ARGV[2])
+
+            local argIndex = 4
+            local function replaceHash(key)
+              redis.call('DEL', key)
+              local count = tonumber(ARGV[argIndex])
+              argIndex = argIndex + 1
+              for i = 1, count do
+                redis.call('HSET', key, ARGV[argIndex], ARGV[argIndex + 1])
+                argIndex = argIndex + 2
+              end
+            end
+
+            replaceHash(KEYS[2])
+            replaceHash(KEYS[3])
+            replaceHash(KEYS[4])
+            replaceHash(KEYS[5])
+
+            if ARGV[3] == '' then
+              redis.call('DEL', KEYS[6])
+            else
+              redis.call('SET', KEYS[6], ARGV[3])
+            end
+
+            return 1
+            """.trimIndent(),
+            Long::class.java,
+        )
     }
 }
 
@@ -122,7 +175,7 @@ fun GroupMetadata.toRedisStateProjection(): RedisCoordinatorStateProjection =
 class RedisCoordinatorStateKeys(
     keyPrefix: String,
 ) {
-    private val prefix = keyPrefix.trimEnd(':')
+    private val prefix = keyPrefix
 
     val groupsIndex: String = "$prefix:groups"
 

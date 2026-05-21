@@ -13,8 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
+      pull-requests: read
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
     steps:
@@ -22,6 +21,7 @@ jobs:
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Pre-fetch base and head refs
         run: |
@@ -45,7 +45,6 @@ jobs:
     needs: codex
     permissions:
       issues: write
-      pull-requests: write
     steps:
       - name: Post Codex review
         uses: actions/github-script@v7

@@ -115,6 +115,62 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `consumer concurrency assignment movement advances epochs and returns new member epoch`() {
+        service.createGroup("policy-epochs", "events-consumer", createGroupRequest(initialShardCount = 8))
+        val first = service.heartbeat(
+            "policy-epochs",
+            "events-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "policy-epochs",
+            "events-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+        val second = service.heartbeat(
+            "policy-epochs",
+            "events-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        val before = service.getGroup("policy-epochs", "events-consumer")
+
+        val update = service.updateConsumerConcurrency(
+            "policy-epochs",
+            "events-consumer",
+            UpdateConsumerConcurrencyRequest(
+                defaultMaxConcurrency = 1,
+                memberOverrides = mapOf("member-b" to 3),
+                requestedBy = "test",
+                reason = "member-b has more workers",
+            ),
+        )
+        val after = service.getGroup("policy-epochs", "events-consumer")
+        val memberA = service.heartbeat(
+            "policy-epochs",
+            "events-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+        val memberB = service.heartbeat(
+            "policy-epochs",
+            "events-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = second.memberEpoch),
+        )
+
+        assertTrue(update.groupEpoch > before.groupEpoch)
+        assertEquals(update.groupEpoch, after.assignmentEpoch)
+        assertEquals(after.assignmentEpoch, memberA.memberEpoch)
+        assertEquals(after.assignmentEpoch, memberB.memberEpoch)
+        assertEquals(2, memberA.assignment.assignedShards.size)
+        assertEquals(6, memberB.assignment.pendingShards.size)
+        assertTrue(memberB.assignment.assignedShards.isEmpty())
+    }
+
+    @Test
     fun `rollback restores previous stream version and clears active migration`() {
         service.createGroup("metrics", "metrics-consumer", createGroupRequest(initialShardCount = 2))
         val migration = service.scaleGroup(
@@ -244,12 +300,12 @@ class CoordinatorServiceTest {
     private fun service(clock: Clock): CoordinatorService =
         CoordinatorService(
             properties = CoordinatorProperties(
-            heartbeatInterval = Duration.ofSeconds(3),
-            memberLeaseTtl = Duration.ofSeconds(15),
-            defaults = CoordinatorProperties.Defaults(
-                initialShardCount = 4,
-                consumerMaxConcurrency = 4,
-            ),
+                heartbeatInterval = Duration.ofSeconds(3),
+                memberLeaseTtl = Duration.ofSeconds(15),
+                defaults = CoordinatorProperties.Defaults(
+                    initialShardCount = 4,
+                    consumerMaxConcurrency = 4,
+                ),
             ),
             stateStore = InMemoryCoordinatorStateStore(),
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),

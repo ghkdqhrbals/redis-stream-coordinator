@@ -117,10 +117,15 @@ class CoordinatorService(
         val nextPolicy = ConsumerConcurrencyPolicy(request.defaultMaxConcurrency, request.memberOverrides)
         if (group.consumerConcurrencyPolicy != nextPolicy) {
             val now = Instant.now(clock)
+            val previousTargetAssignments = group.targetAssignmentSnapshot()
             group.consumerConcurrencyPolicy = nextPolicy
             bumpMetadata(group, now, bumpGroupEpoch = false)
             group.members.values.forEach { it.assignedMaxConcurrency = group.assignedMaxConcurrency(it.memberName) }
             reconcile(group, now)
+            if (group.targetAssignmentSnapshot() != previousTargetAssignments) {
+                group.groupEpoch += 1
+                group.assignmentEpoch = group.groupEpoch
+            }
             stateStore.save(group.key(), group)
         }
 
@@ -527,6 +532,11 @@ class CoordinatorService(
         group.metadataVersion += 1
         group.updatedAt = now
     }
+
+    private fun GroupMetadata.targetAssignmentSnapshot(): Map<String, Set<ShardId>> =
+        targetAssignments
+            .mapValues { (_, shards) -> shards.toSortedSet() }
+            .toSortedMap()
 
     private fun GroupMetadata.readableShards(): List<ShardId> =
         readableVersions.flatMap { version ->
