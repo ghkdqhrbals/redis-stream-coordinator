@@ -187,7 +187,7 @@ coverage for operational behavior.
 
 | Area | Coverage |
 | --- | --- |
-| Operational scenario matrix | 1,440 generated cases covering shard counts, member counts, scale up/down/rollback, churn, expiry, rolling restart, replacement, and capacity skew. |
+| Operational scenario matrix | 432 focused cases covering shard counts, member counts, scale up/down/rollback, churn, expiry, rolling restart, replacement, and capacity skew with descriptive scenario names. |
 | Coordinator failover | Replacement coordinator resumes pending revoke and assignment after process replacement. |
 | Stale consumer fencing | Old member epochs and expired owners are fenced instead of mutating current ownership. |
 | Redis state race | Optimistic revision conflict rejects stale snapshots. |
