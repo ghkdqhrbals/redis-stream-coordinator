@@ -147,10 +147,15 @@ epoch already acknowledged by the coordinator, the coordinator returns
 `FENCED_MEMBER_EPOCH` and no assignment. The member must drop ownership and
 rejoin with epoch `0`.
 
+When a member joins or rejoins with epoch `0`, the coordinator ignores any
+reported `ownedShards` or `revokingShards` in that heartbeat. A join starts from
+empty local ownership and must converge from the coordinator response.
+
 Covered by tests:
 
 - `stale member epoch after acknowledged rebalance is fenced`
 - `expired old consumer returning with stale ownership is fenced`
+- `expired member rejoining with epoch zero does not restore stale ownership`
 
 ### Race Between Coordinators
 
@@ -198,6 +203,7 @@ The design reread found these gaps and their current resolution status:
 | Stale member heartbeat accepted after a newer epoch was already acknowledged. | Fixed in implementation. | Stale positive epochs are fenced; normal first heartbeat after a rebalance is still accepted until the new epoch is acknowledged. |
 | Coordinator replacement during pending revoke was not explicitly tested. | Fixed in tests. | Shared store failover test covers the handoff continuation. |
 | Expired old consumer could report stale ownership. | Fixed in implementation and tests. | Expired members with positive epochs are fenced and do not block the replacement owner. |
+| Epoch-zero rejoin could restore stale ownership from the request body. | Fixed in implementation and tests. | Join/rejoin heartbeats ignore reported owned/revoking shards and start from empty local ownership. |
 | Capacity policy updates could over-advance group epoch or advance it without assignment movement. | Fixed in implementation and tests. | No-move policy updates advance metadata only; assignment-moving policy updates advance the group epoch once. |
 | PR test comments were too verbose. | Fixed in workflow. | The PR comment now keeps totals and links only; full scenario names live in the Test HTML report. |
 | Design docs lived only as implementation notes. | Fixed by process. | Markdown source is stored on the separate `design-docs` branch and rendered by a dedicated action. |
