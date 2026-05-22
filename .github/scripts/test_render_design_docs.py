@@ -74,6 +74,39 @@ class RenderDesignDocsTest(unittest.TestCase):
             self.assertIn("font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);", html)
             self.assertIn("font-size: 0.93em;", html)
 
+    def test_shows_index_at_top_before_document_body(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            (source / "index.md").write_text("# Design Doc\n", encoding="utf-8")
+            (source / "rebalance.md").write_text("# Rebalance Protocol\n", encoding="utf-8")
+
+            self._run_renderer(source, output)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn('<div class="index-title">Index</div>', html)
+            self.assertIn('<nav aria-label="Design document navigation">', html)
+            self.assertLess(html.index('<div class="index-title">Index</div>'), html.index("<main>"))
+            self.assertLess(html.index('href="rebalance.html"'), html.index("<main>"))
+
+    def test_heading_levels_do_not_render_underline_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            (source / "index.md").write_text(
+                "# Design Doc\n\n## Section\n\n### Scenario\n\n#### Detail\n\nBody\n",
+                encoding="utf-8",
+            )
+
+            self._run_renderer(source, output)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("h1, h2, h3, h4", html)
+            for selector in ("h1", "h2", "h3", "h4"):
+                rule = html.split(f"{selector} {{", 1)[1].split("}", 1)[0]
+                self.assertNotIn("border-bottom", rule)
+                self.assertNotIn("text-decoration", rule)
+
     def test_uses_samsung_blue_as_accent_color(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
             source = Path(source_dir)

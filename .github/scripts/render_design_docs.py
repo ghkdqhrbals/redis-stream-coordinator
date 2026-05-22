@@ -221,20 +221,25 @@ def render_page(title: str, body: str, nav: str) -> str:
         display: flex;
         flex-wrap: wrap;
         gap: 4px 14px;
-        border-bottom: 1px solid var(--border);
-        margin-bottom: 18px;
-        padding-bottom: 8px;
+        margin-top: 6px;
       }}
       nav a {{
         color: var(--accent);
         text-decoration: none;
         overflow-wrap: anywhere;
       }}
+      .index-title {{
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }}
       main {{
         min-width: 0;
         max-width: 100%;
       }}
-      h1, h2, h3 {{
+      h1, h2, h3, h4 {{
         line-height: 1.25;
         overflow-wrap: anywhere;
       }}
@@ -247,13 +252,16 @@ def render_page(title: str, body: str, nav: str) -> str:
         font-size: 1.3rem;
         margin-top: 1.65rem;
         margin-bottom: 0.65rem;
-        border-bottom: 1px solid var(--border);
-        padding-bottom: 0.25rem;
       }}
       h3 {{
         font-size: 1.08rem;
         margin-top: 1.2rem;
         margin-bottom: 0.45rem;
+      }}
+      h4 {{
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
       }}
       p, ul, ol {{
         margin-top: 0.55rem;
@@ -382,13 +390,13 @@ def render_page(title: str, body: str, nav: str) -> str:
   <body>
     <header>
       <div class="wrap">
-        <strong>Redis Stream Coordinator Design Docs</strong>
+        <div class="index-title">Index</div>
+        <nav aria-label="Design document navigation">
+{nav}
+        </nav>
       </div>
     </header>
     <div class="wrap">
-      <nav aria-label="Design document navigation">
-{nav}
-      </nav>
       <main>
 {body}
       </main>
