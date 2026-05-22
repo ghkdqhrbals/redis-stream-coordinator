@@ -434,6 +434,7 @@ Implemented tests:
 * Producer routing metadata exposes active write version, shard count, hash policy, stream key pattern, and active shard keys.
 * HTTP integration covers scale-triggered producer routing updates and graceful leave monitoring.
 * Mockito-backed integration tests verify stream provisioning failures do not publish create or scale metadata.
+* Rebalance state-machine flow tests provide large, small, and micro formats for coordinator tick expiration detection, heartbeat-driven reassignment, sticky shard retention, and redistribution invariants.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
 * In-memory state store supports create/get/save/list.
@@ -455,6 +456,7 @@ Test files:
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorServiceTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorGroupedWorkflowTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorProvisioningFailureIntegrationTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorRebalanceStateMachineFlowTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
