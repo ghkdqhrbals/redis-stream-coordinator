@@ -55,8 +55,24 @@ class RenderDesignDocsTest(unittest.TestCase):
             self.assertIn('data-label="Scenario"', html)
             self.assertIn('data-label="Expected behavior"', html)
             self.assertIn("@media (max-width: 720px)", html)
-            self.assertIn("grid-template-columns: minmax(7.5rem, 34%) minmax(0, 1fr)", html)
+            self.assertIn("grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr)", html)
             self.assertNotIn("overflow-x: hidden", html)
+
+    def test_uses_compact_kip_like_document_spacing(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            (source / "index.md").write_text("# Design Doc\n\n## Section\n\nBody\n", encoding="utf-8")
+
+            self._run_renderer(source, output)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);", html)
+            self.assertIn("line-height: 1.5;", html)
+            self.assertIn("width: min(100%, 980px);", html)
+            self.assertIn("padding: clamp(14px, 2.6vw, 24px);", html)
+            self.assertIn("font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);", html)
+            self.assertIn("font-size: 0.93em;", html)
 
     def test_uses_samsung_blue_as_accent_color(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:

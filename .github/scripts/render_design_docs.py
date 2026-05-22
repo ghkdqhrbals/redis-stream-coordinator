@@ -203,27 +203,27 @@ def render_page(title: str, body: str, nav: str) -> str:
       body {{
         margin: 0;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-size: clamp(0.98rem, 0.92rem + 0.25vw, 1.05rem);
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
         color: var(--fg);
         background: #ffffff;
-        line-height: 1.62;
+        line-height: 1.5;
       }}
       header {{
         border-bottom: 1px solid var(--border);
         background: var(--panel);
       }}
       .wrap {{
-        width: min(100%, 920px);
+        width: min(100%, 980px);
         margin: 0 auto;
-        padding: clamp(18px, 4vw, 32px);
+        padding: clamp(14px, 2.6vw, 24px);
       }}
       nav {{
         display: flex;
         flex-wrap: wrap;
-        gap: 8px 16px;
+        gap: 4px 14px;
         border-bottom: 1px solid var(--border);
-        margin-bottom: 28px;
-        padding-bottom: 12px;
+        margin-bottom: 18px;
+        padding-bottom: 8px;
       }}
       nav a {{
         color: var(--accent);
@@ -239,16 +239,25 @@ def render_page(title: str, body: str, nav: str) -> str:
         overflow-wrap: anywhere;
       }}
       h1 {{
-        font-size: clamp(1.75rem, 1.36rem + 1.65vw, 2.35rem);
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
         margin-top: 0;
+        margin-bottom: 0.8rem;
       }}
       h2 {{
-        margin-top: 2.1rem;
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
         border-bottom: 1px solid var(--border);
-        padding-bottom: 0.35rem;
+        padding-bottom: 0.25rem;
       }}
       h3 {{
-        margin-top: 1.6rem;
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }}
+      p, ul, ol {{
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
       }}
       a {{
         color: var(--accent);
@@ -258,12 +267,13 @@ def render_page(title: str, body: str, nav: str) -> str:
         width: 100%;
         max-width: 100%;
         border-collapse: collapse;
-        margin: 1rem 0;
+        margin: 0.8rem 0;
+        font-size: 0.93em;
         table-layout: auto;
       }}
       th, td {{
         border: 1px solid var(--border);
-        padding: 8px 10px;
+        padding: 6px 8px;
         vertical-align: top;
         overflow-wrap: anywhere;
       }}
@@ -280,16 +290,17 @@ def render_page(title: str, body: str, nav: str) -> str:
         max-width: 100%;
         overflow-x: auto;
         background: var(--code);
-        border-radius: 8px;
-        padding: 16px;
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
       }}
       pre code {{
         padding: 0;
         white-space: pre;
       }}
       blockquote {{
-        margin: 1rem 0;
-        padding: 0.3rem 1rem;
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
         border-left: 4px solid var(--accent);
         color: var(--muted);
         background: var(--panel);
@@ -327,8 +338,8 @@ def render_page(title: str, body: str, nav: str) -> str:
         }}
         .responsive-table td {{
           display: grid;
-          grid-template-columns: minmax(7.5rem, 34%) minmax(0, 1fr);
-          gap: 12px;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
@@ -351,8 +362,8 @@ def render_page(title: str, body: str, nav: str) -> str:
       }}
       @media (max-width: 480px) {{
         .wrap {{
-          padding-top: 18px;
-          padding-bottom: 18px;
+          padding-top: 12px;
+          padding-bottom: 12px;
         }}
         nav {{
           display: block;
