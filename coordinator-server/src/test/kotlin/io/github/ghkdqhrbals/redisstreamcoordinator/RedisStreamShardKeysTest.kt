@@ -77,4 +77,23 @@ class RedisStreamShardKeysTest {
             group.streamShardKeys(streamVersion = 3)
         }
     }
+
+    @Test
+    fun `provisioning plan binds consumer group and shard keys`() {
+        val plan = RedisStreamShardProvisioningPlan.forVersion(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            streamVersion = 2,
+            shardCount = 3,
+        )
+
+        assertEquals("orders", plan.streamPrefix)
+        assertEquals("orders-consumer", plan.consumerGroup)
+        assertEquals(2, plan.streamVersion)
+        assertEquals(3, plan.shardCount)
+        assertEquals(
+            listOf("orders:v2:shard:0", "orders:v2:shard:1", "orders:v2:shard:2"),
+            plan.shardKeys.map { it.value },
+        )
+    }
 }

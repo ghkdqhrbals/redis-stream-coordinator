@@ -368,6 +368,7 @@ private fun service(clock: Clock): CoordinatorService =
         ),
         stateStore = InMemoryCoordinatorStateStore(),
         redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
+        streamProvisioner = NoopStreamShardProvisioner,
         clock = clock,
     )
 

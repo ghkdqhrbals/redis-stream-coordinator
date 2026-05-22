@@ -4,4 +4,4 @@ build/
 **/build/
 *.swp
 *.swo
-
+docs/coordinator-implementation-plan.md

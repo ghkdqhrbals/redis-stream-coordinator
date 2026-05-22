@@ -41,6 +41,8 @@ coordinator:
   store:
     type: memory
     key-prefix: redis-stream:coord
+  streams:
+    provisioning-enabled: false
   defaults:
     initial-shard-count: 12
     consumer-max-concurrency: 12

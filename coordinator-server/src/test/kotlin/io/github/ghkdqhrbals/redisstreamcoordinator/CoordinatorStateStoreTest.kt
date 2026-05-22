@@ -126,6 +126,7 @@ class CoordinatorStateStoreTest {
             properties = properties,
             stateStore = store,
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
+            streamProvisioner = NoopStreamShardProvisioner,
             clock = clock,
         )
 

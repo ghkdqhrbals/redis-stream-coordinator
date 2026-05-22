@@ -12,6 +12,7 @@ class CoordinatorService(
     private val properties: CoordinatorProperties,
     private val stateStore: CoordinatorStateStore,
     private val redisConnectionFactory: ObjectProvider<RedisConnectionFactory>,
+    private val streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     @Synchronized
@@ -42,6 +43,7 @@ class CoordinatorService(
             updatedAt = now,
         )
         reconcile(group, now)
+        streamProvisioner.provision(group.streamShardProvisioningPlan())
         if (!stateStore.putIfAbsent(key, group)) {
             throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
         }
@@ -87,6 +89,14 @@ class CoordinatorService(
         }
 
         val toVersion = group.shardCountsByVersion.keys.maxOrNull()!! + 1
+        streamProvisioner.provision(
+            RedisStreamShardProvisioningPlan.forVersion(
+                streamPrefix = streamPrefix,
+                consumerGroup = consumerGroup,
+                streamVersion = toVersion,
+                shardCount = request.targetShardCount,
+            ),
+        )
         val migration = Migration(
             migrationId = newMigrationId(),
             fromVersion = fromVersion,

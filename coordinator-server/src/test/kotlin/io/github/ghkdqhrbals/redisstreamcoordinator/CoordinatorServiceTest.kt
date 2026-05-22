@@ -589,10 +589,50 @@ class CoordinatorServiceTest {
         assertEquals(setOf(1, 2), group.readableVersions)
     }
 
+    @Test
+    fun `group creation provisions initial stream version`() {
+        val provisioner = RecordingStreamShardProvisioner()
+        val service = service(clock, InMemoryCoordinatorStateStore(), provisioner)
+
+        service.createGroup("provision-create", "orders-consumer", createGroupRequest(initialShardCount = 2))
+
+        assertEquals(
+            listOf(
+                ProvisionedVersion("provision-create", "orders-consumer", streamVersion = 1, shardCount = 2),
+            ),
+            provisioner.provisioned,
+        )
+    }
+
+    @Test
+    fun `scale provisions next stream version before publishing migration`() {
+        val provisioner = RecordingStreamShardProvisioner()
+        val service = service(clock, InMemoryCoordinatorStateStore(), provisioner)
+
+        service.createGroup("provision-scale", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        service.scaleGroup(
+            "provision-scale",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "provision next version"),
+        )
+
+        assertEquals(
+            listOf(
+                ProvisionedVersion("provision-scale", "orders-consumer", streamVersion = 1, shardCount = 2),
+                ProvisionedVersion("provision-scale", "orders-consumer", streamVersion = 2, shardCount = 3),
+            ),
+            provisioner.provisioned,
+        )
+    }
+
     private fun service(clock: Clock): CoordinatorService =
         service(clock, InMemoryCoordinatorStateStore())
 
-    private fun service(clock: Clock, stateStore: CoordinatorStateStore): CoordinatorService =
+    private fun service(
+        clock: Clock,
+        stateStore: CoordinatorStateStore,
+        streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
+    ): CoordinatorService =
         CoordinatorService(
             properties = CoordinatorProperties(
                 heartbeatInterval = Duration.ofSeconds(3),
@@ -604,6 +644,7 @@ class CoordinatorServiceTest {
             ),
             stateStore = stateStore,
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
+            streamProvisioner = streamProvisioner,
             clock = clock,
         )
 
@@ -636,6 +677,26 @@ class CoordinatorServiceTest {
             ownedShards = ownedShards,
             revokingShards = revokingShards,
         )
+}
+
+private data class ProvisionedVersion(
+    val streamPrefix: String,
+    val consumerGroup: String,
+    val streamVersion: Int,
+    val shardCount: Int,
+)
+
+private class RecordingStreamShardProvisioner : StreamShardProvisioner {
+    val provisioned = mutableListOf<ProvisionedVersion>()
+
+    override fun provision(plan: RedisStreamShardProvisioningPlan) {
+        provisioned += ProvisionedVersion(
+            streamPrefix = plan.streamPrefix,
+            consumerGroup = plan.consumerGroup,
+            streamVersion = plan.streamVersion,
+            shardCount = plan.shardCount,
+        )
+    }
 }
 
 private class MutableClock(

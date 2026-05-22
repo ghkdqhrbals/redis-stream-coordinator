@@ -20,6 +20,36 @@ data class RedisStreamShardKey(
     val slot: Int = RedisClusterHashSlot.slot(value)
 }
 
+data class RedisStreamShardProvisioningPlan(
+    val streamPrefix: String,
+    val consumerGroup: String,
+    val streamVersion: Int,
+    val shardCount: Int,
+    val shardKeys: List<RedisStreamShardKey>,
+) {
+    init {
+        require(consumerGroup.isNotBlank()) { "consumerGroup must not be blank" }
+        require(shardCount > 0) { "shardCount must be positive" }
+        require(shardKeys.size == shardCount) { "shardKeys size must match shardCount" }
+    }
+
+    companion object {
+        fun forVersion(
+            streamPrefix: String,
+            consumerGroup: String,
+            streamVersion: Int,
+            shardCount: Int,
+        ): RedisStreamShardProvisioningPlan =
+            RedisStreamShardProvisioningPlan(
+                streamPrefix = streamPrefix,
+                consumerGroup = consumerGroup,
+                streamVersion = streamVersion,
+                shardCount = shardCount,
+                shardKeys = RedisStreamShardKeys.forVersion(streamPrefix, streamVersion, shardCount),
+            )
+    }
+}
+
 object RedisStreamShardKeys {
     fun forShard(streamPrefix: String, streamVersion: Int, shardIndex: Int): RedisStreamShardKey =
         RedisStreamShardKey(streamPrefix, streamVersion, shardIndex)
@@ -88,4 +118,12 @@ fun GroupMetadata.streamShardKeys(streamVersion: Int = activeWriteVersion): List
     val shardCount = shardCountsByVersion[streamVersion]
         ?: throw IllegalArgumentException("Unknown stream version $streamVersion")
     return RedisStreamShardKeys.forVersion(streamPrefix, streamVersion, shardCount)
+}
+
+fun GroupMetadata.streamShardProvisioningPlan(
+    streamVersion: Int = activeWriteVersion,
+): RedisStreamShardProvisioningPlan {
+    val shardCount = shardCountsByVersion[streamVersion]
+        ?: throw IllegalArgumentException("Unknown stream version $streamVersion")
+    return RedisStreamShardProvisioningPlan.forVersion(streamPrefix, consumerGroup, streamVersion, shardCount)
 }

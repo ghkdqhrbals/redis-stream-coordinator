@@ -9,8 +9,8 @@ The repository now has a Spring Boot 4 / Kotlin / Java 24 Gradle module named `c
 The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, and basic monitoring responses.
 
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
-The module is connected to a local three-node Redis Cluster for connectivity and metadata-store work.
-Stream shard key formatting and Redis Cluster hash-slot planning helpers are now implemented, but the coordinator does not create Redis Stream keys or Redis consumer groups yet.
+The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
+Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
 
 ## Build and Tooling
 
@@ -130,6 +130,8 @@ Implemented:
 * Redis group-scoped aggregate/projection keys are replaced through one Lua script to avoid reader-visible partial projection updates.
 * Redis-backed saves use a coordinator `storeRevision` compare-and-set guard and retry mutation requests on transient state conflicts.
 * Redis Stream shard key helper with Redis Cluster hash-slot calculation and equal-master-range distribution planning.
+* Opt-in Redis Stream shard provisioning through `coordinator.streams.provisioning-enabled=true`.
+* Redis Stream consumer group provisioning with idempotent `XGROUP CREATE ... MKSTREAM` semantics during group creation and scale.
 
 ## Verified Runtime Smoke Test
 
@@ -384,10 +386,10 @@ Expected response:
 
 ### Phase 6: Redis Stream Shard Operations
 
-* [ ] Create stream shard keys during group creation.
-* [ ] Create Redis consumer groups for each shard.
-* [ ] Create next-version shard keys during scale.
-* [ ] Create consumer groups for next-version shards.
+* [x] Create stream shard keys during group creation when stream provisioning is enabled.
+* [x] Create Redis consumer groups for each shard when stream provisioning is enabled.
+* [x] Create next-version shard keys during scale when stream provisioning is enabled.
+* [x] Create consumer groups for next-version shards when stream provisioning is enabled.
 * [x] Validate stream version and shard count metadata before building shard keys.
 * [x] Add shard key format helper.
 * [x] Add hash-slot distribution helper.
@@ -426,6 +428,8 @@ Implemented tests:
 * Redis key helper keeps group-scoped keys in a single Redis Cluster hash slot and preserves configured prefix formatting.
 * Redis-backed store rejects stale coordinator snapshots instead of overwriting newer state.
 * Redis Stream shard key helper rejects hash-tag unsafe stream prefixes, validates version/shard counts, calculates Redis Cluster slots, and estimates distribution across equal master ranges.
+* Coordinator service calls shard provisioning on group creation and scale.
+* Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
 * Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
@@ -446,7 +450,6 @@ Remaining work:
 
 * Redis admin audit log.
 * Coordinator event loop as a scheduled worker.
-* Redis Stream shard and consumer group creation during scale/create.
 * Admin audit logging.
 * Metrics listed in the PRD.
 * Rate limiting.
@@ -454,7 +457,7 @@ Remaining work:
 * Migration drain progress and automatic `DEPRECATED` transition.
 * Producer routing metadata API/cache.
 * More complete epoch fencing semantics.
-* Broader Redis integration tests that exercise live stream and consumer group creation after Phase 6 is implemented.
+* Broader Redis integration tests that stress idempotent provisioning retry and failure handling.
 
 Explicitly still out of scope for the coordinator:
 
@@ -466,9 +469,9 @@ Explicitly still out of scope for the coordinator:
 
 ## Suggested Next Step
 
-Next implementation step should be to implement Redis Stream shard provisioning:
+Next implementation step should be to expose producer routing metadata and finish migration drain semantics:
 
-1. Create stream keys and Redis consumer groups during group creation.
-2. Create next-version stream keys and consumer groups during scale.
-3. Add a producer routing metadata API/cache that returns active write version, shard count, key pattern, hash algorithm, and hash seed.
-4. Add live Redis integration tests for stream provisioning.
+1. Add a producer routing metadata API/cache that returns active write version, shard count, key pattern, hash algorithm, and hash seed.
+2. Add metadata-version based cache invalidation for producer clients.
+3. Detect old-version drain completion and transition active migrations to `DEPRECATED`.
+4. Add retry/failure integration tests for stream provisioning.
