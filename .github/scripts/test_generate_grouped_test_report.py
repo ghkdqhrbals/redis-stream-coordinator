@@ -76,12 +76,10 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
             self.assertIn("<span>Member Expired</span>", html)
             self.assertIn("expired owner is reassigned", html)
 
-    def test_renders_testcase_and_build_stdout(self) -> None:
+    def test_links_raw_gradle_report_without_rendering_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
             source = Path(source_dir)
             output = Path(output_dir)
-            build_log = output / "gradle-test.log"
-            build_log.write_text("> Task :coordinator-server:test\nBUILD SUCCESSFUL\n", encoding="utf-8")
             self._write_xml(
                 source,
                 "ExampleOutputTest",
@@ -94,14 +92,14 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
                 system_out="suite stdout",
             )
 
-            self._run_reporter(source, output / "index.html", build_log)
+            self._run_reporter(source, output / "index.html")
 
             html = (output / "index.html").read_text(encoding="utf-8")
-            self.assertIn("Standard output", html)
-            self.assertIn("hello stdout", html)
-            self.assertIn("warn stderr", html)
-            self.assertIn("Gradle stdout", html)
-            self.assertIn("BUILD SUCCESSFUL", html)
+            self.assertIn("Open raw Gradle test report", html)
+            self.assertIn('href="gradle/index.html"', html)
+            self.assertNotIn("hello stdout", html)
+            self.assertNotIn("warn stderr", html)
+            self.assertNotIn("suite stdout", html)
 
     def _write_xml(
         self,
@@ -123,14 +121,12 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
         )
         (source / f"TEST-{suite_name}.xml").write_text(content, encoding="utf-8")
 
-    def _run_reporter(self, source: Path, output: Path, stdout_log: Path | None = None) -> None:
+    def _run_reporter(self, source: Path, output: Path) -> None:
         import sys
 
         previous_argv = sys.argv
         try:
             sys.argv = ["generate_grouped_test_report.py", str(source), str(output)]
-            if stdout_log is not None:
-                sys.argv.extend(["--stdout-log-path", str(stdout_log)])
             main()
         finally:
             sys.argv = previous_argv

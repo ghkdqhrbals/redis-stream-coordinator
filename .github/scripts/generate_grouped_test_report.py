@@ -19,8 +19,6 @@ class TestCase:
     status: str
     time: float
     detail: str
-    stdout: str
-    stderr: str
 
 
 @dataclass(frozen=True)
@@ -31,8 +29,6 @@ class TestSuite:
     errors: int
     skipped: int
     time: float
-    stdout: str
-    stderr: str
     cases: list[TestCase]
 
 
@@ -41,22 +37,14 @@ def main() -> None:
     parser.add_argument("test_results_dir", type=Path)
     parser.add_argument("output_file", type=Path)
     parser.add_argument("--gradle-report-path", default="gradle/index.html")
-    parser.add_argument("--stdout-log-path", type=Path)
     args = parser.parse_args()
 
     suites = read_suites(args.test_results_dir)
-    build_output = read_optional_text(args.stdout_log_path)
     args.output_file.parent.mkdir(parents=True, exist_ok=True)
     args.output_file.write_text(
-        render_report(suites, args.gradle_report_path, build_output),
+        render_report(suites, args.gradle_report_path),
         encoding="utf-8",
     )
-
-
-def read_optional_text(path: Path | None) -> str:
-    if path is None or not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8", errors="replace").strip()
 
 
 def read_suites(test_results_dir: Path) -> list[TestSuite]:
@@ -76,8 +64,6 @@ def read_suites(test_results_dir: Path) -> list[TestSuite]:
                 errors=int(root.attrib.get("errors", 0)),
                 skipped=int(root.attrib.get("skipped", 0)),
                 time=float(root.attrib.get("time", 0.0)),
-                stdout=child_text(root, "system-out"),
-                stderr=child_text(root, "system-err"),
                 cases=cases,
             )
         )
@@ -100,14 +86,7 @@ def parse_case(suite_name: str, element: ET.Element) -> TestCase:
         status=status,
         time=float(element.attrib.get("time", 0.0)),
         detail=detail.strip(),
-        stdout=child_text(element, "system-out"),
-        stderr=child_text(element, "system-err"),
     )
-
-
-def child_text(element: ET.Element, tag_name: str) -> str:
-    child = element.find(tag_name)
-    return "" if child is None or child.text is None else child.text.strip()
 
 
 def detail_text(element: ET.Element) -> str:
@@ -118,7 +97,7 @@ def detail_text(element: ET.Element) -> str:
     return message or body
 
 
-def render_report(suites: list[TestSuite], gradle_report_path: str, build_output: str = "") -> str:
+def render_report(suites: list[TestSuite], gradle_report_path: str) -> str:
     totals = {
         "tests": sum(suite.tests for suite in suites),
         "failures": sum(suite.failures for suite in suites),
@@ -149,7 +128,6 @@ def render_report(suites: list[TestSuite], gradle_report_path: str, build_output
             '<nav aria-label="Test report navigation">',
             '<a href="#overview">Overview</a>',
             '<a href="#suites">Suites</a>',
-            '<a href="#output">Output</a>',
             *sidebar_suite_links(suites),
             "</nav>",
             "</aside>",
@@ -157,10 +135,9 @@ def render_report(suites: list[TestSuite], gradle_report_path: str, build_output
             '<header id="overview" class="hero">',
             f'<div class="result {result_class}">{result_label}</div>',
             "<h1>Coordinator Test Report</h1>",
-            '<p class="lede">Expandable suites, scenario groups, individual test results, failure detail, and captured stdout/stderr in one static report.</p>',
+            '<p class="lede">Expandable suites, scenario groups, individual test results, and failure detail in one static report.</p>',
             '<div class="hero-actions">',
-            f'<a class="button" href="{escape_attr(gradle_report_path)}">Open Gradle default report</a>',
-            '<a class="button secondary" href="#output">Jump to stdout</a>',
+            f'<a class="button" href="{escape_attr(gradle_report_path)}">Open raw Gradle test report</a>',
             "</div>",
             "</header>",
             '<section class="summary-grid" aria-label="Test summary">',
@@ -172,7 +149,6 @@ def render_report(suites: list[TestSuite], gradle_report_path: str, build_output
             summary_card("Total time", f'{totals["time"]:.3f}s'),
             "</section>",
             render_suites(suites),
-            render_output_section(suites, build_output),
             "</main>",
             "</div>",
             "</body>",
@@ -204,8 +180,6 @@ def render_suites(suites: list[TestSuite]) -> str:
                 render_matrix_cases(suite.cases)
                 if suite.name.endswith("CoordinatorOperationalScenarioMatrixTest")
                 else render_flat_cases(suite.cases, suite.name),
-                render_inline_output("Suite stdout", suite.stdout),
-                render_inline_output("Suite stderr", suite.stderr),
                 "</div>",
                 "</details>",
             ]
@@ -306,9 +280,7 @@ def render_case_list(cases: list[TestCase]) -> str:
 
 def render_case(case: TestCase) -> str:
     open_attr = " open" if case.status in {"failed", "error"} else ""
-    detail = render_inline_output("Failure detail", case.detail)
-    stdout = render_inline_output("Standard output", case.stdout)
-    stderr = render_inline_output("Standard error", case.stderr)
+    detail = render_failure_detail(case.detail)
     metadata = (
         '<dl class="case-meta">'
         f"<div><dt>Class</dt><dd>{escape(case.class_name)}</dd></div>"
@@ -327,40 +299,19 @@ def render_case(case: TestCase) -> str:
             '<div class="case-body">',
             metadata,
             detail,
-            stdout,
-            stderr,
             "</div>",
             "</details>",
         ]
     )
 
 
-def render_output_section(suites: list[TestSuite], build_output: str) -> str:
-    suite_output = "\n\n".join(
-        f"## {suite.name}\n{joined}"
-        for suite in suites
-        for joined in ["\n".join(piece for piece in [suite.stdout, suite.stderr] if piece)]
-        if joined
-    )
-    return "\n".join(
-        [
-            '<section id="output" class="output-section">',
-            '<div class="section-heading"><h2>Output</h2><p>Gradle stdout is shown first, followed by suite-level JUnit stdout/stderr when available.</p></div>',
-            render_inline_output("Gradle stdout", build_output, open_by_default=bool(build_output)),
-            render_inline_output("JUnit suite stdout/stderr", suite_output, open_by_default=bool(suite_output) and not build_output),
-            "</section>",
-        ]
-    )
-
-
-def render_inline_output(title: str, value: str, open_by_default: bool = False) -> str:
+def render_failure_detail(value: str) -> str:
     if not value:
         return ""
-    open_attr = " open" if open_by_default else ""
     return "\n".join(
         [
-            f'<details class="output"{open_attr}>',
-            f"<summary>{escape(title)}</summary>",
+            '<details class="failure-detail" open>',
+            "<summary>Failure detail</summary>",
             f"<pre>{escape(value)}</pre>",
             "</details>",
         ]
@@ -629,12 +580,12 @@ summary {
 }
 dt { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
 dd { margin: 3px 0 0; overflow-wrap: anywhere; }
-.output {
+.failure-detail {
   box-shadow: none;
   background: #0b1020;
   border-color: #1f2937;
 }
-.output > summary { color: #e5e7eb; background: #111827; }
+.failure-detail > summary { color: #e5e7eb; background: #111827; }
 pre {
   margin: 0;
   max-height: 460px;

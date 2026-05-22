@@ -78,8 +78,7 @@ jobs:
           python3 .github/scripts/generate_grouped_test_report.py \
             coordinator-server/build/test-results/test \
             "$publish_dir/index.html" \
-            --gradle-report-path "gradle/index.html" \
-            --stdout-log-path "gradle-test.log"
+            --gradle-report-path "gradle/index.html"
 
           echo "url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${destination}/index.html" >> "$GITHUB_OUTPUT"
 
@@ -112,6 +111,9 @@ jobs:
             const canPublishPages = context.payload.pull_request.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`;
             const htmlReportUrl = canPublishPages
               ? (process.env.TEST_REPORT_HTML_URL || runUrl)
+              : (process.env.TEST_REPORT_ARTIFACT_URL || `${runUrl}#artifacts`);
+            const gradleReportUrl = canPublishPages
+              ? htmlReportUrl.replace(/index\.html$/, 'gradle/index.html')
               : (process.env.TEST_REPORT_ARTIFACT_URL || `${runUrl}#artifacts`);
             const logTail = process.env.TEST_LOG_TAIL || '(no test output captured)';
             const testResultsDir = 'coordinator-server/build/test-results/test';
@@ -223,6 +225,7 @@ jobs:
               `| Coordinator workflow scenarios | ${groupedWorkflowSummary} |`,
               `| Rebalance state-machine scenarios | ${rebalanceFlowSummary} |`,
               `| Reports | [Workflow run](${runUrl}) / [Coordinator test report](${htmlReportUrl}) |`,
+              `| Raw Gradle test report | [Open Gradle report](${gradleReportUrl}) |`,
             ];
 
             if (results.failedCases.length > 0) {
