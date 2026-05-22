@@ -134,6 +134,7 @@ Implemented:
 * Scale request that creates a next stream version and keeps old/new versions readable.
 * Rollback for active migration.
 * Monitoring summaries for members, assignments, migrations, and invariant violations.
+* Shared `CoordinatorError` enum for HTTP status, error code, and default error message management.
 * Basic Auth for admin and monitoring APIs.
 * Optional Basic Auth for member heartbeat API via config.
 * Spring Data Redis dependency and Redis Cluster connectivity health check.

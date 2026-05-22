@@ -1,5 +1,6 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.stream
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import org.springframework.beans.factory.ObjectProvider
@@ -7,7 +8,6 @@ import org.springframework.dao.DataAccessException
 import org.springframework.data.redis.connection.RedisConnection
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.data.redis.connection.stream.ReadOffset
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
 
@@ -34,11 +34,7 @@ class RedisStreamShardProvisioner(
         }
 
         val factory = redisConnectionFactory.ifAvailable
-            ?: throw CoordinatorException(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "REDIS_NOT_CONFIGURED",
-                "Redis Stream provisioning is enabled but Redis is not configured",
-            )
+            ?: throw CoordinatorException(CoordinatorError.REDIS_NOT_CONFIGURED)
 
         factory.connection.use { connection ->
             plan.shardKeys.forEach { shardKey ->
@@ -53,9 +49,9 @@ class RedisStreamShardProvisioner(
         } catch (error: DataAccessException) {
             if (!error.isBusyGroup()) {
                 throw CoordinatorException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "REDIS_STREAM_PROVISIONING_FAILED",
+                    CoordinatorError.REDIS_STREAM_PROVISIONING_FAILED,
                     "Failed to provision Redis Stream consumer group '$consumerGroup' for '$streamKey': ${error.message}",
+                    error,
                 )
             }
         }

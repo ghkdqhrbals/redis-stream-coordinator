@@ -1,5 +1,6 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.service
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
@@ -13,7 +14,6 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardProvisioni
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardKeys
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Instant
@@ -30,7 +30,7 @@ class CoordinatorService(
     fun createGroup(streamPrefix: String, consumerGroup: String, request: CreateGroupRequest): GroupResponse {
         val key = GroupKey(streamPrefix, consumerGroup)
         if (stateStore.contains(key)) {
-            throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
+            throw CoordinatorException(CoordinatorError.GROUP_ALREADY_EXISTS)
         }
 
         val now = Instant.now(clock)
@@ -57,7 +57,7 @@ class CoordinatorService(
         // Provision backing Redis Stream shards before publishing coordinator metadata that references them.
         streamProvisioner.provision(group.streamShardProvisioningPlan())
         if (!stateStore.putIfAbsent(key, group)) {
-            throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
+            throw CoordinatorException(CoordinatorError.GROUP_ALREADY_EXISTS)
         }
         return group.toResponse()
     }
@@ -90,11 +90,7 @@ class CoordinatorService(
         expireMembers(group, now)
 
         group.activeMigrationId?.let {
-            throw CoordinatorException(
-                HttpStatus.CONFLICT,
-                "ACTIVE_MIGRATION_EXISTS",
-                "Group already has an active migration"
-            )
+            throw CoordinatorException(CoordinatorError.ACTIVE_MIGRATION_EXISTS)
         }
 
         val fromVersion = group.activeWriteVersion
@@ -193,7 +189,7 @@ class CoordinatorService(
     @Synchronized
     fun getMigration(streamPrefix: String, consumerGroup: String, migrationId: String): Migration =
         requireGroup(streamPrefix, consumerGroup).migrations[migrationId]
-            ?: throw CoordinatorException(HttpStatus.NOT_FOUND, "MIGRATION_NOT_FOUND", "Migration not found")
+            ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
 
     @Synchronized
     fun rollbackMigration(streamPrefix: String, consumerGroup: String, migrationId: String): Migration =
@@ -202,17 +198,13 @@ class CoordinatorService(
     private fun rollbackMigrationOnce(streamPrefix: String, consumerGroup: String, migrationId: String): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
         val migration = group.migrations[migrationId]
-            ?: throw CoordinatorException(HttpStatus.NOT_FOUND, "MIGRATION_NOT_FOUND", "Migration not found")
+            ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
 
         if (migration.state == MigrationState.ROLLED_BACK || migration.state == MigrationState.ROLLING_BACK) {
             return migration
         }
         if (group.activeMigrationId != migrationId || migration.state != MigrationState.ACTIVE) {
-            throw CoordinatorException(
-                HttpStatus.UNPROCESSABLE_ENTITY,
-                "ROLLBACK_NOT_ALLOWED",
-                "Migration cannot be rolled back"
-            )
+            throw CoordinatorException(CoordinatorError.ROLLBACK_NOT_ALLOWED)
         }
 
         val now = Instant.now(clock)
@@ -253,7 +245,7 @@ class CoordinatorService(
         val group = try {
             requireGroup(streamPrefix, consumerGroup)
         } catch (error: CoordinatorException) {
-            if (error.status == HttpStatus.NOT_FOUND) {
+            if (error.error == CoordinatorError.GROUP_NOT_FOUND) {
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
             }
             throw error
@@ -397,7 +389,7 @@ class CoordinatorService(
 
     private fun requireGroup(streamPrefix: String, consumerGroup: String): GroupMetadata =
         stateStore.get(GroupKey(streamPrefix, consumerGroup))
-            ?: throw CoordinatorException(HttpStatus.NOT_FOUND, "GROUP_NOT_FOUND", "Group not found")
+            ?: throw CoordinatorException(CoordinatorError.GROUP_NOT_FOUND)
 
     private fun <T> withStateConflictRetry(block: () -> T): T {
         var attempts = 0
@@ -407,11 +399,7 @@ class CoordinatorService(
             } catch (error: CoordinatorStateConflictException) {
                 attempts += 1
                 if (attempts >= 3) {
-                    throw CoordinatorException(
-                        HttpStatus.CONFLICT,
-                        "STATE_VERSION_CONFLICT",
-                        "Coordinator state changed concurrently; retry the request",
-                    )
+                    throw CoordinatorException(CoordinatorError.STATE_VERSION_CONFLICT)
                 }
             }
         }

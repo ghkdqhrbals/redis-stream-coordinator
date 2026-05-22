@@ -65,7 +65,7 @@ class CoordinatorHttpIntegrationTest {
                 .content("""{"initialShardCount":0,"hashAlgorithm":"","requestedBy":""}"""),
         )
             .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST"))
+            .andExpect(jsonPath("$.errorCode").value(CoordinatorError.INVALID_REQUEST.code))
     }
 
     @Test

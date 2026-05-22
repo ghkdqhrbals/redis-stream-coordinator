@@ -30,7 +30,8 @@ class CoordinatorServiceTest {
             service.createGroup("orders", "orders-consumer", createGroupRequest())
         }.exceptionOrNull() as CoordinatorException
 
-        assertEquals("GROUP_ALREADY_EXISTS", error.errorCode)
+        assertEquals(CoordinatorError.GROUP_ALREADY_EXISTS, error.error)
+        assertEquals(CoordinatorError.GROUP_ALREADY_EXISTS.code, error.errorCode)
     }
 
     @Test
@@ -243,7 +244,8 @@ class CoordinatorServiceTest {
             service.rollbackMigration("metrics", "metrics-consumer", "mig-missing")
         }.exceptionOrNull() as CoordinatorException
 
-        assertEquals("MIGRATION_NOT_FOUND", error.errorCode)
+        assertEquals(CoordinatorError.MIGRATION_NOT_FOUND, error.error)
+        assertEquals(CoordinatorError.MIGRATION_NOT_FOUND.code, error.errorCode)
     }
 
     @Test
