@@ -121,6 +121,12 @@ returned as `pending` until the previous live owner reports it as revoked or the
 previous owner expires. This prevents two active members from consuming the same
 shard during normal handoff.
 
+Each member heartbeat carries a `rebalanceTimeoutMs`. When a member keeps
+owning or revoking shards that are no longer in its target assignment beyond
+that timeout, the coordinator fences that member, clears its reported ownership,
+and recomputes the assignment so pending shards can move forward. A member that
+reports the revoke before the deadline remains active.
+
 ### Stream Version Migration
 
 Scaling creates a new stream version instead of rewriting existing stream keys.
@@ -156,6 +162,8 @@ Covered by tests:
 - `stale member epoch after acknowledged rebalance is fenced`
 - `expired old consumer returning with stale ownership is fenced`
 - `expired member rejoining with epoch zero does not restore stale ownership`
+- `member that does not revoke moved shard is fenced after rebalance timeout`
+- `member that revokes moved shard before rebalance timeout stays active`
 
 ### Race Between Coordinators
 
@@ -190,6 +198,7 @@ coverage for operational behavior.
 | Operational scenario matrix | 432 focused cases covering shard counts, member counts, scale up/down/rollback, churn, expiry, rolling restart, replacement, and capacity skew with descriptive scenario names. |
 | Coordinator failover | Replacement coordinator resumes pending revoke and assignment after process replacement. |
 | Stale consumer fencing | Old member epochs and expired owners are fenced instead of mutating current ownership. |
+| Rebalance timeout | Old owners that do not revoke moved shards before their deadline are fenced so pending assignments can converge. |
 | Redis state race | Optimistic revision conflict rejects stale snapshots. |
 | HTTP contract | Admin/member API validation and auth behavior. |
 | Redis integration | Redis-backed projection and optimistic concurrency are available as environment-gated integration tests. |
@@ -205,6 +214,7 @@ The design reread found these gaps and their current resolution status:
 | Expired old consumer could report stale ownership. | Fixed in implementation and tests. | Expired members with positive epochs are fenced and do not block the replacement owner. |
 | Epoch-zero rejoin could restore stale ownership from the request body. | Fixed in implementation and tests. | Join/rejoin heartbeats ignore reported owned/revoking shards and start from empty local ownership. |
 | Capacity policy updates could over-advance group epoch or advance it without assignment movement. | Fixed in implementation and tests. | No-move policy updates advance metadata only; assignment-moving policy updates advance the group epoch once. |
+| Pending shard could wait forever if the previous owner never revoked it. | Fixed in implementation and tests. | Members now track a rebalance deadline and are fenced when they keep blocking moved shards past `rebalanceTimeoutMs`. |
 | PR test comments were too verbose. | Fixed in workflow. | The PR comment now keeps totals and links only; full scenario names live in the Test HTML report. |
 | Design docs lived only as implementation notes. | Fixed by process. | Markdown source is stored on the separate `design-docs` branch and rendered by a dedicated action. |
 | Migration completion/deprecation flow is incomplete. | Open. | `DRAINING` and `DEPRECATED` states exist, but there is no explicit API or retention policy to finish a successful migration. |
