@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 ## Summary
 
@@ -10,6 +10,7 @@ The current implementation is an MVP control-plane server for the Redis Stream C
 
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
 The module is connected to a local three-node Redis Cluster for connectivity and metadata-store work.
+Stream shard key formatting and Redis Cluster hash-slot planning helpers are now implemented, but the coordinator does not create Redis Stream keys or Redis consumer groups yet.
 
 ## Build and Tooling
 
@@ -128,6 +129,7 @@ Implemented:
 * Redis projected keys for member metadata, target assignments, current assignments, active migration, and migration history.
 * Redis group-scoped aggregate/projection keys are replaced through one Lua script to avoid reader-visible partial projection updates.
 * Redis-backed saves use a coordinator `storeRevision` compare-and-set guard and retry mutation requests on transient state conflicts.
+* Redis Stream shard key helper with Redis Cluster hash-slot calculation and equal-master-range distribution planning.
 
 ## Verified Runtime Smoke Test
 
@@ -386,9 +388,9 @@ Expected response:
 * [ ] Create Redis consumer groups for each shard.
 * [ ] Create next-version shard keys during scale.
 * [ ] Create consumer groups for next-version shards.
-* [ ] Validate stream version and shard count metadata.
-* [ ] Add shard key format helper.
-* [ ] Add hash-slot distribution helper.
+* [x] Validate stream version and shard count metadata before building shard keys.
+* [x] Add shard key format helper.
+* [x] Add hash-slot distribution helper.
 
 ### Phase 7: Observability and Operations
 
@@ -423,6 +425,7 @@ Implemented tests:
 * Redis state projection splits aggregate state into member, target, current assignment, migration, and active migration sections.
 * Redis key helper keeps group-scoped keys in a single Redis Cluster hash slot and preserves configured prefix formatting.
 * Redis-backed store rejects stale coordinator snapshots instead of overwriting newer state.
+* Redis Stream shard key helper rejects hash-tag unsafe stream prefixes, validates version/shard counts, calculates Redis Cluster slots, and estimates distribution across equal master ranges.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
 * Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
@@ -441,14 +444,7 @@ coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/
 
 Remaining work:
 
-* Full Redis-backed coordinator metadata store.
-* Redis key model from PRD:
-  * group metadata
-  * members
-  * target assignment
-  * current assignment
-  * migrations
-  * audit log
+* Redis admin audit log.
 * Coordinator event loop as a scheduled worker.
 * Redis Stream shard and consumer group creation during scale/create.
 * Admin audit logging.
@@ -458,7 +454,7 @@ Remaining work:
 * Migration drain progress and automatic `DEPRECATED` transition.
 * Producer routing metadata API/cache.
 * More complete epoch fencing semantics.
-* Integration tests with Redis.
+* Broader Redis integration tests that exercise live stream and consumer group creation after Phase 6 is implemented.
 
 Explicitly still out of scope for the coordinator:
 
@@ -470,9 +466,9 @@ Explicitly still out of scope for the coordinator:
 
 ## Suggested Next Step
 
-Next implementation step should be to harden Redis-backed operations:
+Next implementation step should be to implement Redis Stream shard provisioning:
 
-1. Keep group metadata as the aggregate source of truth during the transition.
-2. Add Redis integration tests that run against the local three-node cluster by default in CI.
-3. Add producer routing metadata API/cache.
-4. Promote projected Redis keys to read paths once the read model is ready.
+1. Create stream keys and Redis consumer groups during group creation.
+2. Create next-version stream keys and consumer groups during scale.
+3. Add a producer routing metadata API/cache that returns active write version, shard count, key pattern, hash algorithm, and hash seed.
+4. Add live Redis integration tests for stream provisioning.
