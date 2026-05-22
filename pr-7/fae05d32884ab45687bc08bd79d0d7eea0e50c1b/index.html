@@ -1,0 +1,1167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grouped Coordinator Test Report</title>
+<style>:root { --bg: #f7f8fb; --panel: #ffffff; --text: #172033; --muted: #667085; --line: #d8dee9; --accent: #1428a0; --pass: #16794c; --fail: #b42318; --skip: #946200; } * { box-sizing: border-box; } body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.5; } main { width: min(100%, 1120px); margin: 0 auto; padding: 24px; } h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.2; } .lede { margin: 0 0 10px; color: var(--muted); } .link { color: var(--accent); font-weight: 650; text-decoration: none; } .link:hover { text-decoration: underline; } .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 18px 0; } .summary-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; } .summary-card span { display: block; color: var(--muted); font-size: 12px; } .summary-card strong { display: block; margin-top: 4px; font-size: 22px; } .summary-card.pass strong { color: var(--pass); } .summary-card.fail strong { color: var(--fail); } .summary-card.skip strong { color: var(--skip); } details { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; overflow: hidden; } summary { cursor: pointer; padding: 11px 13px; font-weight: 680; list-style-position: outside; } .suite > summary { background: #eef2ff; } .group-level-1 > summary { background: #f8fafc; } .group-level-2 { margin-left: 14px; } .group-level-3 { margin-left: 28px; } .suite-body, .nested-groups { padding: 0 12px 12px; } .muted { color: var(--muted); margin: 8px 0 10px; } .badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 650; vertical-align: 1px; } .badge.pass { color: var(--pass); border-color: #abefc6; background: #ecfdf3; } .badge.fail { color: var(--fail); border-color: #fecdca; background: #fef3f2; } .badge.skip { color: var(--skip); border-color: #fedf89; background: #fffaeb; } table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; background: #fff; } th, td { border-top: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; } th { color: var(--muted); font-size: 12px; } .status { font-weight: 700; } .status.passed { color: var(--pass); } .status.failed, .status.error { color: var(--fail); } .status.skipped { color: var(--skip); } .case-detail { margin-top: 6px; color: var(--fail); white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; } .empty { padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); } @media (max-width: 720px) { main { padding: 16px; } .group-level-2, .group-level-3 { margin-left: 0; } th:nth-child(3), td:nth-child(3) { display: none; } }</style>
+</head>
+<body>
+<main>
+<header>
+<h1>Grouped Coordinator Test Report</h1>
+<p class="lede">Open each section to inspect the child suites, scenario groups, and individual tests.</p>
+<p><a class="link" href="gradle/index.html">Open Gradle default report</a></p>
+</header>
+<section class="summary-grid" aria-label="Test summary">
+<div class="summary-card"><span>Total</span><strong>481</strong></div>
+<div class="summary-card pass"><span>Passed</span><strong>476</strong></div>
+<div class="summary-card fail"><span>Failed</span><strong>0</strong></div>
+<div class="summary-card fail"><span>Errored</span><strong>0</strong></div>
+<div class="summary-card skip"><span>Skipped</span><strong>5</strong></div>
+<div class="summary-card"><span>Time</span><strong>2.538s</strong></div>
+</section>
+<section class="suite-list" aria-label="Test suites">
+<details class="suite">
+<summary>Coordinator Authenticated Member Http Integration Test <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest · 1.238s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>member api requires basic auth when enabled()</td><td>1.238s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Graceful leave <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Graceful leave · 0.002s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>leaving member releases targets and survivor owns every shard()</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Member expired <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member expired · 0.001s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>expired owner is reassigned and stale heartbeat is fenced()</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Member join <span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member join · 0.002s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>first member receives every initial shard()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>new member waits for previous owner revoke before receiving moved shard()</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>New stream topic creation <span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">New stream topic creation · 0.002s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>upscaling provisions next stream topic shards before publishing migration()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>group creation provisions initial stream topic shards()</td><td>0.000s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Partition upscaling <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Partition upscaling · 0.012s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale creates next stream version and assigns old plus new shards()</td><td>0.012s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Coordinator Http Integration Test <span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest · 0.122s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>http api creates group and accepts heartbeat()</td><td>0.069s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>admin api validates create group body()</td><td>0.034s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>member api allows heartbeat without auth by default()</td><td>0.009s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>admin api requires basic auth()</td><td>0.006s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Coordinator Operational Scenario Matrix Test <span class="badge">432 total</span> <span class="badge pass">432 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorOperationalScenarioMatrixTest · 1.135s</p>
+<div class="nested-groups">
+<details class="group-level-1">
+<summary>scale down <span class="badge">108 total</span> <span class="badge pass">108 passed</span></summary>
+<details class="group-level-2">
+<summary>steady members <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 2 shards, 2 members</td><td>0.015s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 2 shards, 3 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 2 shards, 5 members</td><td>0.006s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 6 shards, 2 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 6 shards, 3 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 6 shards, 5 members</td><td>0.007s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 12 shards, 2 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 12 shards, 3 members</td><td>0.006s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | uniform capacity | 12 shards, 5 members</td><td>0.007s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 2 shards, 2 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 2 shards, 5 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 6 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 6 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 6 shards, 5 members</td><td>0.006s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 12 shards, 2 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 12 shards, 3 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | steady members | weighted capacity | 12 shards, 5 members</td><td>0.012s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>add member <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 2 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 2 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 2 shards, 5 members</td><td>0.006s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 6 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 6 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 6 shards, 5 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 12 shards, 2 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 12 shards, 3 members</td><td>0.009s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | uniform capacity | 12 shards, 5 members</td><td>0.009s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 2 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 2 shards, 5 members</td><td>0.006s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 6 shards, 2 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 6 shards, 5 members</td><td>0.007s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 12 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 12 shards, 3 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | add member | weighted capacity | 12 shards, 5 members</td><td>0.007s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>graceful leave <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 2 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 2 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 6 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 12 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | uniform capacity | 12 shards, 5 members</td><td>0.005s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 2 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 6 shards, 2 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 6 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 6 shards, 5 members</td><td>0.007s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 12 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 12 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | graceful leave | weighted capacity | 12 shards, 5 members</td><td>0.005s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member expiry <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 6 shards, 5 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | uniform capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 2 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 12 shards, 2 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 12 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member expiry | weighted capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>rolling restart <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 2 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 6 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 6 shards, 5 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 12 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | uniform capacity | 12 shards, 5 members</td><td>0.005s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 2 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 6 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 6 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 6 shards, 5 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | rolling restart | weighted capacity | 12 shards, 5 members</td><td>0.005s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member replacement <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 2 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 6 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 6 shards, 5 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 12 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | uniform capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 2 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 2 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 6 shards, 2 members</td><td>0.012s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 6 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 12 shards, 2 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 12 shards, 3 members</td><td>0.005s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale down | member replacement | weighted capacity | 12 shards, 5 members</td><td>0.005s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+</details>
+<details class="group-level-1">
+<summary>scale up <span class="badge">108 total</span> <span class="badge pass">108 passed</span></summary>
+<details class="group-level-2">
+<summary>steady members <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | steady members | weighted capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>add member <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | uniform capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 6 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | add member | weighted capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>graceful leave <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | graceful leave | weighted capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member expiry <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | uniform capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 2 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member expiry | weighted capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>rolling restart <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | uniform capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 2 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 12 shards, 3 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | rolling restart | weighted capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member replacement <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 6 shards, 5 members</td><td>0.003s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale up | member replacement | weighted capacity | 12 shards, 5 members</td><td>0.004s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+</details>
+<details class="group-level-1">
+<summary>rollback <span class="badge">108 total</span> <span class="badge pass">108 passed</span></summary>
+<details class="group-level-2">
+<summary>steady members <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 2 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | steady members | weighted capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>add member <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 6 shards, 3 members</td><td>0.004s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | uniform capacity | 12 shards, 5 members</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | add member | weighted capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>graceful leave <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 2 shards, 3 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | graceful leave | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member expiry <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member expiry | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>rolling restart <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 6 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | uniform capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 6 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | rolling restart | weighted capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member replacement <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 2 shards, 2 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 2 shards, 3 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rollback | member replacement | weighted capacity | 12 shards, 5 members</td><td>0.003s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+</details>
+<details class="group-level-1">
+<summary>no scale <span class="badge">108 total</span> <span class="badge pass">108 passed</span></summary>
+<details class="group-level-2">
+<summary>steady members <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | steady members | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>add member <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 2 shards, 5 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 12 shards, 2 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | add member | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>graceful leave <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 6 shards, 3 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 12 shards, 3 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | uniform capacity | 12 shards, 5 members</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 12 shards, 3 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | graceful leave | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member expiry <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | uniform capacity | 12 shards, 5 members</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 2 shards, 2 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member expiry | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>rolling restart <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 2 shards, 2 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 2 shards, 3 members</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | uniform capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 6 shards, 5 members</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | rolling restart | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+<details class="group-level-2">
+<summary>member replacement <span class="badge">18 total</span> <span class="badge pass">18 passed</span></summary>
+<details class="group-level-3">
+<summary>uniform capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 6 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | uniform capacity | 12 shards, 5 members</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+<details class="group-level-3">
+<summary>weighted capacity <span class="badge">9 total</span> <span class="badge pass">9 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 2 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 2 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 2 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 6 shards, 2 members</td><td>0.007s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 6 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 6 shards, 5 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 12 shards, 2 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 12 shards, 3 members</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>no scale | member replacement | weighted capacity | 12 shards, 5 members</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</details>
+</details>
+</div>
+</div>
+</details>
+<details class="suite">
+<summary>Coordinator Service Test <span class="badge">22 total</span> <span class="badge pass">22 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest · 0.015s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">22 total</span> <span class="badge pass">22 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>rebalance timeout fences stuck owner()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>group creation provisions initial stream version()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>migration scale creates next version()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>assignment waits for previous owner revoke()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>scale provisions next stream version before publishing migration()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>migration rollback restores previous version()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>membership expires owner and reassigns shards()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>heartbeat returns unknown member for missing group()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>migration rollback rejects unknown id()</td><td>0.002s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>assignment first member gets readable shards()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>failover resumes pending revoke()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>rebalance timeout keeps timely owner active()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>heartbeat rejects member id mismatch()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>heartbeat rejects unknown member leave()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>membership rejoin restores expired member()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>membership fences expired owner stale epoch()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>heartbeat fences stale member epoch()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>capacity movement advances epochs()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>group rejects duplicate create()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>capacity rebalances by member weight()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>capacity metadata update keeps assignment epoch()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>membership ignores stale ownership on rejoin()</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Coordinator State Store Test <span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest · 0.004s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>memory store creates saves and lists groups()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>redis keys keep group state in one hash slot()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>memory store survives coordinator replacement()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>redis projection splits aggregate sections()</td><td>0.001s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Redis Coordinator State Store Integration Test <span class="badge">3 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">3 skipped</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest · 0.000s</p>
+<details class="group-level-1">
+<summary>Skipped <span class="badge">3 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">3 skipped</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status skipped">skipped</span></td><td>redis store writes aggregate and projection keys()</td><td>0.000s</td></tr>
+<tr><td><span class="status skipped">skipped</span></td><td>redis store rejects stale snapshot writes()</td><td>0.000s</td></tr>
+<tr><td><span class="status skipped">skipped</span></td><td>redis stream provisioning creates consumer groups for created and scaled shard versions()</td><td>0.000s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Redis Stream Coordinator Application Test <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest · 0.002s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>spring context loads()</td><td>0.002s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Redis Stream Provisioning Integration Test <span class="badge">2 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">2 skipped</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest · 0.000s</p>
+<details class="group-level-1">
+<summary>Skipped <span class="badge">2 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">2 skipped</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status skipped">skipped</span></td><td>stream provisioner is idempotent for existing Redis consumer groups()</td><td>0.000s</td></tr>
+<tr><td><span class="status skipped">skipped</span></td><td>coordinator provisions Redis consumer groups on create and scale()</td><td>0.000s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+<details class="suite">
+<summary>Redis Stream Shard Keys Test <span class="badge">5 total</span> <span class="badge pass">5 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest · 0.003s</p>
+<details class="group-level-1">
+<summary>Passed <span class="badge">5 total</span> <span class="badge pass">5 passed</span></summary>
+<table class="case-table">
+<thead><tr><th>Status</th><th>Test</th><th>Time</th></tr></thead>
+<tbody>
+<tr><td><span class="status passed">passed</span></td><td>hash slot matches Redis Cluster hash tag behavior()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>provisioning plan binds consumer group and shard keys()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>stream shard key helper validates Redis Cluster unsafe metadata()</td><td>0.001s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>group metadata creates stream shard keys for known versions only()</td><td>0.000s</td></tr>
+<tr><td><span class="status passed">passed</span></td><td>stream shard keys avoid hash tags and distribute across equal master ranges()</td><td>0.000s</td></tr>
+</tbody>
+</table>
+</details>
+</div>
+</details>
+</section>
+</main>
+</body>
+</html>
