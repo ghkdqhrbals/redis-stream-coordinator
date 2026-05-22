@@ -59,7 +59,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true \
   ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest
 ```
 
-On pull requests, the `PR test results` workflow reruns PR tests with `--rerun-tasks` in a read-only test job, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, publishes a grouped HTML test report with expandable scenario sections, and posts a new PR comment from a separate job that only has comment-related write permissions.
+On pull requests, the `PR test results` workflow reruns PR tests with `--rerun-tasks` in a read-only test job, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, publishes a grouped HTML test report with expandable scenario sections, and posts a new PR comment for same-repository PRs with `issues: write` and `pull-requests: write`. Fork PR comments are handled by the separate `PR test result comments` workflow from the completed workflow artifact.
 
 ## Implemented Module
 
