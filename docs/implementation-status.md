@@ -458,6 +458,14 @@ Expected response:
 * [ ] Add built-in Redis Stream polling adapter.
 * [ ] Add consumer-side Micrometer metrics.
 
+### Phase 9: Docker Distribution
+
+* [x] Add Docker Compose Redis Cluster for local development and integration tests.
+* [ ] Add coordinator server Docker image build.
+* [ ] Add container smoke test for `/coord/v1/monitoring/health`.
+* [ ] Add versioned Docker tag publishing workflow.
+* [ ] Add Docker usage guide for public users.
+
 ## Tests Added
 
 Implemented tests:
@@ -525,6 +533,9 @@ Remaining work:
 * Consumer starter producer routing metadata cache.
 * Built-in Redis Stream polling adapter.
 * Explicit Redis metadata `schemaVersion` and migration guard.
+* Coordinator server Docker image build and publish workflow.
+* Container smoke tests for the public Docker image.
+* Docker usage guide for public users.
 * More complete epoch fencing semantics.
 * Broader Redis integration tests that stress idempotent provisioning retry and failure handling.
 
@@ -541,6 +552,6 @@ Explicitly still out of scope for the coordinator:
 Next implementation step should be to tighten producer/consumer client behavior and Redis provisioning failure semantics:
 
 1. Add metadata-version based cache invalidation guidance for producer clients.
-2. Add retry/failure integration tests for stream provisioning.
-3. Complete stricter stale member fencing semantics.
-4. Add consumer-side Micrometer metrics.
+2. Add coordinator server Docker image build and smoke test.
+3. Add retry/failure integration tests for stream provisioning.
+4. Complete stricter stale member fencing semantics.

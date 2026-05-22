@@ -194,42 +194,31 @@ jobs:
               results.totals.tests - results.totals.failures - results.totals.errors - results.totals.skipped,
               0
             );
-            function countCasesByClassFragment(fragment) {
-              return results.suites
-                .flatMap((suite) => suite.testcases)
-                .filter((testcase) => testcase.className.includes(fragment))
-                .length;
-            }
-
-            const groupedWorkflowCount = countCasesByClassFragment('CoordinatorGroupedWorkflowTest');
-            const rebalanceFlowCount = countCasesByClassFragment('CoordinatorRebalanceStateMachineFlowTest');
-            const shortSha = context.payload.pull_request.head.sha.slice(0, 7);
             const runAttempt = process.env.GITHUB_RUN_ATTEMPT || '1';
+            const statusIcon = passed ? '✅' : '❌';
             const resultSummary = `${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`;
-            const groupedWorkflowSummary = groupedWorkflowCount > 0
-              ? `${groupedWorkflowCount} tests`
-              : 'not found';
-            const rebalanceFlowSummary = rebalanceFlowCount > 0
-              ? `${rebalanceFlowCount} tests`
-              : 'not found';
             const body = [
               marker,
-              `### Coordinator tests ${passed ? 'passed' : 'failed'}`,
+              `### ${statusIcon} Coordinator tests ${passed ? 'passed' : 'failed'}`,
               '',
               '| Check | Details |',
               '| --- | --- |',
-              `| Commit | \`${shortSha}\` |`,
+              `| Status | ${statusIcon} ${passed ? 'Passed' : 'Failed'} |`,
               `| Run attempt | ${runAttempt} |`,
               '| Command | `./gradlew :coordinator-server:test :coordinator-server:build --rerun-tasks --no-daemon` |',
               `| Result | ${resultSummary} |`,
-              `| Coordinator workflow scenarios | ${groupedWorkflowSummary} |`,
-              `| Rebalance state-machine scenarios | ${rebalanceFlowSummary} |`,
               `| Reports | [Workflow run](${runUrl}) / [Coordinator test report](${htmlReportUrl}) |`,
               `| Raw Gradle test report | [Open Gradle report](${gradleReportUrl}) |`,
+              '',
+              '### Improvements to address before Docker distribution',
+              '',
+              '- Add a Docker image build check for `coordinator-server`.',
+              '- Add a container smoke test that starts the coordinator image and verifies `/coord/v1/monitoring/health`.',
+              '- Add a publish workflow for versioned Docker tags before the first public release.',
             ];
 
             if (results.failedCases.length > 0) {
-              body.push('', '### Failed Cases', '', ...results.failedCases.slice(0, 20).map((testcase) => `- \`${testcase}\``));
+              body.push('', '### Failed Cases', '', ...results.failedCases.slice(0, 20).map((testcase) => `- ❌ \`${testcase}\``));
             }
 
             if (!passed) {
