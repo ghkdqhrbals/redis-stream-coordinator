@@ -56,6 +56,10 @@ class CoordinatorManagedConsumer(
     fun pollOnce(): HeartbeatResponse {
         require(properties.streamPrefix.isNotBlank()) { "redis-stream-coordinator.consumer.stream-prefix must be set" }
         require(properties.consumerGroup.isNotBlank()) { "redis-stream-coordinator.consumer.consumer-group must be set" }
+        require(CoordinatorConsumerProtocol.supportsHeartbeat(properties.protocolVersion)) {
+            "Unsupported heartbeat protocol version ${properties.protocolVersion}; supported range is " +
+                "${CoordinatorConsumerProtocol.MIN_HEARTBEAT_VERSION}..${CoordinatorConsumerProtocol.MAX_HEARTBEAT_VERSION}"
+        }
 
         refreshRevocationProgress()
         val response = client.heartbeat(

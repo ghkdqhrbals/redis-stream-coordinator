@@ -24,6 +24,7 @@ Implemented:
 * Java toolchain `24`.
 * Foojay toolchain resolver so Gradle can provision Java 24 when it is not installed locally.
 * Version catalog for project plugin versions.
+* Central project artifact version via `gradle.properties`.
 * `.gitignore` for Gradle, IDE, build, and swap files.
 * IntelliJ setup guide: [`docs/intellij-setup.md`](intellij-setup.md).
 * Docker Compose Redis Cluster with three master nodes.
@@ -144,6 +145,7 @@ Implemented:
 * Graceful leave through heartbeat with `memberEpoch=-1`.
 * Member lease expiration based on `member-lease-ttl`.
 * Group epoch, metadata version, and assignment epoch tracking.
+* Configurable heartbeat protocol compatibility range.
 * Sticky assignment with minimal movement and balancing across live members.
 * `assignedShards` and `pendingShards` separation.
 * Revoke-before-assign rule: a shard is not assigned to a new owner while another active/leaving member still reports ownership or revocation.
@@ -375,6 +377,7 @@ Expected response:
 * [x] Track `groupEpoch`.
 * [x] Track `metadataVersion`.
 * [x] Track `assignmentEpoch`.
+* [x] Add configurable heartbeat protocol compatibility range.
 * [x] Track active write version and readable versions.
 * [x] Track member metadata and lease expiry.
 * [x] Support member join/rejoin with `memberEpoch=0`.
@@ -447,6 +450,7 @@ Expected response:
 * [x] Add `RestClient`-based coordinator HTTP client.
 * [x] Add `CoordinatorShardLifecycle` callback interface for application-owned shard workers.
 * [x] Add `CoordinatorManagedConsumer` heartbeat lifecycle.
+* [x] Add consumer-side supported heartbeat protocol constants and validation.
 * [x] Add Spring Boot auto-configuration.
 * [x] Add assignment and revoke callback tests.
 * [x] Add repeated revoke callback support for long drain windows.
@@ -463,6 +467,7 @@ Implemented tests:
 * Scale request creates next stream version and exposes old/new readable versions.
 * Duplicate group creation is rejected.
 * Invalid heartbeat path/body member mismatch is rejected.
+* Coordinator accepts heartbeat protocol versions inside the configured supported range and rejects versions outside it.
 * Missing group heartbeat is rejected as `UNKNOWN_MEMBER_ID`.
 * Unknown member cannot leave by sending `memberEpoch=-1`.
 * Expired member is removed from target assignment and shards are reassigned after lease expiry.
@@ -486,6 +491,7 @@ Implemented tests:
 * Consumer starter sends join heartbeat and notifies assigned shards.
 * Consumer starter detects removed assignment and reports revoked shards.
 * Consumer starter retries incomplete revoke callbacks and reports `REVOKED` after application drain completes.
+* Consumer starter fails fast when configured with a locally unsupported heartbeat protocol version.
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
@@ -518,6 +524,7 @@ Remaining work:
 * Producer routing metadata client cache contract.
 * Consumer starter producer routing metadata cache.
 * Built-in Redis Stream polling adapter.
+* Explicit Redis metadata `schemaVersion` and migration guard.
 * More complete epoch fencing semantics.
 * Broader Redis integration tests that stress idempotent provisioning retry and failure handling.
 

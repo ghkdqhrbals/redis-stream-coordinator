@@ -235,7 +235,7 @@ class CoordinatorService(
         memberId: String,
         request: HeartbeatRequest,
     ): HeartbeatResponse {
-        if (request.protocolVersion != 1) {
+        if (!properties.protocol.supportsHeartbeat(request.protocolVersion)) {
             return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNSUPPORTED_PROTOCOL)
         }
         if (request.memberId != memberId) {

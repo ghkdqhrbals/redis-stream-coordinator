@@ -9,6 +9,7 @@ data class CoordinatorProperties(
     val heartbeatInterval: Duration = Duration.ofSeconds(5),
     val memberLeaseTtl: Duration = Duration.ofSeconds(15),
     val api: Api = Api(),
+    val protocol: Protocol = Protocol(),
     val redisCluster: RedisCluster = RedisCluster(),
     val store: Store = Store(),
     val streams: Streams = Streams(),
@@ -19,6 +20,14 @@ data class CoordinatorProperties(
         val adminPassword: String = "password",
         val authenticateMemberApi: Boolean = false,
     )
+
+    data class Protocol(
+        val minHeartbeatVersion: Int = 1,
+        val maxHeartbeatVersion: Int = 1,
+    ) {
+        fun supportsHeartbeat(version: Int): Boolean =
+            version in minHeartbeatVersion..maxHeartbeatVersion
+    }
 
     data class RedisCluster(
         val nodeMappings: List<NodeMapping> = emptyList(),

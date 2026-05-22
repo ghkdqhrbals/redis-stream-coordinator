@@ -59,6 +59,43 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `heartbeat protocol version is accepted inside configured support range`() {
+        val service = service(
+            clock = clock,
+            properties = CoordinatorProperties(
+                protocol = CoordinatorProperties.Protocol(minHeartbeatVersion = 2, maxHeartbeatVersion = 3),
+                heartbeatInterval = Duration.ofSeconds(3),
+                memberLeaseTtl = Duration.ofSeconds(15),
+                defaults = CoordinatorProperties.Defaults(initialShardCount = 4, consumerMaxConcurrency = 4),
+            ),
+        )
+        service.createGroup("protocol", "orders-consumer", createGroupRequest())
+
+        val accepted = service.heartbeat(
+            "protocol",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0, protocolVersion = 2),
+        )
+        val rejectedBelowMinimum = service.heartbeat(
+            "protocol",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0, protocolVersion = 1),
+        )
+        val rejectedAboveMaximum = service.heartbeat(
+            "protocol",
+            "orders-consumer",
+            "member-c",
+            heartbeat("member-c", memberEpoch = 0, protocolVersion = 4),
+        )
+
+        assertEquals(HeartbeatStatus.OK, accepted.status)
+        assertEquals(HeartbeatStatus.UNSUPPORTED_PROTOCOL, rejectedBelowMinimum.status)
+        assertEquals(HeartbeatStatus.UNSUPPORTED_PROTOCOL, rejectedAboveMaximum.status)
+    }
+
+    @Test
     fun `heartbeat rejects unknown member leave`() {
         service.createGroup("orders", "orders-consumer", createGroupRequest())
 
@@ -750,18 +787,19 @@ class CoordinatorServiceTest {
 
     private fun service(
         clock: Clock,
-        stateStore: CoordinatorStateStore,
+        stateStore: CoordinatorStateStore = InMemoryCoordinatorStateStore(),
         streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
+        properties: CoordinatorProperties = CoordinatorProperties(
+            heartbeatInterval = Duration.ofSeconds(3),
+            memberLeaseTtl = Duration.ofSeconds(15),
+            defaults = CoordinatorProperties.Defaults(
+                initialShardCount = 4,
+                consumerMaxConcurrency = 4,
+            ),
+        ),
     ): CoordinatorService =
         CoordinatorService(
-            properties = CoordinatorProperties(
-                heartbeatInterval = Duration.ofSeconds(3),
-                memberLeaseTtl = Duration.ofSeconds(15),
-                defaults = CoordinatorProperties.Defaults(
-                    initialShardCount = 4,
-                    consumerMaxConcurrency = 4,
-                ),
-            ),
+            properties = properties,
             stateStore = stateStore,
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
             streamProvisioner = streamProvisioner,
@@ -781,9 +819,10 @@ class CoordinatorServiceTest {
         ownedShards: Set<ShardId> = emptySet(),
         revokingShards: List<RevokingShardReport> = emptyList(),
         rebalanceTimeoutMs: Long = 60_000,
+        protocolVersion: Int = 1,
     ): HeartbeatRequest =
         HeartbeatRequest(
-            protocolVersion = 1,
+            protocolVersion = protocolVersion,
             requestId = "hb-$memberId-$memberEpoch",
             memberId = memberId,
             memberName = memberId,

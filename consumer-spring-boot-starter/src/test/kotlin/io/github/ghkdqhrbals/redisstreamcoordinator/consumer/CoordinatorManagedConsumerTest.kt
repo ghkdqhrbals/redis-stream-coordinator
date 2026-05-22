@@ -2,6 +2,7 @@ package io.github.ghkdqhrbals.redisstreamcoordinator.consumer
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class CoordinatorManagedConsumerTest {
@@ -124,6 +125,20 @@ class CoordinatorManagedConsumerTest {
 
         assertEquals(listOf(setOf(revokedShard), setOf(revokedShard)), lifecycle.revoked)
         assertEquals(RevokingShardState.REVOKED, client.requests[2].revokingShards.single().state)
+    }
+
+    @Test
+    fun `unsupported local heartbeat protocol version fails before polling coordinator`() {
+        val client = ScriptedCoordinatorClient()
+        val properties = properties().apply {
+            protocolVersion = CoordinatorConsumerProtocol.MAX_HEARTBEAT_VERSION + 1
+        }
+        val consumer = CoordinatorManagedConsumer(properties, client, RecordingShardLifecycle())
+
+        assertFailsWith<IllegalArgumentException> {
+            consumer.pollOnce()
+        }
+        assertTrue(client.requests.isEmpty())
     }
 
     private fun properties(): CoordinatorConsumerProperties =

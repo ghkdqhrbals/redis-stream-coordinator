@@ -13,7 +13,7 @@ class CoordinatorConsumerProperties {
     var consumerGroup: String = ""
     var memberId: String = UUID.randomUUID().toString()
     var memberName: String = "redis-stream-consumer"
-    var protocolVersion: Int = 1
+    var protocolVersion: Int = CoordinatorConsumerProtocol.DEFAULT_HEARTBEAT_VERSION
     var heartbeatInterval: Duration = Duration.ofSeconds(3)
     var rebalanceTimeout: Duration = Duration.ofSeconds(60)
     var runtimeMaxConcurrency: Int = 1

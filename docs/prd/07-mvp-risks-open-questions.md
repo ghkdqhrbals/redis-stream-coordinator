@@ -73,7 +73,7 @@ Costs:
 
 ## Maintainability Improvements
 
-* heartbeat schema는 `protocolVersion`으로 관리한다. 호환되지 않는 request/response 변경은 major version bump로 처리하고, optional field 추가만 같은 version에서 허용한다.
+* heartbeat schema는 `protocolVersion`으로 관리한다. 호환되지 않는 request/response 변경은 major version bump로 처리하고, optional field 추가만 같은 version에서 허용한다. 상세 정책은 [`11-versioning-compatibility.md`](11-versioning-compatibility.md)에서 관리한다.
 * coordinator event loop에는 invariant checker를 둔다. target assignment 중복 owner, missing owner, stale member epoch을 감지하면 metric과 structured log를 남긴다.
 * `EXPIRED` member와 migration metadata는 삭제하지 않고 장기간 유지한다. 정리가 필요하면 별도 운영 작업으로 다룬다.
 * Admin API mutation은 audit log를 필수로 남긴다. 운영자가 누가 언제 group metadata를 바꿨는지 추적할 수 있어야 한다.

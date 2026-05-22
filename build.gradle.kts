@@ -22,7 +22,7 @@ ensurePrepareKotlinBuildScriptModelTask()
 
 subprojects {
     group = "io.github.ghkdqhrbals"
-    version = "0.1.0-SNAPSHOT"
+    version = providers.gradleProperty("projectVersion").get()
 
     tasks.register("wrapper") {
         group = "Build Setup"

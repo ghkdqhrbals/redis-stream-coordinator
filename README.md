@@ -24,6 +24,18 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
 * `consumer-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, receive assignment changes, and implement shard lifecycle callbacks.
 
+## Versioning
+
+The project treats compatibility as part of the public contract:
+
+* Artifact versions follow Semantic Versioning.
+* Heartbeat schema compatibility is controlled by `protocolVersion`.
+* Coordinator servers accept a configured heartbeat protocol range so old and new consumers can coexist during rolling upgrades.
+* Breaking HTTP API changes require a new path prefix such as `/coord/v2`.
+* Redis metadata schema changes require migration notes and compatibility tests.
+
+See [Versioning and Compatibility Policy](docs/prd/11-versioning-compatibility.md).
+
 ## Consumer Integration
 
 Applications implement `CoordinatorShardLifecycle` and keep ownership of actual Redis Stream reads, handler execution, `XACK`, retry, DLQ, and idempotency.
