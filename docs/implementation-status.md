@@ -4,13 +4,14 @@ Last updated: 2026-05-22
 
 ## Summary
 
-The repository now has a Spring Boot 4 / Kotlin / Java 24 Gradle module named `coordinator-server`.
+The repository now has Spring Boot 4 / Kotlin / Java 24 Gradle modules named `coordinator-server` and `consumer-spring-boot-starter`.
 
 The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, producer routing metadata, and basic monitoring responses.
 
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
 The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
 Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
+The consumer starter provides Spring Boot auto-configuration, a coordinator HTTP client, and a shard lifecycle callback contract that application code can implement.
 
 ## Build and Tooling
 
@@ -33,6 +34,7 @@ Verified:
 ./gradlew :coordinator-server:compileJava
 ./gradlew :coordinator-server:test
 ./gradlew :coordinator-server:build
+./gradlew :consumer-spring-boot-starter:test
 ```
 
 All passed.
@@ -61,12 +63,13 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true \
 
 On pull requests, the `PR test results` workflow reruns PR tests with `--rerun-tasks` in a read-only test job, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, publishes a grouped HTML test report with expandable scenario sections, and posts a new PR comment for same-repository PRs with `issues: write` and `pull-requests: write`. Fork PR comments are handled by the separate `PR test result comments` workflow from the completed workflow artifact.
 
-## Implemented Module
+## Implemented Modules
 
-Module:
+Modules:
 
 ```text
 coordinator-server
+consumer-spring-boot-starter
 ```
 
 Main files:
@@ -86,6 +89,19 @@ Main files:
 * `RedisStreamProvisioning.kt`, `RedisStreamShardKeys.kt`
   * package: `io.github.ghkdqhrbals.redisstreamcoordinator.stream`
 * root `compose.yaml`
+
+Consumer starter files:
+
+* `CoordinatorConsumerModels.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+* `CoordinatorClient.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+* `CoordinatorManagedConsumer.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+* `CoordinatorShardLifecycle.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+* `CoordinatorConsumerAutoConfiguration.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
 
 ## Implemented API Surface
 
@@ -423,6 +439,21 @@ Expected response:
 * [ ] Add rate limiting for admin APIs.
 * [ ] Add operational runbook.
 
+### Phase 8: Consumer Spring Boot Starter
+
+* [x] Add `consumer-spring-boot-starter` module.
+* [x] Add coordinator DTOs for heartbeat and producer routing responses.
+* [x] Add overridable `CoordinatorClient`.
+* [x] Add `RestClient`-based coordinator HTTP client.
+* [x] Add `CoordinatorShardLifecycle` callback interface for application-owned shard workers.
+* [x] Add `CoordinatorManagedConsumer` heartbeat lifecycle.
+* [x] Add Spring Boot auto-configuration.
+* [x] Add assignment and revoke callback tests.
+* [x] Add repeated revoke callback support for long drain windows.
+* [ ] Add producer routing metadata cache component.
+* [ ] Add built-in Redis Stream polling adapter.
+* [ ] Add consumer-side Micrometer metrics.
+
 ## Tests Added
 
 Implemented tests:
@@ -452,6 +483,9 @@ Implemented tests:
 * Redis-backed store rejects stale coordinator snapshots instead of overwriting newer state.
 * Redis Stream shard key helper rejects hash-tag unsafe stream prefixes, validates version/shard counts, calculates Redis Cluster slots, and estimates distribution across equal master ranges.
 * Coordinator service calls shard provisioning on group creation and scale.
+* Consumer starter sends join heartbeat and notifies assigned shards.
+* Consumer starter detects removed assignment and reports revoked shards.
+* Consumer starter retries incomplete revoke callbacks and reports `REVOKED` after application drain completes.
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
@@ -482,6 +516,8 @@ Remaining work:
 * Rate limiting.
 * Full authorization model beyond Basic Auth.
 * Producer routing metadata client cache contract.
+* Consumer starter producer routing metadata cache.
+* Built-in Redis Stream polling adapter.
 * More complete epoch fencing semantics.
 * Broader Redis integration tests that stress idempotent provisioning retry and failure handling.
 
@@ -495,9 +531,9 @@ Explicitly still out of scope for the coordinator:
 
 ## Suggested Next Step
 
-Next implementation step should be to tighten producer cache and Redis provisioning failure semantics:
+Next implementation step should be to tighten producer/consumer client behavior and Redis provisioning failure semantics:
 
 1. Add metadata-version based cache invalidation guidance for producer clients.
 2. Add retry/failure integration tests for stream provisioning.
 3. Complete stricter stale member fencing semantics.
-4. Add structured audit logs and metrics for migration drain progress.
+4. Add consumer-side Micrometer metrics.

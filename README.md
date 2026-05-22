@@ -19,6 +19,42 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 * Rebalance only the shards that need to move when members join, leave, expire, or when shard counts change.
 * Handle shard count changes through next-version stream migration instead of in-place resharding.
 
+## Modules
+
+* `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
+* `consumer-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, receive assignment changes, and implement shard lifecycle callbacks.
+
+## Consumer Integration
+
+Applications implement `CoordinatorShardLifecycle` and keep ownership of actual Redis Stream reads, handler execution, `XACK`, retry, DLQ, and idempotency.
+
+```kotlin
+@Component
+class OrdersShardLifecycle : CoordinatorShardLifecycle {
+    override fun onAssigned(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext) {
+        // Start local Redis Stream workers for these shards.
+    }
+
+    override fun onRevoked(
+        shards: Set<CoordinatorShard>,
+        context: CoordinatorConsumerContext,
+    ): Set<CoordinatorShard> {
+        // Stop new reads, drain in-flight work, then return fully revoked shards.
+        return shards
+    }
+}
+```
+
+```yaml
+redis-stream-coordinator:
+  consumer:
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    member-name: orders-worker
+    runtime-max-concurrency: 4
+```
+
 ## Documentation
 
 * [Implementation Status](docs/implementation-status.md)
@@ -26,7 +62,7 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, and a Codex review workflow.
+This repository now includes an early Spring Boot/Kotlin coordinator server module and a consumer Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, consumer heartbeat integration, and a Codex review workflow.
 
 ## License
 
