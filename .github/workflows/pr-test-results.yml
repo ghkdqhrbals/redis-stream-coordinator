@@ -78,7 +78,8 @@ jobs:
           python3 .github/scripts/generate_grouped_test_report.py \
             coordinator-server/build/test-results/test \
             "$publish_dir/index.html" \
-            --gradle-report-path "gradle/index.html"
+            --gradle-report-path "gradle/index.html" \
+            --stdout-log-path "gradle-test.log"
 
           echo "url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${destination}/index.html" >> "$GITHUB_OUTPUT"
 
@@ -191,20 +192,23 @@ jobs:
               results.totals.tests - results.totals.failures - results.totals.errors - results.totals.skipped,
               0
             );
-            const groupedWorkflowSuite = results.suites.find((suite) =>
-              suite.name.endsWith('CoordinatorGroupedWorkflowTest')
-            );
-            const rebalanceFlowSuite = results.suites.find((suite) =>
-              suite.name.endsWith('CoordinatorRebalanceStateMachineFlowTest')
-            );
+            function countCasesByClassFragment(fragment) {
+              return results.suites
+                .flatMap((suite) => suite.testcases)
+                .filter((testcase) => testcase.className.includes(fragment))
+                .length;
+            }
+
+            const groupedWorkflowCount = countCasesByClassFragment('CoordinatorGroupedWorkflowTest');
+            const rebalanceFlowCount = countCasesByClassFragment('CoordinatorRebalanceStateMachineFlowTest');
             const shortSha = context.payload.pull_request.head.sha.slice(0, 7);
             const runAttempt = process.env.GITHUB_RUN_ATTEMPT || '1';
             const resultSummary = `${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`;
-            const groupedWorkflowSummary = groupedWorkflowSuite
-              ? `${groupedWorkflowSuite.tests} tests`
+            const groupedWorkflowSummary = groupedWorkflowCount > 0
+              ? `${groupedWorkflowCount} tests`
               : 'not found';
-            const rebalanceFlowSummary = rebalanceFlowSuite
-              ? `${rebalanceFlowSuite.tests} tests`
+            const rebalanceFlowSummary = rebalanceFlowCount > 0
+              ? `${rebalanceFlowCount} tests`
               : 'not found';
             const body = [
               marker,
@@ -216,9 +220,9 @@ jobs:
               `| Run attempt | ${runAttempt} |`,
               '| Command | `./gradlew :coordinator-server:test :coordinator-server:build --rerun-tasks --no-daemon` |',
               `| Result | ${resultSummary} |`,
-              `| Grouped workflow tests | ${groupedWorkflowSummary} |`,
-              `| Rebalance flow tests | ${rebalanceFlowSummary} |`,
-              `| Reports | [Workflow run](${runUrl}) / [Grouped test report](${htmlReportUrl}) |`,
+              `| Coordinator workflow scenarios | ${groupedWorkflowSummary} |`,
+              `| Rebalance state-machine scenarios | ${rebalanceFlowSummary} |`,
+              `| Reports | [Workflow run](${runUrl}) / [Coordinator test report](${htmlReportUrl}) |`,
             ];
 
             if (results.failedCases.length > 0) {

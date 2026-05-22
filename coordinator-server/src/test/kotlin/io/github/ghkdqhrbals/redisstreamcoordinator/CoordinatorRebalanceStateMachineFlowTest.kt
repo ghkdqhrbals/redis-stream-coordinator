@@ -21,11 +21,11 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 
-@DisplayName("Coordinator rebalance state machine flows")
+@DisplayName("Coordinator rebalance workflow scenarios")
 class CoordinatorRebalanceStateMachineFlowTest {
     @Nested
-    @DisplayName("Large flow")
-    inner class LargeFlow {
+    @DisplayName("Member expiration rebalance workflow")
+    inner class MemberExpirationRebalanceWorkflow {
         @Test
         fun `coordinator tick expires silent member and survivors converge through heartbeat responses`() {
             val harness = RebalanceFlowHarness("flow-large-expire", initialShardCount = 6)
@@ -73,8 +73,8 @@ class CoordinatorRebalanceStateMachineFlowTest {
     }
 
     @Nested
-    @DisplayName("Small flow")
-    inner class SmallFlow {
+    @DisplayName("Heartbeat reconciliation component scenarios")
+    inner class HeartbeatReconciliationComponentScenarios {
         @Test
         fun `new member receives pending shards until previous owner reports released ownership`() {
             val harness = RebalanceFlowHarness("flow-small-join", initialShardCount = 4)
@@ -126,8 +126,8 @@ class CoordinatorRebalanceStateMachineFlowTest {
     }
 
     @Nested
-    @DisplayName("Micro flow")
-    inner class MicroFlow {
+    @DisplayName("Assignment algorithm scenarios")
+    inner class AssignmentAlgorithmScenarios {
         @Test
         fun `redistribution keeps survivor sticky shards while balancing expired owner shards`() {
             val harness = RebalanceFlowHarness("flow-micro-sticky", initialShardCount = 6)

@@ -27,10 +27,11 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
             self._run_reporter(source, output / "index.html")
 
             html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Coordinator Test Report", html)
             self.assertIn("CoordinatorOperationalScenarioMatrixTest", html)
-            self.assertIn("<summary>scale up", html)
-            self.assertIn("<summary>add member", html)
-            self.assertIn("<summary>weighted capacity", html)
+            self.assertIn("<span>scale up</span>", html)
+            self.assertIn("<span>add member</span>", html)
+            self.assertIn("<span>weighted capacity</span>", html)
             self.assertIn("6 shards, 3 members", html)
             self.assertIn('href="gradle/index.html"', html)
 
@@ -52,8 +53,8 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
             self._run_reporter(source, output / "index.html")
 
             html = (output / "index.html").read_text(encoding="utf-8")
-            self.assertIn('<details class="suite" open>', html)
-            self.assertIn("<summary>Failed", html)
+            self.assertIn('class="suite" open>', html)
+            self.assertIn("<span>Failed</span>", html)
             self.assertIn("expected true", html)
 
     def test_groups_nested_junit_classes_by_category(self) -> None:
@@ -72,8 +73,35 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
             self._run_reporter(source, output / "index.html")
 
             html = (output / "index.html").read_text(encoding="utf-8")
-            self.assertIn("<summary>Member Expired", html)
+            self.assertIn("<span>Member Expired</span>", html)
             self.assertIn("expired owner is reassigned", html)
+
+    def test_renders_testcase_and_build_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            build_log = output / "gradle-test.log"
+            build_log.write_text("> Task :coordinator-server:test\nBUILD SUCCESSFUL\n", encoding="utf-8")
+            self._write_xml(
+                source,
+                "ExampleOutputTest",
+                [
+                    '<testcase classname="ExampleOutputTest" name="prints output" time="0.003">'
+                    "<system-out>hello stdout</system-out>"
+                    "<system-err>warn stderr</system-err>"
+                    "</testcase>",
+                ],
+                system_out="suite stdout",
+            )
+
+            self._run_reporter(source, output / "index.html", build_log)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Standard output", html)
+            self.assertIn("hello stdout", html)
+            self.assertIn("warn stderr", html)
+            self.assertIn("Gradle stdout", html)
+            self.assertIn("BUILD SUCCESSFUL", html)
 
     def _write_xml(
         self,
@@ -81,6 +109,7 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
         suite_name: str,
         testcases: list[str],
         failures: int = 0,
+        system_out: str = "",
     ) -> None:
         source.mkdir(parents=True, exist_ok=True)
         content = "\n".join(
@@ -88,17 +117,20 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
                 '<?xml version="1.0" encoding="UTF-8"?>',
                 f'<testsuite name="{suite_name}" tests="{len(testcases)}" skipped="0" failures="{failures}" errors="0" time="0.01">',
                 *testcases,
+                f"<system-out>{system_out}</system-out>" if system_out else "",
                 "</testsuite>",
             ]
         )
         (source / f"TEST-{suite_name}.xml").write_text(content, encoding="utf-8")
 
-    def _run_reporter(self, source: Path, output: Path) -> None:
+    def _run_reporter(self, source: Path, output: Path, stdout_log: Path | None = None) -> None:
         import sys
 
         previous_argv = sys.argv
         try:
             sys.argv = ["generate_grouped_test_report.py", str(source), str(output)]
+            if stdout_log is not None:
+                sys.argv.extend(["--stdout-log-path", str(stdout_log)])
             main()
         finally:
             sys.argv = previous_argv
