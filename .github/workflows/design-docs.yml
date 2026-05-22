@@ -6,15 +6,10 @@ on:
     paths:
       - ".github/workflows/design-docs.yml"
       - ".github/scripts/render_design_docs.py"
-  push:
-    branches: [main, unstable]
-    paths:
-      - ".github/workflows/design-docs.yml"
-      - ".github/scripts/render_design_docs.py"
   workflow_dispatch:
     inputs:
       source_ref:
-        description: "Branch or ref that contains Markdown design documents"
+        description: "Branch or ref that contains Markdown design documents to publish"
         required: false
         default: "design-docs"
 
@@ -98,7 +93,7 @@ jobs:
           retention-days: 1
 
   publish:
-    if: always() && needs.build.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'workflow_dispatch' && needs.build.result == 'success'
     runs-on: ubuntu-latest
     needs: build
     permissions:
@@ -121,15 +116,15 @@ jobs:
           keep_files: true
           commit_message: "Publish design docs for ${{ needs.build.outputs.source_ref }}"
 
-  post_preview:
-    if: always() && needs.publish.result == 'success' && github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+  post_render_result:
+    if: always() && needs.build.result == 'success' && github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    needs: [build, publish]
+    needs: build
     permissions:
       issues: write
       pull-requests: write
     steps:
-      - name: Post design docs preview
+      - name: Post design docs render result
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
@@ -137,10 +132,12 @@ jobs:
             const marker = '<!-- design-docs-preview -->';
             const body = [
               marker,
-              '## Design docs preview',
+              '## Design docs render',
               '',
               `- Source: \`${{ needs.build.outputs.source_ref }}\``,
-              `- Links: [HTML design docs](${{ needs.build.outputs.url }}) / [workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              `- Result: Rendered HTML was uploaded as the \`coordinator-design-docs-html\` artifact.`,
+              `- Publish: Manual only via the \`Design docs\` workflow_dispatch run.`,
+              `- Links: [workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
             ].join('\n');
 
             const { data: comments } = await github.rest.issues.listComments({
