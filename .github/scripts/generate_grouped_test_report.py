@@ -144,7 +144,7 @@ def render_suites(suites: list[TestSuite]) -> str:
                 f'<p class="muted">{escape(suite.name)} · {suite.time:.3f}s</p>',
                 render_matrix_cases(suite.cases)
                 if suite.name.endswith("CoordinatorOperationalScenarioMatrixTest")
-                else render_flat_cases(suite.cases),
+                else render_flat_cases(suite.cases, suite.name),
                 "</div>",
                 "</details>",
             ]
@@ -169,7 +169,7 @@ def render_matrix_cases(cases: list[TestCase]) -> str:
         scale_cases = [case for capacities in churns.values() for cases_by_capacity in capacities.values() for case in cases_by_capacity]
         body.append(group_details(scale, scale_cases, "group-level-1", render_churns(churns)))
     if fallback:
-        body.append(group_details("Other matrix cases", fallback, "group-level-1", render_flat_cases(fallback)))
+        body.append(group_details("Other matrix cases", fallback, "group-level-1", render_status_groups(fallback)))
     body.append("</div>")
     return "\n".join(body)
 
@@ -185,7 +185,27 @@ def render_churns(churns: dict[str, dict[str, list[TestCase]]]) -> str:
     return "\n".join(body)
 
 
-def render_flat_cases(cases: list[TestCase]) -> str:
+def render_flat_cases(cases: list[TestCase], suite_name: str) -> str:
+    categories: dict[str, list[TestCase]] = {}
+    for case in cases:
+        categories.setdefault(case_category(case, suite_name), []).append(case)
+
+    only_category = next(iter(categories), "Tests")
+    if len(categories) == 1 and (
+        only_category == "Tests" or normalized_label(only_category) == normalized_label(short_name(suite_name))
+    ):
+        return render_status_groups(cases)
+
+    if len(categories) > 1 or only_category != "Tests":
+        return "\n".join(
+            group_details(category, category_cases, "group-level-1", render_status_groups(category_cases))
+            for category, category_cases in categories.items()
+        )
+
+    return render_status_groups(cases)
+
+
+def render_status_groups(cases: list[TestCase]) -> str:
     grouped: dict[str, list[TestCase]] = {}
     for case in cases:
         grouped.setdefault(case.status, []).append(case)
@@ -196,6 +216,14 @@ def render_flat_cases(cases: list[TestCase]) -> str:
         if status_cases:
             body.append(group_details(status.title(), status_cases, "group-level-1", render_case_table(status_cases)))
     return "\n".join(body)
+
+
+def case_category(case: TestCase, suite_name: str) -> str:
+    if "$" in case.class_name:
+        return humanize_identifier(case.class_name.rsplit("$", 1)[-1])
+    if case.class_name != suite_name:
+        return humanize_identifier(short_name(case.class_name))
+    return "Tests"
 
 
 def group_details(title: str, cases: list[TestCase], css_class: str, content: str) -> str:
@@ -259,7 +287,17 @@ def summary_card(label: str, value: object, status: str = "") -> str:
 
 
 def short_name(value: str) -> str:
-    return value.rsplit(".", 1)[-1]
+    return humanize_identifier(value.rsplit(".", 1)[-1].rsplit("$", 1)[-1])
+
+
+def humanize_identifier(value: str) -> str:
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", value)
+    spaced = spaced.replace("_", " ").replace("-", " ")
+    return " ".join(spaced.split())
+
+
+def normalized_label(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def escape(value: str) -> str:

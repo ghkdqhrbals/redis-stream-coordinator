@@ -426,6 +426,7 @@ Implemented tests:
 * Consumer concurrency policy changes rebalance target assignments by member weight.
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
 * Rebalance timeout fences an old owner that does not revoke a moved shard and keeps a timely revoker active.
+* Category-level grouped workflows cover member expiration, member join, graceful leave, partition upscaling, and new stream topic creation.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
 * 432 focused Kafka-style operational matrix scenarios cover shard counts, member counts, scale up/down/rollback, steady/add/leave/expire/restart/replace churn, and uniform/skewed member capacity with descriptive scenario names.
@@ -446,6 +447,7 @@ Test files:
 
 ```text
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorServiceTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorGroupedWorkflowTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorOperationalScenarioMatrixTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt

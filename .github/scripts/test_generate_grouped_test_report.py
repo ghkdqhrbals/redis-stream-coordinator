@@ -56,6 +56,25 @@ class GenerateGroupedTestReportTest(unittest.TestCase):
             self.assertIn("<summary>Failed", html)
             self.assertIn("expected true", html)
 
+    def test_groups_nested_junit_classes_by_category(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            self._write_xml(
+                source,
+                "io.github.CoordinatorGroupedWorkflowTest$MemberExpired",
+                [
+                    '<testcase classname="io.github.CoordinatorGroupedWorkflowTest$MemberExpired" '
+                    'name="expired owner is reassigned" time="0.003"/>',
+                ],
+            )
+
+            self._run_reporter(source, output / "index.html")
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("<summary>Member Expired", html)
+            self.assertIn("expired owner is reassigned", html)
+
     def _write_xml(
         self,
         source: Path,
