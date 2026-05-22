@@ -1,0 +1,1636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coordinator Test Report</title>
+<style>
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-soft: #f9fafb;
+  --text: #172033;
+  --muted: #667085;
+  --line: #d8dee9;
+  --accent: #3155d4;
+  --accent-soft: #eef2ff;
+  --pass: #16803d;
+  --pass-soft: #ecfdf3;
+  --fail: #b42318;
+  --fail-soft: #fef3f2;
+  --skip: #946200;
+  --skip-soft: #fffaeb;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.page-shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 22px 16px;
+  border-right: 1px solid var(--line);
+  background: #111827;
+  color: #fff;
+  overflow-y: auto;
+}
+.product { font-size: 12px; color: #c7d2fe; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.sidebar-title { margin: 6px 0 18px; font-size: 20px; font-weight: 750; }
+nav { display: grid; gap: 4px; }
+nav a {
+  color: #e5e7eb;
+  text-decoration: none;
+  padding: 7px 8px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+nav a:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+nav .suite-link { padding-left: 16px; color: #cbd5e1; font-size: 12px; }
+main { width: min(100%, 1180px); padding: 28px; }
+.hero {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+h1, h2 { margin: 0; line-height: 1.2; }
+h1 { font-size: 28px; }
+h2 { font-size: 20px; }
+.lede { margin: 8px 0 0; color: var(--muted); max-width: 820px; }
+.result {
+  display: inline-block;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.result.success { color: var(--pass); background: var(--pass-soft); }
+.result.failed { color: var(--fail); background: var(--fail-soft); }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.button {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.button.secondary { background: var(--accent-soft); color: var(--accent); }
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+.summary-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 13px;
+}
+.summary-card span { display: block; color: var(--muted); font-size: 12px; }
+.summary-card strong { display: block; margin-top: 4px; font-size: 22px; }
+.summary-card.pass strong { color: var(--pass); }
+.summary-card.fail strong { color: var(--fail); }
+.summary-card.skip strong { color: var(--skip); }
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 24px 0 10px;
+}
+.section-heading p { margin: 0; color: var(--muted); }
+details {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 10px 0;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+summary {
+  cursor: pointer;
+  padding: 11px 13px;
+  font-weight: 700;
+  list-style-position: outside;
+}
+.suite > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-soft);
+}
+.group-level-1 > summary { background: var(--panel-soft); }
+.group-level-2 { margin-left: 14px; }
+.group-level-3 { margin-left: 28px; }
+.suite-body, .nested-groups { padding: 0 12px 12px; }
+.muted { color: var(--muted); margin: 8px 0 10px; }
+.suite-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.suite-dot.passed { background: var(--pass); }
+.suite-dot.failed { background: var(--fail); }
+.suite-dot.skipped { background: var(--skip); }
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.badge.pass { color: var(--pass); border-color: #abefc6; background: var(--pass-soft); }
+.badge.fail { color: var(--fail); border-color: #fecdca; background: var(--fail-soft); }
+.badge.skip { color: var(--skip); border-color: #fedf89; background: var(--skip-soft); }
+.case-list { display: grid; gap: 8px; margin: 10px 0 12px; }
+.case-card {
+  margin: 0;
+  border-radius: 7px;
+  box-shadow: none;
+}
+.case-card.failed, .case-card.error { border-color: #fecdca; }
+.case-summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+}
+.status {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 68px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.status.passed { color: var(--pass); background: var(--pass-soft); }
+.status.failed, .status.error { color: var(--fail); background: var(--fail-soft); }
+.status.skipped { color: var(--skip); background: var(--skip-soft); }
+.case-name { overflow-wrap: anywhere; }
+.case-time { color: var(--muted); font-size: 12px; }
+.case-body { padding: 0 12px 12px; border-top: 1px solid var(--line); }
+.case-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+.case-meta div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  padding: 8px;
+}
+dt { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.output {
+  box-shadow: none;
+  background: #0b1020;
+  border-color: #1f2937;
+}
+.output > summary { color: #e5e7eb; background: #111827; }
+pre {
+  margin: 0;
+  max-height: 460px;
+  overflow: auto;
+  padding: 12px;
+  background: #0b1020;
+  color: #d1d5db;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.empty {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+@media (max-width: 900px) {
+  .page-shell { display: block; }
+  .sidebar { position: static; height: auto; }
+  main { padding: 16px; }
+}
+@media (max-width: 720px) {
+  .section-heading { display: block; }
+  .group-level-2, .group-level-3 { margin-left: 0; }
+  .case-summary { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page-shell">
+<aside class="sidebar">
+<div class="product">Redis Stream Coordinator</div>
+<div class="sidebar-title">Test execution</div>
+<nav aria-label="Test report navigation">
+<a href="#overview">Overview</a>
+<a href="#suites">Suites</a>
+<a href="#output">Output</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorauthenticatedmemberhttpintegrationtest">Coordinator Authenticated Member Http Integration Test</a>
+<a class="suite-link" href="#suite-graceful-leave">Graceful leave</a>
+<a class="suite-link" href="#suite-member-expired">Member expired</a>
+<a class="suite-link" href="#suite-member-join">Member join</a>
+<a class="suite-link" href="#suite-new-stream-topic-creation">New stream topic creation</a>
+<a class="suite-link" href="#suite-partition-upscaling">Partition upscaling</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorhttpintegrationtest">Coordinator Http Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorprovisioningfailureintegrationtest">Coordinator Provisioning Failure Integration Test</a>
+<a class="suite-link" href="#suite-assignment-algorithm-scenarios">Assignment algorithm scenarios</a>
+<a class="suite-link" href="#suite-heartbeat-reconciliation-component-scenarios">Heartbeat reconciliation component scenarios</a>
+<a class="suite-link" href="#suite-member-expiration-rebalance-workflow">Member expiration rebalance workflow</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorservicetest">Coordinator Service Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorstatestoretest">Coordinator State Store Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-rediscoordinatorstatestoreintegrationtest">Redis Coordinator State Store Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamcoordinatorapplicationtest">Redis Stream Coordinator Application Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamprovisioningintegrationtest">Redis Stream Provisioning Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamshardkeystest">Redis Stream Shard Keys Test</a>
+</nav>
+</aside>
+<main>
+<header id="overview" class="hero">
+<div class="result success">Passed</div>
+<h1>Coordinator Test Report</h1>
+<p class="lede">Expandable suites, scenario groups, individual test results, failure detail, and captured stdout/stderr in one static report.</p>
+<div class="hero-actions">
+<a class="button" href="gradle/index.html">Open Gradle default report</a>
+<a class="button secondary" href="#output">Jump to stdout</a>
+</div>
+</header>
+<section class="summary-grid" aria-label="Test summary">
+<div class="summary-card"><span>Total tests</span><strong>67</strong></div>
+<div class="summary-card pass"><span>Passed</span><strong>62</strong></div>
+<div class="summary-card fail"><span>Failed</span><strong>0</strong></div>
+<div class="summary-card fail"><span>Errored</span><strong>0</strong></div>
+<div class="summary-card skip"><span>Skipped</span><strong>5</strong></div>
+<div class="summary-card"><span>Total time</span><strong>1.902s</strong></div>
+</section>
+<section id="suites" class="suite-list" aria-label="Test suites">
+<div class="section-heading"><h2>Suites</h2><p>Click a suite, scenario group, or test case to inspect nested results.</p></div>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorauthenticatedmemberhttpintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Authenticated Member Http Integration Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest · 1.413s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">member api requires basic auth when enabled()</span>
+<span class="case-time">1.413s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>1.413s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+<details class="output">
+<summary>Suite stdout</summary>
+<pre>11:06:52.742 [Test worker] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest]: CoordinatorAuthenticatedMemberHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+11:06:52.896 [Test worker] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest
+11:06:52.968 [Test worker] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest]: CoordinatorAuthenticatedMemberHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+11:06:52.971 [Test worker] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-05-22T11:06:53.337Z  INFO 2772 --- [    Test worker] orAuthenticatedMemberHttpIntegrationTest : Starting CoordinatorAuthenticatedMemberHttpIntegrationTest using Java 24.0.2 with PID 2772 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-05-22T11:06:53.340Z  INFO 2772 --- [    Test worker] orAuthenticatedMemberHttpIntegrationTest : No active profile set, falling back to 1 default profile: "default"
+2026-05-22T11:06:54.501Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-05-22T11:06:54.504Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-05-22T11:06:54.544Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 23 ms. Found 0 Redis repository interfaces.
+2026-05-22T11:06:56.084Z  INFO 2772 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-05-22T11:06:56.149Z  INFO 2772 --- [    Test worker] orAuthenticatedMemberHttpIntegrationTest : Started CoordinatorAuthenticatedMemberHttpIntegrationTest in 3.125 seconds (process running for 4.622)
+2026-05-22T11:06:56.831Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:56.832Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:56.834Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms</pre>
+</details>
+<details class="output">
+<summary>Suite stderr</summary>
+<pre>Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/home/runner/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy-agent/1.17.8/f09415827a71be7ed621c7bd02550678f28bc81c/byte-buddy-agent-1.17.8.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release</pre>
+</details>
+</div>
+</details>
+<details id="suite-graceful-leave" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Graceful leave</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Graceful leave · 0.004s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">last member leave makes group empty and clears targets()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$GracefulLeave</dd></div><div><dt>Suite</dt><dd>Graceful leave</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">leaving member releases targets and survivor owns every shard()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$GracefulLeave</dd></div><div><dt>Suite</dt><dd>Graceful leave</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-member-expired" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Member expired</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member expired · 0.003s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">expired member rejoin ignores stale ownership report()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberExpired</dd></div><div><dt>Suite</dt><dd>Member expired</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">expired owner is reassigned and stale heartbeat is fenced()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberExpired</dd></div><div><dt>Suite</dt><dd>Member expired</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-member-join" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Member join</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member join · 0.005s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">first member receives every initial shard()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberJoin</dd></div><div><dt>Suite</dt><dd>Member join</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">new member waits for previous owner revoke before receiving moved shard()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberJoin</dd></div><div><dt>Suite</dt><dd>Member join</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">three member join creates balanced target assignment without duplicate owners()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberJoin</dd></div><div><dt>Suite</dt><dd>Member join</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-new-stream-topic-creation" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>New stream topic creation</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="suite-body">
+<p class="muted">New stream topic creation · 0.003s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">upscaling provisions next stream topic shards before publishing migration()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$NewStreamTopicCreation</dd></div><div><dt>Suite</dt><dd>New stream topic creation</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">same shard count scale does not provision a new stream topic version()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$NewStreamTopicCreation</dd></div><div><dt>Suite</dt><dd>New stream topic creation</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group creation provisions initial stream topic shards()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$NewStreamTopicCreation</dd></div><div><dt>Suite</dt><dd>New stream topic creation</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-partition-upscaling" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Partition upscaling</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Partition upscaling · 0.017s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale updates producer routing while keeping old version readable()</span>
+<span class="case-time">0.014s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$PartitionUpscaling</dd></div><div><dt>Suite</dt><dd>Partition upscaling</dd></div><div><dt>Duration</dt><dd>0.014s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale creates next stream version and assigns old plus new shards()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$PartitionUpscaling</dd></div><div><dt>Suite</dt><dd>Partition upscaling</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorhttpintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Http Integration Test</span><span class="badge">7 total</span> <span class="badge pass">7 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest · 0.229s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">7 total</span> <span class="badge pass">7 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api creates group and accepts heartbeat()</span>
+<span class="case-time">0.074s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.074s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api handles graceful leave and monitoring shows empty group()</span>
+<span class="case-time">0.019s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.019s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api scales group and refreshes producer routing metadata()</span>
+<span class="case-time">0.050s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.050s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">admin api validates create group body()</span>
+<span class="case-time">0.037s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.037s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api returns producer routing metadata()</span>
+<span class="case-time">0.012s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.012s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">member api allows heartbeat without auth by default()</span>
+<span class="case-time">0.016s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.016s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">admin api requires basic auth()</span>
+<span class="case-time">0.011s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.011s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+<details class="output">
+<summary>Suite stdout</summary>
+<pre>2026-05-22T11:06:57.718Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest]: CoordinatorHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:57.720Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest
+2026-05-22T11:06:57.721Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest]: CoordinatorHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:57.723Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-05-22T11:06:57.766Z  INFO 2772 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : Starting CoordinatorHttpIntegrationTest using Java 24.0.2 with PID 2772 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-05-22T11:06:57.766Z  INFO 2772 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : No active profile set, falling back to 1 default profile: "default"
+2026-05-22T11:06:57.969Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-05-22T11:06:57.969Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-05-22T11:06:57.978Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 7 ms. Found 0 Redis repository interfaces.
+2026-05-22T11:06:58.228Z  INFO 2772 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-05-22T11:06:58.243Z  INFO 2772 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : Started CoordinatorHttpIntegrationTest in 0.51 seconds (process running for 6.716)
+2026-05-22T11:06:58.249Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.249Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.250Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.324Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.325Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.326Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.344Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.344Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.346Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.395Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.396Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.397Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.434Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.434Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.435Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.447Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.447Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.451Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 3 ms
+2026-05-22T11:06:58.466Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.467Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.470Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms</pre>
+</details>
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorprovisioningfailureintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Provisioning Failure Integration Test</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest · 0.135s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">mocked provisioning failure during scale keeps previous coordinator metadata()</span>
+<span class="case-time">0.133s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.133s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">mocked provisioning failure during create does not publish group metadata()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-assignment-algorithm-scenarios" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Assignment algorithm scenarios</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Assignment algorithm scenarios · 0.009s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redistribution keeps survivor sticky shards while balancing expired owner shards()</span>
+<span class="case-time">0.009s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$AssignmentAlgorithmScenarios</dd></div><div><dt>Suite</dt><dd>Assignment algorithm scenarios</dd></div><div><dt>Duration</dt><dd>0.009s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-heartbeat-reconciliation-component-scenarios" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Heartbeat reconciliation component scenarios</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Heartbeat reconciliation component scenarios · 0.010s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">new member receives pending shards until previous owner reports released ownership()</span>
+<span class="case-time">0.006s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$HeartbeatReconciliationComponentScenarios</dd></div><div><dt>Suite</dt><dd>Heartbeat reconciliation component scenarios</dd></div><div><dt>Duration</dt><dd>0.006s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">one second coordinator ticks enter rebalancing when a silent member lease expires()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$HeartbeatReconciliationComponentScenarios</dd></div><div><dt>Suite</dt><dd>Heartbeat reconciliation component scenarios</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-member-expiration-rebalance-workflow" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Member expiration rebalance workflow</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member expiration rebalance workflow · 0.013s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator tick expires silent member and survivors converge through heartbeat responses()</span>
+<span class="case-time">0.013s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$MemberExpirationRebalanceWorkflow</dd></div><div><dt>Suite</dt><dd>Member expiration rebalance workflow</dd></div><div><dt>Duration</dt><dd>0.013s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorservicetest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Service Test</span><span class="badge">25 total</span> <span class="badge pass">25 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest · 0.046s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">25 total</span> <span class="badge pass">25 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">rebalance timeout fences stuck owner()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group creation provisions initial stream version()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration scale creates next version()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">assignment waits for previous owner revoke()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale provisions next stream version before publishing migration()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration rollback restores previous version()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership expires owner and reassigns shards()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat returns unknown member for missing group()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration rollback rejects unknown id()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration completes after old version shards are drained()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">assignment first member gets readable shards()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">failover resumes pending revoke()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">rebalance timeout keeps timely owner active()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects member id mismatch()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects unknown member leave()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership rejoin restores expired member()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">producer routing returns active write metadata()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership fences expired owner stale epoch()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat fences stale member epoch()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">capacity movement advances epochs()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group rejects duplicate create()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat protocol version is accepted inside configured support range()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">capacity rebalances by member weight()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">capacity metadata update keeps assignment epoch()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership ignores stale ownership on rejoin()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorstatestoretest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator State Store Test</span><span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest · 0.006s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">memory store creates saves and lists groups()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis keys keep group state in one hash slot()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">memory store survives coordinator replacement()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis projection splits aggregate sections()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-rediscoordinatorstatestoreintegrationtest" class="suite">
+<summary><span class="suite-dot skipped" aria-label="skipped"></span><span>Redis Coordinator State Store Integration Test</span><span class="badge">3 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">3 skipped</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest · 0.001s</p>
+<details class="group-level-1">
+<summary><span>Skipped</span><span class="badge">3 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">3 skipped</span></summary>
+<div class="case-list">
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">redis store writes aggregate and projection keys()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">redis store rejects stale snapshot writes()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">redis stream provisioning creates consumer groups for created and scaled shard versions()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamcoordinatorapplicationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Redis Stream Coordinator Application Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest · 0.003s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">spring context loads()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+<details class="output">
+<summary>Suite stdout</summary>
+<pre>2026-05-22T11:06:58.719Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest]: RedisStreamCoordinatorApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:58.721Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest
+2026-05-22T11:06:58.722Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest]: RedisStreamCoordinatorApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:58.723Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-05-22T11:06:58.751Z  INFO 2772 --- [    Test worker] .r.RedisStreamCoordinatorApplicationTest : Starting RedisStreamCoordinatorApplicationTest using Java 24.0.2 with PID 2772 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-05-22T11:06:58.751Z  INFO 2772 --- [    Test worker] .r.RedisStreamCoordinatorApplicationTest : No active profile set, falling back to 1 default profile: "default"
+2026-05-22T11:06:58.920Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-05-22T11:06:58.921Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-05-22T11:06:58.928Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 5 ms. Found 0 Redis repository interfaces.
+2026-05-22T11:06:59.136Z  INFO 2772 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-05-22T11:06:59.148Z  INFO 2772 --- [    Test worker] .r.RedisStreamCoordinatorApplicationTest : Started RedisStreamCoordinatorApplicationTest in 0.422 seconds (process running for 7.622)</pre>
+</details>
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamprovisioningintegrationtest" class="suite">
+<summary><span class="suite-dot skipped" aria-label="skipped"></span><span>Redis Stream Provisioning Integration Test</span><span class="badge">2 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">2 skipped</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest · 0.000s</p>
+<details class="group-level-1">
+<summary><span>Skipped</span><span class="badge">2 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">2 skipped</span></summary>
+<div class="case-list">
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">stream provisioner is idempotent for existing Redis consumer groups()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">coordinator provisions Redis consumer groups on create and scale()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamshardkeystest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Redis Stream Shard Keys Test</span><span class="badge">6 total</span> <span class="badge pass">6 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest · 0.005s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">6 total</span> <span class="badge pass">6 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">hash slot matches Redis Cluster hash tag behavior()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream key pattern uses placeholders for producer routing()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">provisioning plan binds consumer group and shard keys()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream shard key helper validates Redis Cluster unsafe metadata()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group metadata creates stream shard keys for known versions only()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream shard keys avoid hash tags and distribute across equal master ranges()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+
+
+</div>
+</details>
+</div>
+</details>
+
+
+</div>
+</details>
+</section>
+<section id="output" class="output-section">
+<div class="section-heading"><h2>Output</h2><p>Gradle stdout is shown first, followed by suite-level JUnit stdout/stderr when available.</p></div>
+<details class="output" open>
+<summary>Gradle stdout</summary>
+<pre>Downloading https://services.gradle.org/distributions/gradle-8.14.5-bin.zip
+.............10%.............20%.............30%.............40%.............50%.............60%..............70%.............80%.............90%.............100%
+
+Welcome to Gradle 8.14.5!
+
+Here are the highlights of this release:
+ - Java 24 support
+ - GraalVM Native Image toolchain selection
+ - Enhancements to test reporting
+ - Build Authoring improvements
+
+For more details see https://docs.gradle.org/8.14.5/release-notes.html
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.5/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+&gt; Task :coordinator-server:checkKotlinGradlePluginConfigurationErrors SKIPPED
+&gt; Task :coordinator-server:processResources
+&gt; Task :coordinator-server:processTestResources NO-SOURCE
+&gt; Task :coordinator-server:compileKotlin
+&gt; Task :coordinator-server:compileJava NO-SOURCE
+&gt; Task :coordinator-server:classes
+&gt; Task :coordinator-server:resolveMainClassName
+&gt; Task :coordinator-server:bootJar
+&gt; Task :coordinator-server:jar
+&gt; Task :coordinator-server:assemble
+&gt; Task :coordinator-server:compileTestKotlin
+&gt; Task :coordinator-server:compileTestJava NO-SOURCE
+&gt; Task :coordinator-server:testClasses UP-TO-DATE
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::allocateMemory has been called by io.netty.util.internal.PlatformDependent0$2 (file:/home/runner/.gradle/caches/modules-2/files-2.1/io.netty/netty-common/4.2.12.Final/d35ffb9bf5cc0e05ae7408cf6a682b62dceceafc/netty-common-4.2.12.Final.jar)
+WARNING: Please consider reporting this to the maintainers of class io.netty.util.internal.PlatformDependent0$2
+WARNING: sun.misc.Unsafe::allocateMemory will be removed in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+&gt; Task :coordinator-server:test
+&gt; Task :coordinator-server:check
+&gt; Task :coordinator-server:build
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/gradle_test-1779447932091.json
+
+BUILD SUCCESSFUL in 1m 34s
+7 actionable tasks: 7 executed</pre>
+</details>
+<details class="output">
+<summary>JUnit suite stdout/stderr</summary>
+<pre>## io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest
+11:06:52.742 [Test worker] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest]: CoordinatorAuthenticatedMemberHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+11:06:52.896 [Test worker] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest
+11:06:52.968 [Test worker] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest]: CoordinatorAuthenticatedMemberHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+11:06:52.971 [Test worker] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-05-22T11:06:53.337Z  INFO 2772 --- [    Test worker] orAuthenticatedMemberHttpIntegrationTest : Starting CoordinatorAuthenticatedMemberHttpIntegrationTest using Java 24.0.2 with PID 2772 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-05-22T11:06:53.340Z  INFO 2772 --- [    Test worker] orAuthenticatedMemberHttpIntegrationTest : No active profile set, falling back to 1 default profile: "default"
+2026-05-22T11:06:54.501Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-05-22T11:06:54.504Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-05-22T11:06:54.544Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 23 ms. Found 0 Redis repository interfaces.
+2026-05-22T11:06:56.084Z  INFO 2772 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-05-22T11:06:56.149Z  INFO 2772 --- [    Test worker] orAuthenticatedMemberHttpIntegrationTest : Started CoordinatorAuthenticatedMemberHttpIntegrationTest in 3.125 seconds (process running for 4.622)
+2026-05-22T11:06:56.831Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:56.832Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:56.834Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/home/runner/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy-agent/1.17.8/f09415827a71be7ed621c7bd02550678f28bc81c/byte-buddy-agent-1.17.8.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+
+## io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest
+2026-05-22T11:06:57.718Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest]: CoordinatorHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:57.720Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest
+2026-05-22T11:06:57.721Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest]: CoordinatorHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:57.723Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-05-22T11:06:57.766Z  INFO 2772 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : Starting CoordinatorHttpIntegrationTest using Java 24.0.2 with PID 2772 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-05-22T11:06:57.766Z  INFO 2772 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : No active profile set, falling back to 1 default profile: "default"
+2026-05-22T11:06:57.969Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-05-22T11:06:57.969Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-05-22T11:06:57.978Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 7 ms. Found 0 Redis repository interfaces.
+2026-05-22T11:06:58.228Z  INFO 2772 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-05-22T11:06:58.243Z  INFO 2772 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : Started CoordinatorHttpIntegrationTest in 0.51 seconds (process running for 6.716)
+2026-05-22T11:06:58.249Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.249Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.250Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.324Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.325Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.326Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.344Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.344Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.346Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.395Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.396Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.397Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.434Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.434Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.435Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-05-22T11:06:58.447Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.447Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.451Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 3 ms
+2026-05-22T11:06:58.466Z  INFO 2772 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-05-22T11:06:58.467Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-05-22T11:06:58.470Z  INFO 2772 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+
+## io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest
+2026-05-22T11:06:58.719Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest]: RedisStreamCoordinatorApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:58.721Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest
+2026-05-22T11:06:58.722Z  INFO 2772 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest]: RedisStreamCoordinatorApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-05-22T11:06:58.723Z  INFO 2772 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-05-22T11:06:58.751Z  INFO 2772 --- [    Test worker] .r.RedisStreamCoordinatorApplicationTest : Starting RedisStreamCoordinatorApplicationTest using Java 24.0.2 with PID 2772 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-05-22T11:06:58.751Z  INFO 2772 --- [    Test worker] .r.RedisStreamCoordinatorApplicationTest : No active profile set, falling back to 1 default profile: "default"
+2026-05-22T11:06:58.920Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-05-22T11:06:58.921Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-05-22T11:06:58.928Z  INFO 2772 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 5 ms. Found 0 Redis repository interfaces.
+2026-05-22T11:06:59.136Z  INFO 2772 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-05-22T11:06:59.148Z  INFO 2772 --- [    Test worker] .r.RedisStreamCoordinatorApplicationTest : Started RedisStreamCoordinatorApplicationTest in 0.422 seconds (process running for 7.622)</pre>
+</details>
+</section>
+</main>
+</div>
+</body>
+</html>
