@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          ./gradlew :coordinator-server:test :coordinator-server:build --no-daemon 2>&1 | tee gradle-test.log
+          ./gradlew :coordinator-server:test :coordinator-server:build --rerun-tasks --no-daemon 2>&1 | tee gradle-test.log
           status=${PIPESTATUS[0]}
           {
             echo "exit_code=$status"
@@ -191,13 +191,20 @@ jobs:
               results.totals.tests - results.totals.failures - results.totals.errors - results.totals.skipped,
               0
             );
-            const operationalSuite = results.suites.find((suite) =>
-              suite.name.endsWith('CoordinatorOperationalScenarioMatrixTest')
+            const groupedWorkflowSuite = results.suites.find((suite) =>
+              suite.name.endsWith('CoordinatorGroupedWorkflowTest')
+            );
+            const rebalanceFlowSuite = results.suites.find((suite) =>
+              suite.name.endsWith('CoordinatorRebalanceStateMachineFlowTest')
             );
             const shortSha = context.payload.pull_request.head.sha.slice(0, 7);
+            const runAttempt = process.env.GITHUB_RUN_ATTEMPT || '1';
             const resultSummary = `${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`;
-            const operationalSummary = operationalSuite
-              ? `${operationalSuite.tests} scenarios`
+            const groupedWorkflowSummary = groupedWorkflowSuite
+              ? `${groupedWorkflowSuite.tests} tests`
+              : 'not found';
+            const rebalanceFlowSummary = rebalanceFlowSuite
+              ? `${rebalanceFlowSuite.tests} tests`
               : 'not found';
             const body = [
               marker,
@@ -206,9 +213,11 @@ jobs:
               '| Check | Details |',
               '| --- | --- |',
               `| Commit | \`${shortSha}\` |`,
-              '| Command | `./gradlew :coordinator-server:test :coordinator-server:build --no-daemon` |',
+              `| Run attempt | ${runAttempt} |`,
+              '| Command | `./gradlew :coordinator-server:test :coordinator-server:build --rerun-tasks --no-daemon` |',
               `| Result | ${resultSummary} |`,
-              `| Operational scenario matrix | ${operationalSummary} |`,
+              `| Grouped workflow tests | ${groupedWorkflowSummary} |`,
+              `| Rebalance flow tests | ${rebalanceFlowSummary} |`,
               `| Reports | [Workflow run](${runUrl}) / [Grouped test report](${htmlReportUrl}) |`,
             ];
 
@@ -278,7 +287,6 @@ jobs:
     permissions:
       actions: read
       issues: write
-      pull-requests: write
     steps:
       - name: Download prepared PR test result comment
         uses: actions/download-artifact@v4
@@ -292,31 +300,11 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const fs = require('fs');
-            const marker = '<!-- pr-test-results -->';
             const body = fs.readFileSync('pr-test-result-comment/body.md', 'utf8');
 
-            const { data: comments } = await github.rest.issues.listComments({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              per_page: 100,
+              body,
             });
-            const previous = comments.find((comment) =>
-              comment.user.type === 'Bot' && comment.body?.includes(marker)
-            );
-
-            if (previous) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: previous.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body,
-              });
-            }
