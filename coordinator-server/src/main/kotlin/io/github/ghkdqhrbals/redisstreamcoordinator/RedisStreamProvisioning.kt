@@ -10,6 +10,10 @@ import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
 
 interface StreamShardProvisioner {
+    /**
+     * Ensures the Redis Stream keys and consumer group for a shard version exist before
+     * coordinator metadata exposes that version to members or producers.
+     */
     fun provision(plan: RedisStreamShardProvisioningPlan)
 }
 

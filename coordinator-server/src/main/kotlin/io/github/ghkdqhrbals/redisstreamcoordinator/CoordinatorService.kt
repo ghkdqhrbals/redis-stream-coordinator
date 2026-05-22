@@ -43,6 +43,7 @@ class CoordinatorService(
             updatedAt = now,
         )
         reconcile(group, now)
+        // Provision backing Redis Stream shards before publishing coordinator metadata that references them.
         streamProvisioner.provision(group.streamShardProvisioningPlan())
         if (!stateStore.putIfAbsent(key, group)) {
             throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
@@ -89,6 +90,7 @@ class CoordinatorService(
         }
 
         val toVersion = group.shardCountsByVersion.keys.maxOrNull()!! + 1
+        // Prepare the next stream version first so scale metadata never points at missing Redis Stream shards.
         streamProvisioner.provision(
             RedisStreamShardProvisioningPlan.forVersion(
                 streamPrefix = streamPrefix,
