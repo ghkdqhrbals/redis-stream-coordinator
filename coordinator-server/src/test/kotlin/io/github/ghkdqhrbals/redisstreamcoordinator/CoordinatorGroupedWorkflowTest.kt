@@ -41,6 +41,32 @@ class CoordinatorGroupedWorkflowTest {
             assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-b"))
             assertTrue(assignments.invariantViolations.isEmpty())
         }
+
+        @Test
+        fun `expired member rejoin ignores stale ownership report`() {
+            val clock = CategoryClock()
+            val service = service(clock)
+            service.createGroup("category-expired-rejoin", "orders-consumer", createGroupRequest(initialShardCount = 2))
+            val memberA = join(service, "category-expired-rejoin", "member-a")
+            acknowledge(service, "category-expired-rejoin", "member-a", memberA)
+            clock.advance(Duration.ofSeconds(16))
+            val memberB = join(service, "category-expired-rejoin", "member-b")
+            acknowledge(service, "category-expired-rejoin", "member-b", memberB)
+
+            val rejoinedA = service.heartbeat(
+                "category-expired-rejoin",
+                "orders-consumer",
+                "member-a",
+                heartbeat("member-a", memberEpoch = 0, ownedShards = memberA.assignment.assignedShards),
+            )
+            val assignments = service.assignments("category-expired-rejoin", "orders-consumer")
+
+            assertEquals(HeartbeatStatus.OK, rejoinedA.status)
+            assertTrue(rejoinedA.assignment.assignedShards.isEmpty())
+            assertEquals(emptySet(), assignments.currentAssignments.getValue("member-a"))
+            assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-b"))
+            assertTrue(assignments.invariantViolations.isEmpty())
+        }
     }
 
     @Nested
@@ -88,6 +114,23 @@ class CoordinatorGroupedWorkflowTest {
             assertEquals(setOf(ShardId(1, 1)), assignedToB.assignment.assignedShards)
             assertTrue(assignedToB.assignment.pendingShards.isEmpty())
         }
+
+        @Test
+        fun `three member join creates balanced target assignment without duplicate owners`() {
+            val service = service()
+            service.createGroup("category-join-three", "orders-consumer", createGroupRequest(initialShardCount = 6))
+            join(service, "category-join-three", "member-a")
+            join(service, "category-join-three", "member-b")
+            join(service, "category-join-three", "member-c")
+
+            val assignments = service.assignments("category-join-three", "orders-consumer")
+            val targetShards = assignments.targetAssignment.values.flatten()
+
+            assertEquals(mapOf("member-a" to 2, "member-b" to 2, "member-c" to 2), assignments.targetAssignment.mapValues { it.value.size })
+            assertEquals(6, targetShards.toSet().size)
+            assertEquals((0 until 6).map { ShardId(1, it) }.toSet(), targetShards.toSet())
+            assertTrue(assignments.invariantViolations.isEmpty())
+        }
     }
 
     @Nested
@@ -120,6 +163,28 @@ class CoordinatorGroupedWorkflowTest {
             assertTrue("member-a" !in assignments.targetAssignment)
             assertTrue(assignments.invariantViolations.isEmpty())
         }
+
+        @Test
+        fun `last member leave makes group empty and clears targets`() {
+            val service = service()
+            service.createGroup("category-leave-empty", "orders-consumer", createGroupRequest(initialShardCount = 2))
+            val memberA = join(service, "category-leave-empty", "member-a")
+            acknowledge(service, "category-leave-empty", "member-a", memberA)
+
+            val leave = service.heartbeat(
+                "category-leave-empty",
+                "orders-consumer",
+                "member-a",
+                heartbeat("member-a", memberEpoch = -1, ownedShards = memberA.assignment.assignedShards),
+            )
+            val group = service.getGroup("category-leave-empty", "orders-consumer")
+            val assignments = service.assignments("category-leave-empty", "orders-consumer")
+
+            assertEquals(HeartbeatStatus.OK, leave.status)
+            assertEquals(GroupState.EMPTY, group.state)
+            assertTrue(assignments.targetAssignment.isEmpty())
+            assertTrue(assignments.invariantViolations.isEmpty())
+        }
     }
 
     @Nested
@@ -149,6 +214,28 @@ class CoordinatorGroupedWorkflowTest {
             assertEquals(2, migration.toVersion)
             assertEquals(setOf(1, 2), group.readableVersions)
             assertEquals((0 until 2).map { ShardId(1, it) }.toSet() + (0 until 4).map { ShardId(2, it) }.toSet(), heartbeat.assignment.assignedShards)
+        }
+
+        @Test
+        fun `scale updates producer routing while keeping old version readable`() {
+            val service = service()
+            service.createGroup("category-upscale-routing", "orders-consumer", createGroupRequest(initialShardCount = 2))
+            val before = service.producerRouting("category-upscale-routing", "orders-consumer")
+
+            service.scaleGroup(
+                "category-upscale-routing",
+                "orders-consumer",
+                ScaleGroupRequest(targetShardCount = 5, requestedBy = "test", reason = "route new version"),
+            )
+            val after = service.producerRouting("category-upscale-routing", "orders-consumer")
+            val group = service.getGroup("category-upscale-routing", "orders-consumer")
+
+            assertEquals(1, before.activeWriteVersion)
+            assertEquals(2, after.activeWriteVersion)
+            assertEquals(5, after.shardCount)
+            assertEquals(setOf(1, 2), group.readableVersions)
+            assertEquals((0 until 5).map { "category-upscale-routing:v2:shard:$it" }, after.shards.map { it.streamKey })
+            assertTrue(after.metadataVersion > before.metadataVersion)
         }
     }
 
@@ -192,6 +279,25 @@ class CoordinatorGroupedWorkflowTest {
                 ),
                 provisioner.provisioned,
             )
+        }
+
+        @Test
+        fun `same shard count scale does not provision a new stream topic version`() {
+            val provisioner = CategoryRecordingStreamShardProvisioner()
+            val service = service(streamProvisioner = provisioner)
+            service.createGroup("category-topic-noop", "orders-consumer", createGroupRequest(initialShardCount = 3))
+
+            val migration = service.scaleGroup(
+                "category-topic-noop",
+                "orders-consumer",
+                ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "noop"),
+            )
+            val group = service.getGroup("category-topic-noop", "orders-consumer")
+
+            assertEquals(MigrationState.DEPRECATED, migration.state)
+            assertEquals(1, group.activeWriteVersion)
+            assertEquals(null, group.activeMigration)
+            assertEquals(listOf(CategoryProvisionedVersion("category-topic-noop", "orders-consumer", 1, 3)), provisioner.provisioned)
         }
     }
 

@@ -430,8 +430,10 @@ Implemented tests:
 * Consumer concurrency policy changes rebalance target assignments by member weight.
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
 * Rebalance timeout fences an old owner that does not revoke a moved shard and keeps a timely revoker active.
-* Category-level grouped workflows cover member expiration, member join, graceful leave, partition upscaling, and new stream topic creation.
+* Category-level grouped workflows cover member expiration, expired rejoin, member join balancing, graceful leave, empty group transition, partition upscaling, producer routing after scale, and new stream topic creation.
 * Producer routing metadata exposes active write version, shard count, hash policy, stream key pattern, and active shard keys.
+* HTTP integration covers scale-triggered producer routing updates and graceful leave monitoring.
+* Mockito-backed integration tests verify stream provisioning failures do not publish create or scale metadata.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
 * In-memory state store supports create/get/save/list.
@@ -452,6 +454,7 @@ Test files:
 ```text
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorServiceTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorGroupedWorkflowTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorProvisioningFailureIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
