@@ -590,6 +590,42 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `producer routing returns active write metadata`() {
+        service.createGroup(
+            "route-orders",
+            "orders-consumer",
+            CreateGroupRequest(
+                initialShardCount = 2,
+                hashAlgorithm = "murmur3",
+                hashSeed = "tenant-a",
+                requestedBy = "test",
+            ),
+        )
+        val beforeScale = service.producerRouting("route-orders", "orders-consumer")
+
+        service.scaleGroup(
+            "route-orders",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "scale producer writes"),
+        )
+        val afterScale = service.producerRouting("route-orders", "orders-consumer")
+
+        assertEquals(1, beforeScale.activeWriteVersion)
+        assertEquals(2, beforeScale.shardCount)
+        assertEquals("murmur3", beforeScale.hashAlgorithm)
+        assertEquals("tenant-a", beforeScale.hashSeed)
+        assertEquals("route-orders:v{streamVersion}:shard:{shardIndex}", beforeScale.streamKeyPattern)
+        assertEquals(listOf("route-orders:v1:shard:0", "route-orders:v1:shard:1"), beforeScale.shards.map { it.streamKey })
+        assertEquals(2, afterScale.activeWriteVersion)
+        assertEquals(3, afterScale.shardCount)
+        assertTrue(afterScale.metadataVersion > beforeScale.metadataVersion)
+        assertEquals(
+            listOf("route-orders:v2:shard:0", "route-orders:v2:shard:1", "route-orders:v2:shard:2"),
+            afterScale.shards.map { it.streamKey },
+        )
+    }
+
+    @Test
     fun `group creation provisions initial stream version`() {
         val provisioner = RecordingStreamShardProvisioner()
         val service = service(clock, InMemoryCoordinatorStateStore(), provisioner)

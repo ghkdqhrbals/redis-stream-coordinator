@@ -61,6 +61,15 @@ class CoordinatorService(
         }
 
     @Synchronized
+    fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+        requireGroup(streamPrefix, consumerGroup).let { group ->
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
+            }
+            group.toProducerRoutingResponse()
+        }
+
+    @Synchronized
     fun scaleGroup(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration =
         withStateConflictRetry { scaleGroupOnce(streamPrefix, consumerGroup, request) }
 
@@ -685,6 +694,28 @@ class CoordinatorService(
             targetAssignmentSummary = targetAssignments.mapValues { it.value.size },
             currentAssignmentSummary = members.mapValues { it.value.currentAssignment.size },
         )
+
+    private fun GroupMetadata.toProducerRoutingResponse(): ProducerRoutingResponse {
+        val activeShardKeys = streamShardKeys(activeWriteVersion)
+        return ProducerRoutingResponse(
+            streamPrefix = streamPrefix,
+            consumerGroup = consumerGroup,
+            metadataVersion = metadataVersion,
+            activeWriteVersion = activeWriteVersion,
+            shardCount = shardCountsByVersion.getValue(activeWriteVersion),
+            hashAlgorithm = hashAlgorithm,
+            hashSeed = hashSeed,
+            streamKeyPattern = RedisStreamShardKeys.keyPattern(streamPrefix),
+            shards = activeShardKeys.map { shardKey ->
+                ProducerRoutingShard(
+                    streamVersion = shardKey.streamVersion,
+                    shardIndex = shardKey.shardIndex,
+                    streamKey = shardKey.value,
+                    redisSlot = shardKey.slot,
+                )
+            },
+        )
+    }
 
     private fun invariantViolations(group: GroupMetadata): List<String> {
         val violations = mutableListOf<String>()

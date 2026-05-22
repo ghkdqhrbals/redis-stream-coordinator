@@ -92,6 +92,34 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `http api returns producer routing metadata`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/http-routing/groups/orders-consumer")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createGroupRequest(initialShardCount = 2))),
+        )
+            .andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/coord/v1/streams/http-routing/groups/orders-consumer/producer-routing")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.streamPrefix").value("http-routing"))
+            .andExpect(jsonPath("$.consumerGroup").value("orders-consumer"))
+            .andExpect(jsonPath("$.metadataVersion").value(1))
+            .andExpect(jsonPath("$.activeWriteVersion").value(1))
+            .andExpect(jsonPath("$.shardCount").value(2))
+            .andExpect(jsonPath("$.hashAlgorithm").value("murmur3"))
+            .andExpect(jsonPath("$.hashSeed").value("default"))
+            .andExpect(jsonPath("$.streamKeyPattern").value("http-routing:v{streamVersion}:shard:{shardIndex}"))
+            .andExpect(jsonPath("$.shards.length()").value(2))
+            .andExpect(jsonPath("$.shards[0].streamKey").value("http-routing:v1:shard:0"))
+            .andExpect(jsonPath("$.shards[1].streamKey").value("http-routing:v1:shard:1"))
+    }
+
+    @Test
     fun `member api allows heartbeat without auth by default`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-auth/groups/auth-consumer")

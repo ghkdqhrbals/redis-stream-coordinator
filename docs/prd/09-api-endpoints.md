@@ -150,6 +150,33 @@ Response summary:
 | `targetAssignmentSummary` | Desired ownership summary. |
 | `currentAssignmentSummary` | Member-reported ownership summary. |
 
+### Get Producer Routing Metadata
+
+```http
+GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+```
+
+Returns the active write metadata that producers need to route partition keys to Redis Stream shards. This endpoint is read-only and does not create streams, change shard counts, or mutate group assignment.
+
+Producer routing formula:
+
+```text
+shardIndex = hash(hashAlgorithm, hashSeed, partitionKey) % shardCount
+streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
+```
+
+Response summary:
+
+| Field | Meaning |
+| --- | --- |
+| `metadataVersion` | Coordinator metadata version for producer cache invalidation. |
+| `activeWriteVersion` | Integer stream version that producers must write to. |
+| `shardCount` | Active write version shard count. |
+| `hashAlgorithm` | Partition key hash algorithm. |
+| `hashSeed` | Hash seed. |
+| `streamKeyPattern` | Redis Stream key pattern with `{streamVersion}` and `{shardIndex}` placeholders. |
+| `shards` | Active write version shard keys and Redis Cluster slots. |
+
 ### Scale Group
 
 ```http

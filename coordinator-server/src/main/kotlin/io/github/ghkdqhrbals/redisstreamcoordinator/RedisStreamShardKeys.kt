@@ -8,10 +8,7 @@ data class RedisStreamShardKey(
     val shardIndex: Int,
 ) {
     init {
-        require(streamPrefix.isNotBlank()) { "streamPrefix must not be blank" }
-        require('{' !in streamPrefix && '}' !in streamPrefix) {
-            "streamPrefix must not contain Redis Cluster hash tag braces"
-        }
+        validateStreamPrefix(streamPrefix)
         require(streamVersion > 0) { "streamVersion must be positive" }
         require(shardIndex >= 0) { "shardIndex must be zero or positive" }
     }
@@ -51,6 +48,11 @@ data class RedisStreamShardProvisioningPlan(
 }
 
 object RedisStreamShardKeys {
+    fun keyPattern(streamPrefix: String): String {
+        validateStreamPrefix(streamPrefix)
+        return "$streamPrefix:v{streamVersion}:shard:{shardIndex}"
+    }
+
     fun forShard(streamPrefix: String, streamVersion: Int, shardIndex: Int): RedisStreamShardKey =
         RedisStreamShardKey(streamPrefix, streamVersion, shardIndex)
 
@@ -72,6 +74,13 @@ object RedisStreamShardKeys {
             counts[masterIndex] = counts.getValue(masterIndex) + 1
         }
         return counts.toSortedMap()
+    }
+}
+
+private fun validateStreamPrefix(streamPrefix: String) {
+    require(streamPrefix.isNotBlank()) { "streamPrefix must not be blank" }
+    require('{' !in streamPrefix && '}' !in streamPrefix) {
+        "streamPrefix must not contain Redis Cluster hash tag braces"
     }
 }
 

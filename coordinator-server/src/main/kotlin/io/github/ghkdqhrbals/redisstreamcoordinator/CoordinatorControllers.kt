@@ -33,6 +33,13 @@ class AdminController(
     ): GroupResponse =
         coordinator.getGroup(streamPrefix, consumerGroup)
 
+    @GetMapping("/producer-routing")
+    fun getProducerRouting(
+        @PathVariable streamPrefix: String,
+        @PathVariable consumerGroup: String,
+    ): ProducerRoutingResponse =
+        coordinator.producerRouting(streamPrefix, consumerGroup)
+
     @PostMapping("/scale")
     fun scaleGroup(
         @PathVariable streamPrefix: String,

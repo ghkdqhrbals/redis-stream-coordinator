@@ -31,6 +31,11 @@ class RedisStreamShardKeysTest {
     }
 
     @Test
+    fun `stream key pattern uses placeholders for producer routing`() {
+        assertEquals("orders:v{streamVersion}:shard:{shardIndex}", RedisStreamShardKeys.keyPattern("orders"))
+    }
+
+    @Test
     fun `stream shard key helper validates Redis Cluster unsafe metadata`() {
         assertFailsWith<IllegalArgumentException> {
             RedisStreamShardKeys.forVersion("orders:{tenant-a}", streamVersion = 1, shardCount = 4)

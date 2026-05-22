@@ -6,7 +6,7 @@ Last updated: 2026-05-22
 
 The repository now has a Spring Boot 4 / Kotlin / Java 24 Gradle module named `coordinator-server`.
 
-The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, and basic monitoring responses.
+The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, producer routing metadata, and basic monitoring responses.
 
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
 The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
@@ -93,6 +93,7 @@ Implemented admin APIs:
 
 * `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`
 * `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`
+* `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing`
 * `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale`
 * `PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency`
 * `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}`
@@ -329,6 +330,7 @@ Expected response:
 
 * [x] Add admin group creation API.
 * [x] Add admin group metadata read API.
+* [x] Add producer routing metadata API.
 * [x] Add shard scale API.
 * [x] Add consumer concurrency update API.
 * [x] Add migration lookup API.
@@ -360,6 +362,7 @@ Expected response:
 * [x] Enforce revoke-before-assign.
 * [x] Create next stream version on scale.
 * [x] Keep old and new versions readable during migration.
+* [x] Expose active write routing metadata for producers.
 * [x] Support active migration rollback.
 * [x] Advance assignment epoch for capacity-policy-driven rebalances.
 * [ ] Complete stricter stale member fencing semantics.
@@ -400,6 +403,7 @@ Expected response:
 * [x] Validate stream version and shard count metadata before building shard keys.
 * [x] Add shard key format helper.
 * [x] Add hash-slot distribution helper.
+* [x] Add producer routing response with active shard keys and Redis slots.
 
 ### Phase 7: Observability and Operations
 
@@ -427,6 +431,7 @@ Implemented tests:
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
 * Rebalance timeout fences an old owner that does not revoke a moved shard and keeps a timely revoker active.
 * Category-level grouped workflows cover member expiration, member join, graceful leave, partition upscaling, and new stream topic creation.
+* Producer routing metadata exposes active write version, shard count, hash policy, stream key pattern, and active shard keys.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
 * 432 focused Kafka-style operational matrix scenarios cover shard counts, member counts, scale up/down/rollback, steady/add/leave/expire/restart/replace churn, and uniform/skewed member capacity with descriptive scenario names.

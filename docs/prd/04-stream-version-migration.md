@@ -8,11 +8,19 @@
 
 Producer는 local shard count를 직접 쓰지 않는다.
 
-```text
-metadata = metadataCache.activeWrite(streamPrefix)
-shardIndex = hash(metadata.hashAlgorithm, metadata.hashSeed, partitionKey) % metadata.shardCount
-streamKey = format(metadata.streamKeyFormat, streamPrefix, metadata.streamVersion, shardIndex)
+Producer는 coordinator의 producer routing metadata endpoint를 캐시한다.
+
+```http
+GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 ```
+
+```text
+metadata = metadataCache.activeWrite(streamPrefix, consumerGroup)
+shardIndex = hash(metadata.hashAlgorithm, metadata.hashSeed, partitionKey) % metadata.shardCount
+streamKey = format(metadata.streamKeyPattern, metadata.activeWriteVersion, shardIndex)
+```
+
+`metadataVersion`이 바뀌면 producer는 cached routing metadata를 갱신해야 한다.
 
 ## Coordinator Admin Scale Request
 
