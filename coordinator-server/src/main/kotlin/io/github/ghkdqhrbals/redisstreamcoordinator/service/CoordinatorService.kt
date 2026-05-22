@@ -292,6 +292,7 @@ class CoordinatorService(
 
         reconcile(group, now)
         enforceRebalanceTimeouts(group, now)
+        advanceMigrationDrainState(group, now)
         if (member.state == MemberState.FENCED) {
             stateStore.save(group.key(), group)
             return fencedHeartbeat(group, request, memberId, member)
@@ -442,7 +443,8 @@ class CoordinatorService(
     private fun refreshOperationalState(group: GroupMetadata, now: Instant): Boolean {
         val expired = expireMembers(group, now)
         val timedOut = enforceRebalanceTimeouts(group, now)
-        return expired || timedOut
+        val migrationAdvanced = advanceMigrationDrainState(group, now)
+        return expired || timedOut || migrationAdvanced
     }
 
     private fun markLeaving(
@@ -551,9 +553,60 @@ class CoordinatorService(
         return changed
     }
 
+    private fun advanceMigrationDrainState(group: GroupMetadata, now: Instant): Boolean {
+        val migration = group.activeMigrationId?.let { group.migrations[it] } ?: return false
+        return when (migration.state) {
+            MigrationState.ACTIVE -> startMigrationDrainIfReady(group, migration, now)
+            MigrationState.DRAINING -> completeMigrationDrainIfReady(group, migration, now)
+            else -> false
+        }
+    }
+
+    private fun startMigrationDrainIfReady(
+        group: GroupMetadata,
+        migration: Migration,
+        now: Instant,
+    ): Boolean {
+        val liveMembers = group.liveMembers()
+        if (liveMembers.isEmpty() || group.state != GroupState.STABLE) {
+            return false
+        }
+        if (!liveMembers.all { member -> member.currentAssignment == group.targetAssignments[member.memberId].orEmpty() }) {
+            return false
+        }
+
+        migration.state = MigrationState.DRAINING
+        migration.updatedAt = now
+        group.readableVersions = setOf(migration.toVersion)
+        bumpMetadata(group, now, bumpGroupEpoch = true)
+        reconcile(group, now)
+        return true
+    }
+
+    private fun completeMigrationDrainIfReady(
+        group: GroupMetadata,
+        migration: Migration,
+        now: Instant,
+    ): Boolean {
+        val oldVersionStillOwned = group.liveMembers().any { member ->
+            member.currentAssignment.any { it.streamVersion == migration.fromVersion } ||
+                member.revoking.any { it.streamVersion == migration.fromVersion }
+        }
+        if (oldVersionStillOwned) {
+            return false
+        }
+
+        migration.state = MigrationState.DEPRECATED
+        migration.updatedAt = now
+        group.activeMigrationId = null
+        group.readableVersions = setOf(migration.toVersion)
+        bumpMetadata(group, now, bumpGroupEpoch = false)
+        reconcile(group, now)
+        return true
+    }
+
     private fun reconcile(group: GroupMetadata, now: Instant) {
-        val liveMembers = group.members.values
-            .filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
+        val liveMembers = group.liveMembers()
             .sortedBy { it.memberId }
 
         if (liveMembers.isEmpty()) {
@@ -678,6 +731,9 @@ class CoordinatorService(
             val count = shardCountsByVersion.getValue(version)
             (0 until count).map { ShardId(version, it) }
         }.sorted()
+
+    private fun GroupMetadata.liveMembers(): List<MemberMetadata> =
+        members.values.filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
 
     private fun GroupMetadata.assignedMaxConcurrency(memberName: String): Int =
         consumerConcurrencyPolicy.memberOverrides[memberName]

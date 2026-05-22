@@ -599,6 +599,81 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `migration completes after old version shards are drained`() {
+        service.createGroup("drain", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val joined = service.heartbeat("drain", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        val oldOwned = service.heartbeat(
+            "drain",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = joined.memberEpoch, ownedShards = joined.assignment.assignedShards),
+        )
+        val migration = service.scaleGroup(
+            "drain",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "scale out"),
+        )
+        val oldAndNew = service.heartbeat(
+            "drain",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = oldOwned.memberEpoch, ownedShards = oldOwned.assignment.assignedShards),
+        )
+
+        val drainingResponse = service.heartbeat(
+            "drain",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = oldAndNew.memberEpoch, ownedShards = oldAndNew.assignment.assignedShards),
+        )
+        val drainingGroup = service.getGroup("drain", "orders-consumer")
+        val drainingMigration = service.getMigration("drain", "orders-consumer", migration.migrationId)
+
+        assertEquals(MigrationState.DRAINING, drainingMigration.state)
+        assertEquals(setOf(2), drainingGroup.readableVersions)
+        assertEquals((0 until 3).map { ShardId(2, it) }.toSet(), drainingResponse.assignment.assignedShards)
+        assertEquals((0 until 3).map { ShardId(2, it) }.toSet(), service.assignments("drain", "orders-consumer").targetAssignment.getValue("member-a"))
+
+        service.heartbeat(
+            "drain",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = drainingResponse.memberEpoch,
+                ownedShards = drainingResponse.assignment.assignedShards,
+                revokingShards = listOf(
+                    RevokingShardReport(ShardId(1, 0), RevokingShardState.DRAINING, inFlight = 1),
+                    RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED, inFlight = 0),
+                ),
+            ),
+        )
+        assertEquals(MigrationState.DRAINING, service.getMigration("drain", "orders-consumer", migration.migrationId).state)
+
+        val completed = service.heartbeat(
+            "drain",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = drainingResponse.memberEpoch,
+                ownedShards = drainingResponse.assignment.assignedShards,
+                revokingShards = listOf(
+                    RevokingShardReport(ShardId(1, 0), RevokingShardState.REVOKED, inFlight = 0),
+                    RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED, inFlight = 0),
+                ),
+            ),
+        )
+        val completedGroup = service.getGroup("drain", "orders-consumer")
+        val completedMigration = service.getMigration("drain", "orders-consumer", migration.migrationId)
+
+        assertEquals(MigrationState.DEPRECATED, completedMigration.state)
+        assertEquals(null, completedGroup.activeMigration)
+        assertEquals(setOf(2), completedGroup.readableVersions)
+        assertEquals((0 until 3).map { ShardId(2, it) }.toSet(), completed.assignment.assignedShards)
+    }
+
+    @Test
     fun `producer routing returns active write metadata`() {
         service.createGroup(
             "route-orders",

@@ -132,6 +132,7 @@ Implemented:
 * `assignedShards` and `pendingShards` separation.
 * Revoke-before-assign rule: a shard is not assigned to a new owner while another active/leaving member still reports ownership or revocation.
 * Scale request that creates a next stream version and keeps old/new versions readable.
+* Automatic migration drain transition: old/new assignments converge, old version is removed from targets, and the migration becomes `DEPRECATED` after members report old shard drain completion.
 * Rollback for active migration.
 * Monitoring summaries for members, assignments, migrations, and invariant violations.
 * Shared `CoordinatorError` enum for HTTP status, error code, and default error message management.
@@ -374,7 +375,7 @@ Expected response:
 * [x] Advance assignment epoch for capacity-policy-driven rebalances.
 * [ ] Complete stricter stale member fencing semantics.
 * [x] Add rebalance timeout handling.
-* [ ] Add automatic migration drain completion and `DEPRECATED` transition.
+* [x] Add automatic migration drain completion and `DEPRECATED` transition.
 
 ### Phase 4: Redis Cluster Environment
 
@@ -480,8 +481,7 @@ Remaining work:
 * Metrics listed in the PRD.
 * Rate limiting.
 * Full authorization model beyond Basic Auth.
-* Migration drain progress and automatic `DEPRECATED` transition.
-* Producer routing metadata API/cache.
+* Producer routing metadata client cache contract.
 * More complete epoch fencing semantics.
 * Broader Redis integration tests that stress idempotent provisioning retry and failure handling.
 
@@ -495,9 +495,9 @@ Explicitly still out of scope for the coordinator:
 
 ## Suggested Next Step
 
-Next implementation step should be to expose producer routing metadata and finish migration drain semantics:
+Next implementation step should be to tighten producer cache and Redis provisioning failure semantics:
 
-1. Add a producer routing metadata API/cache that returns active write version, shard count, key pattern, hash algorithm, and hash seed.
-2. Add metadata-version based cache invalidation for producer clients.
-3. Detect old-version drain completion and transition active migrations to `DEPRECATED`.
-4. Add retry/failure integration tests for stream provisioning.
+1. Add metadata-version based cache invalidation guidance for producer clients.
+2. Add retry/failure integration tests for stream provisioning.
+3. Complete stricter stale member fencing semantics.
+4. Add structured audit logs and metrics for migration drain progress.
