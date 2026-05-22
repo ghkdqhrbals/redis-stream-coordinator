@@ -54,10 +54,17 @@ class CoordinatorService(
             updatedAt = now,
         )
         reconcile(group, now)
-        // Provision backing Redis Stream shards before publishing coordinator metadata that references them.
-        streamProvisioner.provision(group.streamShardProvisioningPlan())
         if (!stateStore.putIfAbsent(key, group)) {
             throw CoordinatorException(CoordinatorError.GROUP_ALREADY_EXISTS)
+        }
+        // Provision after the state claim is won so rejected concurrent creates cannot leave stream keys behind.
+        try {
+            streamProvisioner.provision(group.streamShardProvisioningPlan())
+        } catch (error: RuntimeException) {
+            runCatching { stateStore.deleteIfRevision(key, group.storeRevision) }
+                .exceptionOrNull()
+                ?.let(error::addSuppressed)
+            throw error
         }
         return group.toResponse()
     }
@@ -89,7 +96,13 @@ class CoordinatorService(
         val now = Instant.now(clock)
         expireMembers(group, now)
 
-        group.activeMigrationId?.let {
+        val activeMigration = group.activeMigrationId?.let { group.migrations[it] }
+        if (activeMigration != null) {
+            if (activeMigration.state == MigrationState.PREPARING &&
+                activeMigration.toShardCount == request.targetShardCount
+            ) {
+                return provisionAndActivatePreparedMigration(group, activeMigration, request, now)
+            }
             throw CoordinatorException(CoordinatorError.ACTIVE_MIGRATION_EXISTS)
         }
 
@@ -110,31 +123,45 @@ class CoordinatorService(
         }
 
         val toVersion = group.shardCountsByVersion.keys.maxOrNull()!! + 1
-        // Prepare the next stream version first so scale metadata never points at missing Redis Stream shards.
-        streamProvisioner.provision(
-            RedisStreamShardProvisioningPlan.forVersion(
-                streamPrefix = streamPrefix,
-                consumerGroup = consumerGroup,
-                streamVersion = toVersion,
-                shardCount = request.targetShardCount,
-            ),
-        )
         val migration = Migration(
             migrationId = newMigrationId(),
             fromVersion = fromVersion,
             toVersion = toVersion,
             fromShardCount = fromShardCount,
             toShardCount = request.targetShardCount,
-            state = MigrationState.ACTIVE,
+            state = MigrationState.PREPARING,
             createdAt = now,
             updatedAt = now,
         )
 
         group.migrations[migration.migrationId] = migration
         group.activeMigrationId = migration.migrationId
-        group.shardCountsByVersion[toVersion] = request.targetShardCount
-        group.activeWriteVersion = toVersion
-        group.readableVersions = setOf(fromVersion, toVersion)
+        group.updatedAt = now
+        stateStore.save(group.key(), group)
+        return provisionAndActivatePreparedMigration(group, migration, request, now)
+    }
+
+    private fun provisionAndActivatePreparedMigration(
+        group: GroupMetadata,
+        migration: Migration,
+        request: ScaleGroupRequest,
+        now: Instant,
+    ): Migration {
+        // Commit PREPARING first; conflict retries must not create Redis shards without matching coordinator state.
+        streamProvisioner.provision(
+            RedisStreamShardProvisioningPlan.forVersion(
+                streamPrefix = group.streamPrefix,
+                consumerGroup = group.consumerGroup,
+                streamVersion = migration.toVersion,
+                shardCount = migration.toShardCount,
+            ),
+        )
+
+        migration.state = MigrationState.ACTIVE
+        migration.updatedAt = now
+        group.shardCountsByVersion[migration.toVersion] = migration.toShardCount
+        group.activeWriteVersion = migration.toVersion
+        group.readableVersions = setOf(migration.fromVersion, migration.toVersion)
         request.consumerConcurrencyPolicy?.let { group.consumerConcurrencyPolicy = it }
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)

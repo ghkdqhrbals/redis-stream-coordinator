@@ -837,7 +837,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `scale provisions next stream version before publishing migration`() {
+    fun `scale provisions next stream version after preparing migration state is committed`() {
         val provisioner = RecordingStreamShardProvisioner()
         val service = service(clock, InMemoryCoordinatorStateStore(), provisioner)
 

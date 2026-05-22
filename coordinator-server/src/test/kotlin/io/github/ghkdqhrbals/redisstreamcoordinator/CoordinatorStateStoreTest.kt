@@ -48,6 +48,12 @@ class CoordinatorStateStoreTest {
         assertTrue(store.contains(key))
         assertEquals(2, store.get(key)?.metadataVersion)
         assertEquals(listOf(key), store.list().map { GroupKey(it.streamPrefix, it.consumerGroup) })
+
+        val currentRevision = assertNotNull(store.get(key)).storeRevision
+        assertFalse(store.deleteIfRevision(key, currentRevision - 1))
+        assertTrue(store.contains(key))
+        assertTrue(store.deleteIfRevision(key, currentRevision))
+        assertFalse(store.contains(key))
     }
 
     @Test

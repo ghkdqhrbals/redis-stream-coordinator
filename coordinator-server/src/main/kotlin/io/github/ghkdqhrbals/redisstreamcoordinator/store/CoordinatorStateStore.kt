@@ -18,6 +18,7 @@ interface CoordinatorStateStore {
     fun contains(key: GroupKey): Boolean
     fun get(key: GroupKey): GroupMetadata?
     fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean
+    fun deleteIfRevision(key: GroupKey, expectedRevision: Long): Boolean
     fun save(key: GroupKey, group: GroupMetadata)
     fun list(): List<GroupMetadata>
 }
@@ -41,6 +42,19 @@ class InMemoryCoordinatorStateStore : CoordinatorStateStore {
         } else {
             false
         }
+
+    override fun deleteIfRevision(key: GroupKey, expectedRevision: Long): Boolean {
+        var deleted = false
+        groups.computeIfPresent(key) { _, stored ->
+            if (stored.storeRevision == expectedRevision) {
+                deleted = true
+                null
+            } else {
+                stored
+            }
+        }
+        return deleted
+    }
 
     override fun save(key: GroupKey, group: GroupMetadata) {
         group.storeRevision += 1
@@ -73,6 +87,27 @@ class RedisCoordinatorStateStore(
             redisTemplate.opsForSet().add(keys.groupsIndex, groupKeys.group)
         }
         return stored
+    }
+
+    override fun deleteIfRevision(key: GroupKey, expectedRevision: Long): Boolean {
+        val groupKeys = keys.forGroup(key)
+        val deleted = redisTemplate.execute(
+            DELETE_GROUP_IF_REVISION_SCRIPT,
+            listOf(
+                groupKeys.group,
+                groupKeys.members,
+                groupKeys.targetAssignments,
+                groupKeys.currentAssignments,
+                groupKeys.migrations,
+                groupKeys.activeMigration,
+                groupKeys.revision,
+            ),
+            expectedRevision.toString(),
+        ) == 1L
+        if (deleted) {
+            redisTemplate.opsForSet().remove(keys.groupsIndex, groupKeys.group)
+        }
+        return deleted
     }
 
     override fun save(key: GroupKey, group: GroupMetadata) {
@@ -187,6 +222,19 @@ class RedisCoordinatorStateStore(
               redis.call('SET', KEYS[6], ARGV[5])
             end
 
+            return 1
+            """.trimIndent(),
+            Long::class.java,
+        )
+
+        private val DELETE_GROUP_IF_REVISION_SCRIPT = DefaultRedisScript(
+            """
+            local currentRevision = redis.call('GET', KEYS[7])
+            if currentRevision == false or currentRevision ~= ARGV[1] then
+              return 0
+            end
+
+            redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7])
             return 1
             """.trimIndent(),
             Long::class.java,

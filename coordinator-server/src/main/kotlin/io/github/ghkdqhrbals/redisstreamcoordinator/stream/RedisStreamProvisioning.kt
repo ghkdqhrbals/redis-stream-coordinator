@@ -13,8 +13,9 @@ import java.nio.charset.StandardCharsets
 
 interface StreamShardProvisioner {
     /**
-     * Ensures the Redis Stream keys and consumer group for a shard version exist before
-     * coordinator metadata exposes that version to members or producers.
+     * Ensures the Redis Stream keys and consumer group for a shard version exist.
+     * Coordinator state claims or PREPARING migrations should be committed before this runs,
+     * so failed state races cannot leave untracked stream versions behind.
      */
     fun provision(plan: RedisStreamShardProvisioningPlan)
 }

@@ -167,6 +167,7 @@ Implemented:
 * Redis Stream shard key helper with Redis Cluster hash-slot calculation and equal-master-range distribution planning.
 * Opt-in Redis Stream shard provisioning through `coordinator.streams.provisioning-enabled=true`.
 * Redis Stream consumer group provisioning with idempotent `XGROUP CREATE ... MKSTREAM` semantics during group creation and scale.
+* Stream provisioning is ordered after coordinator state ownership/preparation commits, so rejected create races and failed scale save retries do not leave untracked Redis Stream versions.
 
 ## Verified Runtime Smoke Test
 
@@ -489,7 +490,7 @@ Implemented tests:
 * Category-level grouped workflows cover member expiration, expired rejoin, member join balancing, graceful leave, empty group transition, partition upscaling, producer routing after scale, and new stream topic creation.
 * Producer routing metadata exposes active write version, shard count, hash policy, stream key pattern, and active shard keys.
 * HTTP integration covers scale-triggered producer routing updates and graceful leave monitoring.
-* Mockito-backed integration tests verify stream provisioning failures do not publish create or scale metadata.
+* Mockito-backed integration tests verify failed create provisioning removes unpublished metadata, failed scale provisioning leaves retryable `PREPARING` metadata, and save-conflict retries do not provision untracked shard versions.
 * Rebalance state-machine workflow scenarios cover member expiration, heartbeat reconciliation, sticky shard retention, and redistribution invariants.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.

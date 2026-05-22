@@ -267,7 +267,7 @@ class CoordinatorGroupedWorkflowTest {
         }
 
         @Test
-        fun `upscaling provisions next stream topic shards before publishing migration`() {
+        fun `upscaling provisions next stream topic shards after preparing migration`() {
             val provisioner = CategoryRecordingStreamShardProvisioner()
             val service = service(streamProvisioner = provisioner)
             service.createGroup("category-topic-scale", "orders-consumer", createGroupRequest(initialShardCount = 2))
