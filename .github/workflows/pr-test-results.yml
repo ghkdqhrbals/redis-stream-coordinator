@@ -67,22 +67,18 @@ jobs:
           destination="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}"
           report_dir="coordinator-server/build/reports/tests/test"
           publish_dir="public-test-report"
+          gradle_report_dir="$publish_dir/gradle"
 
           mkdir -p "$publish_dir"
           if [ -d "$report_dir" ]; then
-            cp -R "$report_dir"/. "$publish_dir"/
-          else
-            cat > "$publish_dir/index.html" <<'HTML'
-          <!doctype html>
-          <html lang="en">
-            <head><meta charset="utf-8"><title>Coordinator Test Report</title></head>
-            <body>
-              <h1>Coordinator Test Report</h1>
-              <p>No Gradle Test HTML report was produced. Check the workflow log for the failure details.</p>
-            </body>
-          </html>
-          HTML
+            mkdir -p "$gradle_report_dir"
+            cp -R "$report_dir"/. "$gradle_report_dir"/
           fi
+
+          python3 .github/scripts/generate_grouped_test_report.py \
+            coordinator-server/build/test-results/test \
+            "$publish_dir/index.html" \
+            --gradle-report-path "gradle/index.html"
 
           echo "url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${destination}/index.html" >> "$GITHUB_OUTPUT"
 
@@ -206,7 +202,7 @@ jobs:
               `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
               `- Result: ${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`,
               operationalSuite ? `- Operational scenario matrix: ${operationalSuite.tests} scenarios` : '- Operational scenario matrix: not found',
-              `- Links: [workflow run](${runUrl}) / [Test HTML report](${htmlReportUrl})`,
+              `- Links: [workflow run](${runUrl}) / [Grouped test report](${htmlReportUrl})`,
             ];
 
             if (results.failedCases.length > 0) {
