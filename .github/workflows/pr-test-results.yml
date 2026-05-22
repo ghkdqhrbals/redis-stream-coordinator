@@ -194,15 +194,22 @@ jobs:
             const operationalSuite = results.suites.find((suite) =>
               suite.name.endsWith('CoordinatorOperationalScenarioMatrixTest')
             );
+            const shortSha = context.payload.pull_request.head.sha.slice(0, 7);
+            const resultSummary = `${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`;
+            const operationalSummary = operationalSuite
+              ? `${operationalSuite.tests} scenarios`
+              : 'not found';
             const body = [
               marker,
-              `## ${passed ? 'Passed' : 'Failed'}: PR test results`,
+              `### Coordinator tests ${passed ? 'passed' : 'failed'}`,
               '',
-              `- Commit: \`${context.payload.pull_request.head.sha}\``,
-              `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
-              `- Result: ${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`,
-              operationalSuite ? `- Operational scenario matrix: ${operationalSuite.tests} scenarios` : '- Operational scenario matrix: not found',
-              `- Links: [workflow run](${runUrl}) / [Grouped test report](${htmlReportUrl})`,
+              '| Check | Details |',
+              '| --- | --- |',
+              `| Commit | \`${shortSha}\` |`,
+              '| Command | `./gradlew :coordinator-server:test :coordinator-server:build --no-daemon` |',
+              `| Result | ${resultSummary} |`,
+              `| Operational scenario matrix | ${operationalSummary} |`,
+              `| Reports | [Workflow run](${runUrl}) / [Grouped test report](${htmlReportUrl}) |`,
             ];
 
             if (results.failedCases.length > 0) {
