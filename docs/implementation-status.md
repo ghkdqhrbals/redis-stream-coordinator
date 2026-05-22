@@ -350,8 +350,9 @@ Expected response:
 * [x] Create next stream version on scale.
 * [x] Keep old and new versions readable during migration.
 * [x] Support active migration rollback.
+* [x] Advance assignment epoch for capacity-policy-driven rebalances.
 * [ ] Complete stricter stale member fencing semantics.
-* [ ] Add rebalance timeout handling.
+* [x] Add rebalance timeout handling.
 * [ ] Add automatic migration drain completion and `DEPRECATED` transition.
 
 ### Phase 4: Redis Cluster Environment
@@ -413,8 +414,10 @@ Implemented tests:
 * Expired member is removed from target assignment and shards are reassigned after lease expiry.
 * Consumer concurrency policy changes rebalance target assignments by member weight.
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
+* Rebalance timeout fences an old owner that does not revoke a moved shard and keeps a timely revoker active.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
+* 432 focused Kafka-style operational matrix scenarios cover shard counts, member counts, scale up/down/rollback, steady/add/leave/expire/restart/replace churn, and uniform/skewed member capacity with descriptive scenario names.
 * In-memory state store supports create/get/save/list.
 * Coordinator state survives service instance replacement when the same state store is reused.
 * Redis state projection splits aggregate state into member, target, current assignment, migration, and active migration sections.
@@ -428,6 +431,7 @@ Test files:
 
 ```text
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorServiceTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorOperationalScenarioMatrixTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt

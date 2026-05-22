@@ -6,6 +6,6 @@ import org.springframework.boot.test.context.SpringBootTest
 @SpringBootTest
 class RedisStreamCoordinatorApplicationTest {
     @Test
-    fun contextLoads() {
+    fun `spring context loads`() {
     }
 }

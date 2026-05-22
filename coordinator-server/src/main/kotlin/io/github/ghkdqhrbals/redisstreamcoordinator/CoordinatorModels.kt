@@ -148,6 +148,8 @@ data class MemberMetadata(
     var revoking: Set<ShardId>,
     var lastHeartbeatAt: Instant,
     var memberLeaseExpiresAt: Instant,
+    var rebalanceTimeoutMs: Long = 60_000,
+    var rebalanceDeadlineAt: Instant? = null,
 )
 
 data class GroupMetadata(

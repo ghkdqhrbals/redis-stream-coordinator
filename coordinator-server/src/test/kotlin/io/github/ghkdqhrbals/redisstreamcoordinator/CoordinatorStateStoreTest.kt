@@ -24,7 +24,7 @@ class CoordinatorStateStoreTest {
     )
 
     @Test
-    fun `in memory store supports create get save and list`() {
+    fun `memory store creates saves and lists groups`() {
         val store = InMemoryCoordinatorStateStore()
         val key = GroupKey("orders", "orders-consumer")
         val group = groupMetadata(key)
@@ -44,7 +44,7 @@ class CoordinatorStateStoreTest {
     }
 
     @Test
-    fun `coordinator state survives service instance replacement when store is shared`() {
+    fun `memory store survives coordinator replacement`() {
         val store = InMemoryCoordinatorStateStore()
         val firstService = service(store)
         firstService.createGroup("payments", "payments-consumer", createGroupRequest(initialShardCount = 2))
@@ -65,7 +65,7 @@ class CoordinatorStateStoreTest {
     }
 
     @Test
-    fun `redis coordinator keys keep group scoped keys in the same cluster hash slot`() {
+    fun `redis keys keep group state in one hash slot`() {
         val stateKeys = RedisCoordinatorStateKeys("redis-stream:coord:")
         val keys = stateKeys.forGroup(GroupKey("orders", "orders-consumer"))
 
@@ -80,7 +80,7 @@ class CoordinatorStateStoreTest {
     }
 
     @Test
-    fun `redis projection splits aggregate state into PRD key model sections`() {
+    fun `redis projection splits aggregate sections`() {
         val key = GroupKey("orders", "orders-consumer")
         val group = groupMetadata(key)
         val member = MemberMetadata(
