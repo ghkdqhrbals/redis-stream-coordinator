@@ -313,6 +313,102 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `member that does not revoke moved shard is fenced after rebalance timeout`() {
+        service.createGroup("rebalance-timeout", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "rebalance-timeout",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0, rebalanceTimeoutMs = 5_000),
+        )
+        service.heartbeat(
+            "rebalance-timeout",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberA.memberEpoch,
+                ownedShards = memberA.assignment.assignedShards,
+                rebalanceTimeoutMs = 5_000,
+            ),
+        )
+        val memberB = service.heartbeat(
+            "rebalance-timeout",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        assertEquals(setOf(ShardId(1, 1)), memberB.assignment.pendingShards)
+
+        clock.advance(Duration.ofSeconds(6))
+        val afterTimeout = service.heartbeat(
+            "rebalance-timeout",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch),
+        )
+        val members = service.listMembers("rebalance-timeout", "orders-consumer").members
+        val assignments = service.assignments("rebalance-timeout", "orders-consumer")
+
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), afterTimeout.assignment.assignedShards)
+        assertEquals(MemberState.FENCED, members.single { it.memberId == "member-a" }.state)
+        assertEquals(MemberState.ACTIVE, members.single { it.memberId == "member-b" }.state)
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `member that revokes moved shard before rebalance timeout stays active`() {
+        service.createGroup("rebalance-completes", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "rebalance-completes",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0, rebalanceTimeoutMs = 5_000),
+        )
+        service.heartbeat(
+            "rebalance-completes",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberA.memberEpoch,
+                ownedShards = memberA.assignment.assignedShards,
+                rebalanceTimeoutMs = 5_000,
+            ),
+        )
+        val memberB = service.heartbeat(
+            "rebalance-completes",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+
+        service.heartbeat(
+            "rebalance-completes",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberA.memberEpoch,
+                ownedShards = setOf(ShardId(1, 0)),
+                revokingShards = listOf(RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED)),
+                rebalanceTimeoutMs = 5_000,
+            ),
+        )
+        clock.advance(Duration.ofSeconds(6))
+        val assignedToB = service.heartbeat(
+            "rebalance-completes",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch),
+        )
+        val members = service.listMembers("rebalance-completes", "orders-consumer").members
+
+        assertEquals(setOf(ShardId(1, 1)), assignedToB.assignment.assignedShards)
+        assertEquals(MemberState.ACTIVE, members.single { it.memberId == "member-a" }.state)
+    }
+
+    @Test
     fun `replacement coordinator resumes pending revoke after previous coordinator stops`() {
         val sharedStore = InMemoryCoordinatorStateStore()
         val firstCoordinator = service(clock, sharedStore)
@@ -523,6 +619,7 @@ class CoordinatorServiceTest {
         memberEpoch: Long,
         ownedShards: Set<ShardId> = emptySet(),
         revokingShards: List<RevokingShardReport> = emptyList(),
+        rebalanceTimeoutMs: Long = 60_000,
     ): HeartbeatRequest =
         HeartbeatRequest(
             protocolVersion = 1,
@@ -530,7 +627,7 @@ class CoordinatorServiceTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
+            rebalanceTimeoutMs = rebalanceTimeoutMs,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,

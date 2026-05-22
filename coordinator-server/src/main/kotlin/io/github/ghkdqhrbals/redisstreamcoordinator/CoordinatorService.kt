@@ -51,7 +51,7 @@ class CoordinatorService(
     @Synchronized
     fun getGroup(streamPrefix: String, consumerGroup: String): GroupResponse =
         requireGroup(streamPrefix, consumerGroup).let { group ->
-            if (expireMembers(group, Instant.now(clock))) {
+            if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
             }
             group.toResponse()
@@ -106,6 +106,7 @@ class CoordinatorService(
         request.consumerConcurrencyPolicy?.let { group.consumerConcurrencyPolicy = it }
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
+        enforceRebalanceTimeouts(group, now)
         stateStore.save(group.key(), group)
         return migration
     }
@@ -137,6 +138,7 @@ class CoordinatorService(
             } else {
                 bumpMetadata(group, now, bumpGroupEpoch = false)
             }
+            enforceRebalanceTimeouts(group, now)
             stateStore.save(group.key(), group)
         }
 
@@ -245,6 +247,7 @@ class CoordinatorService(
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
         member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
+        member.rebalanceTimeoutMs = request.rebalanceTimeoutMs ?: member.rebalanceTimeoutMs
         val reportedOwnedShards = if (request.memberEpoch == 0L) emptySet() else request.ownedShards
         val reportedRevokingShards = if (request.memberEpoch == 0L) emptyList() else request.revokingShards
         member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else reportedOwnedShards
@@ -256,6 +259,11 @@ class CoordinatorService(
         member.memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl)
 
         reconcile(group, now)
+        enforceRebalanceTimeouts(group, now)
+        if (member.state == MemberState.FENCED) {
+            stateStore.save(group.key(), group)
+            return fencedHeartbeat(group, request, memberId, member)
+        }
         if (member.state == MemberState.ACTIVE || member.state == MemberState.STARTING) {
             member.memberEpoch = group.assignmentEpoch
         }
@@ -307,7 +315,7 @@ class CoordinatorService(
     fun listGroups(): GroupsResponse {
         val now = Instant.now(clock)
         return GroupsResponse(stateStore.list().map {
-            if (expireMembers(it, now)) {
+            if (refreshOperationalState(it, now)) {
                 stateStore.save(it.key(), it)
             }
             it.toResponse()
@@ -317,7 +325,7 @@ class CoordinatorService(
     @Synchronized
     fun listMembers(streamPrefix: String, consumerGroup: String): MembersResponse {
         val group = requireGroup(streamPrefix, consumerGroup)
-        if (expireMembers(group, Instant.now(clock))) {
+        if (refreshOperationalState(group, Instant.now(clock))) {
             stateStore.save(group.key(), group)
         }
         return MembersResponse(group.members.values.sortedBy { it.memberId })
@@ -326,7 +334,7 @@ class CoordinatorService(
     @Synchronized
     fun assignments(streamPrefix: String, consumerGroup: String): AssignmentsResponse {
         val group = requireGroup(streamPrefix, consumerGroup)
-        if (expireMembers(group, Instant.now(clock))) {
+        if (refreshOperationalState(group, Instant.now(clock))) {
             stateStore.save(group.key(), group)
         }
         return AssignmentsResponse(
@@ -393,12 +401,19 @@ class CoordinatorService(
             revoking = emptySet(),
             lastHeartbeatAt = now,
             memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl),
+            rebalanceTimeoutMs = request.rebalanceTimeoutMs ?: properties.memberLeaseTtl.toMillis(),
         ).also { group.members[memberId] = it }
 
         member.state = MemberState.ACTIVE
         member.memberEpoch = group.groupEpoch.coerceAtLeast(1)
         bumpMetadata(group, now, bumpGroupEpoch = true)
         return member
+    }
+
+    private fun refreshOperationalState(group: GroupMetadata, now: Instant): Boolean {
+        val expired = expireMembers(group, now)
+        val timedOut = enforceRebalanceTimeouts(group, now)
+        return expired || timedOut
     }
 
     private fun markLeaving(
@@ -463,6 +478,44 @@ class CoordinatorService(
             }
         }
         if (changed) {
+            bumpMetadata(group, now, bumpGroupEpoch = true)
+            reconcile(group, now)
+        }
+        return changed
+    }
+
+    private fun enforceRebalanceTimeouts(group: GroupMetadata, now: Instant): Boolean {
+        var changed = false
+        var fenced = false
+        group.members.values
+            .filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING || it.state == MemberState.LEAVING }
+            .forEach { member ->
+                val target = group.targetAssignments[member.memberId].orEmpty()
+                val shardsToRelease = (member.currentAssignment + member.revoking) - target
+                if (shardsToRelease.isEmpty()) {
+                    if (member.rebalanceDeadlineAt != null) {
+                        member.rebalanceDeadlineAt = null
+                        changed = true
+                    }
+                    return@forEach
+                }
+
+                val deadline = member.rebalanceDeadlineAt
+                if (deadline == null) {
+                    member.rebalanceDeadlineAt = now.plusMillis(member.rebalanceTimeoutMs.coerceAtLeast(1))
+                    changed = true
+                } else if (!now.isBefore(deadline)) {
+                    member.state = MemberState.FENCED
+                    member.memberEpoch = (group.groupEpoch + 1).coerceAtLeast(member.memberEpoch + 1)
+                    member.currentAssignment = emptySet()
+                    member.revoking = emptySet()
+                    member.rebalanceDeadlineAt = null
+                    changed = true
+                    fenced = true
+                }
+            }
+
+        if (fenced) {
             bumpMetadata(group, now, bumpGroupEpoch = true)
             reconcile(group, now)
         }

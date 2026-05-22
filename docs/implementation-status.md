@@ -352,7 +352,7 @@ Expected response:
 * [x] Support active migration rollback.
 * [x] Advance assignment epoch for capacity-policy-driven rebalances.
 * [ ] Complete stricter stale member fencing semantics.
-* [ ] Add rebalance timeout handling.
+* [x] Add rebalance timeout handling.
 * [ ] Add automatic migration drain completion and `DEPRECATED` transition.
 
 ### Phase 4: Redis Cluster Environment
@@ -414,6 +414,7 @@ Implemented tests:
 * Expired member is removed from target assignment and shards are reassigned after lease expiry.
 * Consumer concurrency policy changes rebalance target assignments by member weight.
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
+* Rebalance timeout fences an old owner that does not revoke a moved shard and keeps a timely revoker active.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
 * 432 focused Kafka-style operational matrix scenarios cover shard counts, member counts, scale up/down/rollback, steady/add/leave/expire/restart/replace churn, and uniform/skewed member capacity with descriptive scenario names.
