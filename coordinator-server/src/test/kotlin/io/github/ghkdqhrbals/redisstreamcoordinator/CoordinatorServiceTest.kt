@@ -16,7 +16,7 @@ class CoordinatorServiceTest {
     private val service = service(clock)
 
     @Test
-    fun `duplicate group creation is rejected`() {
+    fun `group rejects duplicate create`() {
         service.createGroup("orders", "orders-consumer", createGroupRequest())
 
         val error = kotlin.runCatching {
@@ -27,7 +27,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `heartbeat with mismatched path member id is rejected`() {
+    fun `heartbeat rejects member id mismatch`() {
         val response = service.heartbeat(
             streamPrefix = "orders",
             consumerGroup = "orders-consumer",
@@ -39,7 +39,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `heartbeat for missing group is rejected as unknown member`() {
+    fun `heartbeat returns unknown member for missing group`() {
         val response = service.heartbeat(
             streamPrefix = "orders",
             consumerGroup = "orders-consumer",
@@ -51,7 +51,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `unknown member cannot leave by sending negative epoch`() {
+    fun `heartbeat rejects unknown member leave`() {
         service.createGroup("orders", "orders-consumer", createGroupRequest())
 
         val response = service.heartbeat(
@@ -66,7 +66,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `expired member is removed from target assignment and new member receives readable shards`() {
+    fun `membership expires owner and reassigns shards`() {
         service.createGroup("orders", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val first = service.heartbeat("orders", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
         service.heartbeat(
@@ -86,7 +86,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `consumer concurrency policy update rebalances target assignments by member weight`() {
+    fun `capacity rebalances by member weight`() {
         service.createGroup("events", "events-consumer", createGroupRequest(initialShardCount = 8))
         val first = service.heartbeat("events", "events-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
         service.heartbeat(
@@ -115,7 +115,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `consumer concurrency assignment movement advances epochs and returns new member epoch`() {
+    fun `capacity movement advances epochs`() {
         service.createGroup("policy-epochs", "events-consumer", createGroupRequest(initialShardCount = 8))
         val first = service.heartbeat(
             "policy-epochs",
@@ -172,7 +172,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `consumer concurrency policy update without assignment movement does not advance assignment epoch`() {
+    fun `capacity metadata update keeps assignment epoch`() {
         service.createGroup("policy-metadata", "events-consumer", createGroupRequest(initialShardCount = 2))
         val first = service.heartbeat(
             "policy-metadata",
@@ -207,7 +207,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `rollback restores previous stream version and clears active migration`() {
+    fun `migration rollback restores previous version`() {
         service.createGroup("metrics", "metrics-consumer", createGroupRequest(initialShardCount = 2))
         val migration = service.scaleGroup(
             "metrics",
@@ -229,7 +229,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `rollback is rejected for unknown migration`() {
+    fun `migration rollback rejects unknown id`() {
         service.createGroup("metrics", "metrics-consumer", createGroupRequest(initialShardCount = 2))
 
         val error = kotlin.runCatching {
@@ -240,7 +240,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `rejoin resets expired member to active and assigns epoch from current group`() {
+    fun `membership rejoin restores expired member`() {
         service.createGroup("logs", "logs-consumer", createGroupRequest(initialShardCount = 2))
         service.heartbeat("logs", "logs-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
         clock.advance(Duration.ofSeconds(16))
@@ -255,7 +255,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `first heartbeat assigns all readable shards to first member`() {
+    fun `assignment first member gets readable shards`() {
         service.createGroup("orders", "orders-consumer", createGroupRequest())
 
         val response = service.heartbeat(
@@ -274,7 +274,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `moved shard remains pending for new member until previous owner revokes it`() {
+    fun `assignment waits for previous owner revoke`() {
         service.createGroup("payments", "payments-consumer", createGroupRequest(initialShardCount = 2))
         val first = service.heartbeat("payments", "payments-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
         service.heartbeat(
@@ -313,7 +313,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `member that does not revoke moved shard is fenced after rebalance timeout`() {
+    fun `rebalance timeout fences stuck owner`() {
         service.createGroup("rebalance-timeout", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
             "rebalance-timeout",
@@ -357,7 +357,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `member that revokes moved shard before rebalance timeout stays active`() {
+    fun `rebalance timeout keeps timely owner active`() {
         service.createGroup("rebalance-completes", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
             "rebalance-completes",
@@ -409,7 +409,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `replacement coordinator resumes pending revoke after previous coordinator stops`() {
+    fun `failover resumes pending revoke`() {
         val sharedStore = InMemoryCoordinatorStateStore()
         val firstCoordinator = service(clock, sharedStore)
         firstCoordinator.createGroup("failover", "orders-consumer", createGroupRequest(initialShardCount = 2))
@@ -459,7 +459,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `stale member epoch after acknowledged rebalance is fenced`() {
+    fun `heartbeat fences stale member epoch`() {
         service.createGroup("stale-epoch", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
             "stale-epoch",
@@ -488,7 +488,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `expired old consumer returning with stale ownership is fenced`() {
+    fun `membership fences expired owner stale epoch`() {
         service.createGroup("expired-return", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
             "expired-return",
@@ -525,7 +525,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `expired member rejoining with epoch zero does not restore stale ownership`() {
+    fun `membership ignores stale ownership on rejoin`() {
         service.createGroup("expired-rejoin", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
             "expired-rejoin",
@@ -569,7 +569,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `scale creates next stream version and includes old and new readable versions`() {
+    fun `migration scale creates next version`() {
         service.createGroup("summary", "summary-consumer", createGroupRequest(initialShardCount = 2))
 
         val migration = service.scaleGroup(

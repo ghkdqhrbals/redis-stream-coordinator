@@ -19,8 +19,30 @@ import kotlin.test.assertTrue
 
 class CoordinatorOperationalScenarioMatrixTest {
     @ParameterizedTest(name = "{0}")
-    @MethodSource("operationalScenarios")
-    fun `coordinator handles kafka style operational scenario matrix`(scenario: OperationalScenario) {
+    @MethodSource("noScaleScenarios")
+    fun `matrix no scale preserves invariants`(scenario: OperationalScenario) {
+        runScenario(scenario)
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("scaleUpScenarios")
+    fun `matrix scale up preserves invariants`(scenario: OperationalScenario) {
+        runScenario(scenario)
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("scaleDownScenarios")
+    fun `matrix scale down preserves invariants`(scenario: OperationalScenario) {
+        runScenario(scenario)
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rollbackScenarios")
+    fun `matrix rollback preserves invariants`(scenario: OperationalScenario) {
+        runScenario(scenario)
+    }
+
+    private fun runScenario(scenario: OperationalScenario) {
         val clock = ScenarioClock(Instant.parse("2026-05-21T00:00:00Z"), ZoneOffset.UTC)
         val service = service(clock)
         val runtime = ScenarioRuntime(scenario, service, clock)
@@ -39,24 +61,37 @@ class CoordinatorOperationalScenarioMatrixTest {
 
     companion object {
         @JvmStatic
-        fun operationalScenarios(): Stream<Arguments> {
+        fun noScaleScenarios(): Stream<Arguments> =
+            operationalScenarios(ScaleMode.NONE)
+
+        @JvmStatic
+        fun scaleUpScenarios(): Stream<Arguments> =
+            operationalScenarios(ScaleMode.SCALE_UP)
+
+        @JvmStatic
+        fun scaleDownScenarios(): Stream<Arguments> =
+            operationalScenarios(ScaleMode.SCALE_DOWN)
+
+        @JvmStatic
+        fun rollbackScenarios(): Stream<Arguments> =
+            operationalScenarios(ScaleMode.SCALE_AND_ROLLBACK)
+
+        private fun operationalScenarios(scaleMode: ScaleMode): Stream<Arguments> {
             val shardCounts = listOf(2, 6, 12)
             val memberCounts = listOf(2, 3, 5)
-            return shardCounts.flatMap { shardCount ->
-                memberCounts.flatMap { memberCount ->
-                    ScaleMode.entries.flatMap { scaleMode ->
-                        ChurnMode.entries.flatMap { churnMode ->
-                            ConcurrencyMode.entries.map { concurrencyMode ->
-                                Arguments.of(
-                                    OperationalScenario(
-                                        initialShardCount = shardCount,
-                                        initialMemberCount = memberCount,
-                                        scaleMode = scaleMode,
-                                        churnMode = churnMode,
-                                        concurrencyMode = concurrencyMode,
-                                    ),
-                                )
-                            }
+            return ChurnMode.entries.flatMap { churnMode ->
+                ConcurrencyMode.entries.flatMap { concurrencyMode ->
+                    shardCounts.flatMap { shardCount ->
+                        memberCounts.map { memberCount ->
+                            Arguments.of(
+                                OperationalScenario(
+                                    initialShardCount = shardCount,
+                                    initialMemberCount = memberCount,
+                                    scaleMode = scaleMode,
+                                    churnMode = churnMode,
+                                    concurrencyMode = concurrencyMode,
+                                ),
+                            )
                         }
                     }
                 }
@@ -108,7 +143,7 @@ private class ScenarioRuntime(
                 defaultMaxConcurrency = 1,
                 memberOverrides = weightedOverrides(),
                 requestedBy = "ops-test",
-                reason = "capacity rebalance for ${scenario.concurrencyMode}",
+                reason = "capacity rebalance for ${scenario.concurrencyMode.label}",
             ),
         )
     }
@@ -277,7 +312,7 @@ private class ScenarioRuntime(
             ScaleGroupRequest(
                 targetShardCount = normalizedTarget,
                 requestedBy = "ops-test",
-                reason = "operational ${scenario.scaleMode}",
+                reason = "operational ${scenario.scaleMode.label}",
             ),
         )
     }
@@ -366,29 +401,32 @@ data class OperationalScenario(
     val id: String =
         "s${initialShardCount}-m${initialMemberCount}-${scaleMode.name.lowercase()}-${churnMode.name.lowercase()}-${concurrencyMode.name.lowercase()}"
 
+    val displayName: String =
+        "${scaleMode.label} | ${churnMode.label} | ${concurrencyMode.label} | $initialShardCount shards, $initialMemberCount members"
+
     override fun toString(): String =
-        "starts with $initialShardCount shards and $initialMemberCount members; ${scaleMode.description}; ${churnMode.description}; ${concurrencyMode.description}"
+        displayName
 }
 
-enum class ScaleMode(val description: String) {
-    NONE("keeps the shard count unchanged"),
-    SCALE_UP("scales up to a new stream version"),
-    SCALE_DOWN("scales down to a new stream version"),
-    SCALE_AND_ROLLBACK("scales up and then rolls the migration back"),
+enum class ScaleMode(val label: String) {
+    NONE("no scale"),
+    SCALE_UP("scale up"),
+    SCALE_DOWN("scale down"),
+    SCALE_AND_ROLLBACK("rollback"),
 }
 
-enum class ChurnMode(val description: String) {
-    STEADY("keeps the member set steady"),
-    ADD_MEMBER("adds a new member"),
-    GRACEFUL_LEAVE("removes one member through a graceful leave"),
-    EXPIRE_MEMBER("lets one member expire by missing heartbeats"),
-    ROLLING_RESTART("restarts one member with the same identity"),
-    REPLACE_MEMBER("replaces one member with a new identity"),
+enum class ChurnMode(val label: String) {
+    STEADY("steady members"),
+    ADD_MEMBER("add member"),
+    GRACEFUL_LEAVE("graceful leave"),
+    EXPIRE_MEMBER("member expiry"),
+    ROLLING_RESTART("rolling restart"),
+    REPLACE_MEMBER("member replacement"),
 }
 
-enum class ConcurrencyMode(val description: String) {
-    UNIFORM("uses equal member capacity"),
-    FIRST_MEMBER_HAS_HIGHER_CAPACITY("gives the first live member higher capacity"),
+enum class ConcurrencyMode(val label: String) {
+    UNIFORM("uniform capacity"),
+    FIRST_MEMBER_HAS_HIGHER_CAPACITY("weighted capacity"),
 }
 
 private class ScenarioClock(

@@ -43,14 +43,14 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
-    fun `admin endpoint requires basic auth`() {
+    fun `admin api requires basic auth`() {
         mockMvc.perform(get("/coord/v1/monitoring/groups"))
             .andExpect(status().isUnauthorized)
             .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, """Basic realm="redis-stream-coordinator""""))
     }
 
     @Test
-    fun `create group validates request body`() {
+    fun `admin api validates create group body`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-validation/groups/orders-consumer")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth())
@@ -62,7 +62,7 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
-    fun `create group and member heartbeat work through HTTP`() {
+    fun `http api creates group and accepts heartbeat`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-orders/groups/orders-consumer")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth())
@@ -92,7 +92,7 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
-    fun `member heartbeat does not require auth by default`() {
+    fun `member api allows heartbeat without auth by default`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-auth/groups/auth-consumer")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth())
@@ -160,7 +160,7 @@ class CoordinatorAuthenticatedMemberHttpIntegrationTest {
     }
 
     @Test
-    fun `member heartbeat requires basic auth when enabled`() {
+    fun `member api requires basic auth when enabled`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-member-auth/groups/auth-consumer")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth())

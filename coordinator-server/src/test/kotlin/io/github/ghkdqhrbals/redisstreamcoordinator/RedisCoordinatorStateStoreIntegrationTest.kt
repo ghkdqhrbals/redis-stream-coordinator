@@ -59,7 +59,7 @@ class RedisCoordinatorStateStoreIntegrationTest {
     }
 
     @Test
-    fun `redis store writes aggregate and projected PRD keys`() {
+    fun `redis store writes aggregate and projection keys`() {
         val key = GroupKey("redis-it-orders", "orders-consumer")
         touchedGroups += key
 
@@ -104,7 +104,7 @@ class RedisCoordinatorStateStoreIntegrationTest {
     }
 
     @Test
-    fun `redis store rejects stale coordinator snapshot instead of overwriting latest state`() {
+    fun `redis store rejects stale snapshot writes`() {
         val key = GroupKey("redis-it-conflict", "orders-consumer")
         touchedGroups += key
 
