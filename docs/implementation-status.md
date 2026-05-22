@@ -146,6 +146,7 @@ Implemented:
 * Member lease expiration based on `member-lease-ttl`.
 * Group epoch, metadata version, and assignment epoch tracking.
 * Configurable heartbeat protocol compatibility range.
+* Coordinator-issued member epoch validation that rejects active epoch reset, client-advanced epochs, and unsupported negative epochs.
 * Sticky assignment with minimal movement and balancing across live members.
 * `assignedShards` and `pendingShards` separation.
 * Revoke-before-assign rule: a shard is not assigned to a new owner while another active/leaving member still reports ownership or revocation.
@@ -476,6 +477,9 @@ Implemented tests:
 * Duplicate group creation is rejected.
 * Invalid heartbeat path/body member mismatch is rejected.
 * Coordinator accepts heartbeat protocol versions inside the configured supported range and rejects versions outside it.
+* Active members cannot reset `memberEpoch` to `0`.
+* Members cannot advance `memberEpoch` beyond the coordinator-issued value.
+* Negative `memberEpoch` values other than `-1` are rejected.
 * Missing group heartbeat is rejected as `UNKNOWN_MEMBER_ID`.
 * Unknown member cannot leave by sending `memberEpoch=-1`.
 * Expired member is removed from target assignment and shards are reassigned after lease expiry.

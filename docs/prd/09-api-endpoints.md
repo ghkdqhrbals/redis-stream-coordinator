@@ -323,6 +323,15 @@ Request body:
 | `ownedShards` | yes | Shards the member currently owns and may read. |
 | `revokingShards` | no | Revoke/drain progress and `REVOKED` ack candidates. |
 
+Epoch validation:
+
+* `memberEpoch=0` is accepted only for a new member or a member already fenced/expired by the coordinator.
+* An active member cannot reset itself by sending `memberEpoch=0`; the coordinator rejects it as `INVALID_REQUEST`.
+* Positive `memberEpoch` must match the epoch last issued by the coordinator for that member.
+* A lower positive epoch is stale and returns `FENCED_MEMBER_EPOCH`.
+* A higher positive epoch is not coordinator-issued and returns `INVALID_REQUEST`.
+* Negative values other than the graceful leave sentinel `-1` return `INVALID_REQUEST`.
+
 Response body:
 
 | Field | Meaning |

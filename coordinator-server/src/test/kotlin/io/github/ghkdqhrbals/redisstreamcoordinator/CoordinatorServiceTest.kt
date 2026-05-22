@@ -534,6 +534,81 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `heartbeat rejects active member epoch reset`() {
+        service.createGroup("epoch-reset", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "epoch-reset",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "epoch-reset",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+
+        val resetAttempt = service.heartbeat(
+            "epoch-reset",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0, ownedShards = memberA.assignment.assignedShards),
+        )
+        val members = service.listMembers("epoch-reset", "orders-consumer").members
+        val assignments = service.assignments("epoch-reset", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.INVALID_REQUEST, resetAttempt.status)
+        assertEquals(memberA.memberEpoch, members.single { it.memberId == "member-a" }.memberEpoch)
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-a"))
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `heartbeat rejects client advanced member epoch`() {
+        service.createGroup("future-epoch", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "future-epoch",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val acknowledged = service.heartbeat(
+            "future-epoch",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+
+        val future = service.heartbeat(
+            "future-epoch",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = acknowledged.memberEpoch + 1, ownedShards = memberA.assignment.assignedShards),
+        )
+        val member = service.listMembers("future-epoch", "orders-consumer").members.single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.INVALID_REQUEST, future.status)
+        assertEquals(acknowledged.memberEpoch, member.memberEpoch)
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), member.currentAssignment)
+    }
+
+    @Test
+    fun `heartbeat rejects unsupported negative member epoch`() {
+        service.createGroup("negative-epoch", "orders-consumer", createGroupRequest(initialShardCount = 2))
+
+        val rejected = service.heartbeat(
+            "negative-epoch",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = -2),
+        )
+
+        assertEquals(HeartbeatStatus.INVALID_REQUEST, rejected.status)
+        assertTrue(service.listMembers("negative-epoch", "orders-consumer").members.isEmpty())
+    }
+
+    @Test
     fun `membership fences expired owner stale epoch`() {
         service.createGroup("expired-return", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(

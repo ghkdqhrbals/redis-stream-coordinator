@@ -255,15 +255,38 @@ class CoordinatorService(
         val membersExpired = expireMembers(group, now)
         val existing = group.members[memberId]
         val member = when {
-            request.memberEpoch == 0L -> registerOrRejoinMember(group, memberId, request, now)
-            request.memberEpoch == -1L && existing == null ->
+            request.memberEpoch < -1L -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
+            }
+            existing == null && request.memberEpoch == 0L -> registerOrRejoinMember(group, memberId, request, now)
+            existing == null && request.memberEpoch == -1L ->
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
-            request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
             existing == null -> return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
-            existing.state == MemberState.FENCED ||
-                existing.state == MemberState.EXPIRED ||
-                request.memberEpoch > existing.memberEpoch ||
-                (request.memberEpoch > 0 && request.memberEpoch < existing.memberEpoch) -> {
+            request.memberEpoch == 0L && (existing.state == MemberState.EXPIRED || existing.state == MemberState.FENCED) ->
+                registerOrRejoinMember(group, memberId, request, now)
+            request.memberEpoch == 0L -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
+            }
+            request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
+            existing.state == MemberState.FENCED || existing.state == MemberState.EXPIRED -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return fencedHeartbeat(group, request, memberId, existing)
+            }
+            request.memberEpoch > existing.memberEpoch -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
+            }
+            request.memberEpoch < existing.memberEpoch -> {
                 if (membersExpired) {
                     stateStore.save(group.key(), group)
                 }

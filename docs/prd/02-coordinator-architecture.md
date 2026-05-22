@@ -175,7 +175,7 @@ Heartbeat response 예시:
 | `protocolVersion` | yes | Heartbeat schema version. incompatible version은 `UNSUPPORTED_PROTOCOL`로 거절한다. |
 | `requestId` | yes | 중복 응답과 로그 추적용 id. |
 | `memberId` | yes | path의 `{memberId}`와 같아야 한다. member runtime 시작 시 생성한 UUID이며 이 runtime incarnation을 식별한다. coordinator는 이 id에 member epoch을 부여하고 fencing한다. |
-| `memberEpoch` | yes | `0`이면 join/rejoin, `-1`이면 leave, 양수이면 member가 현재 적용 중인 assignment epoch이다. stale 값이면 `FENCED_MEMBER_EPOCH` 대상이다. |
+| `memberEpoch` | yes | `0`이면 신규 join 또는 coordinator가 이미 `EXPIRED`/`FENCED`로 판단한 member의 rejoin, `-1`이면 leave, 양수이면 coordinator가 직전 response로 발급한 epoch이다. stale 값이면 `FENCED_MEMBER_EPOCH`, coordinator가 발급하지 않은 값이면 `INVALID_REQUEST` 대상이다. |
 | `rebalanceTimeoutMs` | first heartbeat required | revoke를 완료할 수 있는 최대 시간이다. coordinator config가 아니라 member heartbeat contract이며, 값이 바뀌지 않으면 생략할 수 있다. |
 | `metadataVersion` | yes | member가 캐시한 group metadata version. 낮으면 response의 assignment metadata version 기준으로 갱신한다. |
 | `runtimeConsumerCapacity` | yes | member runtime이 보고하는 처리 가능 상태. `runtimeMaxConcurrency`는 process local consumer worker limit이고, coordinator의 server-side `maxConcurrency`를 올릴 수 없다. |
@@ -205,6 +205,9 @@ Heartbeat response 예시:
 KIP-848처럼 member는 response의 assignment와 자신의 local owned shard를 비교해서 수렴한다.
 
 * response `memberEpoch`을 local member epoch으로 갱신한다.
+* member는 `memberEpoch`을 직접 증가시키거나 `0`으로 reset하면 안 된다. coordinator가 response로 발급한 epoch만 다음 heartbeat에 사용한다.
+* active member의 `memberEpoch=0` reset, 현재 epoch보다 큰 positive epoch, `-1` 외의 negative epoch은 `INVALID_REQUEST`로 거절한다.
+* 현재 epoch보다 낮은 positive epoch은 stale heartbeat로 보고 `FENCED_MEMBER_EPOCH`로 거절한다.
 * local `ownedShards`에는 있지만 `assignment.assignedShards`에 없는 shard는 revoke 대상이다. member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 되면 다음 heartbeat에 `revokingShards.state=REVOKED`로 보고한다.
 * `assignment.assignedShards`에는 있지만 local `ownedShards`에 없는 shard는 새로 read 가능한 shard이다.
 * `assignment.pendingShards`는 target assignment에는 포함되지만 아직 이전 owner가 release하지 않은 shard이다. member는 pending shard를 read하면 안 된다.
