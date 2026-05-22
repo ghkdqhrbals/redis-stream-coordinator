@@ -52,6 +52,13 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true \
   ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest
 ```
 
+Provisioning-focused Redis integration tests can be run with:
+
+```bash
+REDIS_COORDINATOR_INTEGRATION_TESTS=true \
+  ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest
+```
+
 On pull requests, the `PR test results` workflow runs PR code in a read-only test job, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, and updates a PR comment from a separate job that only has comment-related write permissions.
 
 ## Implemented Module
@@ -430,6 +437,7 @@ Implemented tests:
 * Redis Stream shard key helper rejects hash-tag unsafe stream prefixes, validates version/shard counts, calculates Redis Cluster slots, and estimates distribution across equal master ranges.
 * Coordinator service calls shard provisioning on group creation and scale.
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
+* Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
 * Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
@@ -442,6 +450,7 @@ coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisStreamProvisioningIntegrationTest.kt
 ```
 
 ## Not Implemented Yet
