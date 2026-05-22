@@ -72,13 +72,19 @@ coordinator-server
 Main files:
 
 * `CoordinatorModels.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.domain`
 * `CoordinatorService.kt`
-* `CoordinatorControllers.kt`
-* `CoordinatorAuth.kt`
-* `CoordinatorErrors.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.service`
+* `CoordinatorControllers.kt`, `CoordinatorErrors.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.api`
+* `CoordinatorAuth.kt`, `CoordinatorProperties.kt`, `RedisClientConfig.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.config`
 * `RedisStreamCoordinatorApplication.kt`
 * `application.yaml`
 * `CoordinatorStateStore.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.store`
+* `RedisStreamProvisioning.kt`, `RedisStreamShardKeys.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.stream`
 * root `compose.yaml`
 
 ## Implemented API Surface

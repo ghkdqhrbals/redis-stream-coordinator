@@ -1,5 +1,6 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.stream
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
 import java.nio.charset.StandardCharsets
 
 data class RedisStreamShardKey(

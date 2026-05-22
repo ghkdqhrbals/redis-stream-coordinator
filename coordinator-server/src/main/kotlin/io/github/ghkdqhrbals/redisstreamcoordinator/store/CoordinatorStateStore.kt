@@ -1,5 +1,11 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.store
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupKey
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MemberMetadata
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.Migration
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardId
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript

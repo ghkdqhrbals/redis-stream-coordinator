@@ -1,5 +1,7 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.stream
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.dao.DataAccessException
 import org.springframework.data.redis.connection.RedisConnection

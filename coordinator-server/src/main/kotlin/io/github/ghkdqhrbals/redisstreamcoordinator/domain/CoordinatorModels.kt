@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.domain
 
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min

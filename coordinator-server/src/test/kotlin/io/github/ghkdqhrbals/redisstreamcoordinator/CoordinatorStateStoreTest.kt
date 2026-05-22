@@ -1,5 +1,12 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
+
 import org.springframework.beans.factory.support.StaticListableBeanFactory
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import kotlin.test.Test

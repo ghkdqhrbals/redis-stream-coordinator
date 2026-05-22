@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.api
 
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity

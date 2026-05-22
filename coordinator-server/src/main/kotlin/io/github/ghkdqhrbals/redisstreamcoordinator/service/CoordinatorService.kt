@@ -1,5 +1,16 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.service
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateConflictException
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateStore
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.NoopStreamShardProvisioner
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.RedisStreamShardKeys
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.RedisStreamShardProvisioningPlan
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardProvisioner
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardProvisioningPlan
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardKeys
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.http.HttpStatus
@@ -79,7 +90,11 @@ class CoordinatorService(
         expireMembers(group, now)
 
         group.activeMigrationId?.let {
-            throw CoordinatorException(HttpStatus.CONFLICT, "ACTIVE_MIGRATION_EXISTS", "Group already has an active migration")
+            throw CoordinatorException(
+                HttpStatus.CONFLICT,
+                "ACTIVE_MIGRATION_EXISTS",
+                "Group already has an active migration"
+            )
         }
 
         val fromVersion = group.activeWriteVersion
@@ -193,7 +208,11 @@ class CoordinatorService(
             return migration
         }
         if (group.activeMigrationId != migrationId || migration.state != MigrationState.ACTIVE) {
-            throw CoordinatorException(HttpStatus.UNPROCESSABLE_ENTITY, "ROLLBACK_NOT_ALLOWED", "Migration cannot be rolled back")
+            throw CoordinatorException(
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                "ROLLBACK_NOT_ALLOWED",
+                "Migration cannot be rolled back"
+            )
         }
 
         val now = Instant.now(clock)
@@ -361,7 +380,8 @@ class CoordinatorService(
         return AssignmentsResponse(
             targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
             currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
-            revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }.filterValues { it.isNotEmpty() },
+            revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }
+                .filterValues { it.isNotEmpty() },
             invariantViolations = invariantViolations(group),
         )
     }
