@@ -1,0 +1,29 @@
+package com.redisstream.consumer
+
+import org.springframework.boot.context.properties.ConfigurationProperties
+import java.time.Duration
+import java.util.UUID
+
+@ConfigurationProperties("redis-stream-coordinator.consumer")
+class CoordinatorConsumerProperties {
+    var enabled: Boolean = true
+    var autoStartup: Boolean = true
+    var coordinatorBaseUrl: String = "http://localhost:8080"
+    var streamPrefix: String = ""
+    var consumerGroup: String = ""
+    var memberId: String = UUID.randomUUID().toString()
+    var memberName: String = "redis-stream-consumer"
+    var protocolVersion: Int = CoordinatorConsumerProtocol.DEFAULT_HEARTBEAT_VERSION
+    var heartbeatInterval: Duration = Duration.ofSeconds(3)
+    var rebalanceTimeout: Duration = Duration.ofSeconds(60)
+    var runtimeMaxConcurrency: Int = 1
+    var username: String? = null
+    var password: String? = null
+    var redis: RedisPolling = RedisPolling()
+
+    class RedisPolling {
+        var enabled: Boolean = false
+        var pollBatchSize: Long = 10
+        var pollTimeout: Duration = Duration.ofSeconds(1)
+    }
+}

@@ -4,4 +4,5 @@ build/
 **/build/
 *.swp
 *.swo
-
+__pycache__/
+docs/coordinator-implementation-plan.md

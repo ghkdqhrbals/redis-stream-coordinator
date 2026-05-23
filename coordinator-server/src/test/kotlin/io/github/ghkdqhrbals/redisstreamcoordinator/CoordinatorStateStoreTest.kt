@@ -1,5 +1,12 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
+
 import org.springframework.beans.factory.support.StaticListableBeanFactory
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import kotlin.test.Test
@@ -41,6 +48,12 @@ class CoordinatorStateStoreTest {
         assertTrue(store.contains(key))
         assertEquals(2, store.get(key)?.metadataVersion)
         assertEquals(listOf(key), store.list().map { GroupKey(it.streamPrefix, it.consumerGroup) })
+
+        val currentRevision = assertNotNull(store.get(key)).storeRevision
+        assertFalse(store.deleteIfRevision(key, currentRevision - 1))
+        assertTrue(store.contains(key))
+        assertTrue(store.deleteIfRevision(key, currentRevision))
+        assertFalse(store.contains(key))
     }
 
     @Test
@@ -126,6 +139,7 @@ class CoordinatorStateStoreTest {
             properties = properties,
             stateStore = store,
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
+            streamProvisioner = NoopStreamShardProvisioner,
             clock = clock,
         )
 

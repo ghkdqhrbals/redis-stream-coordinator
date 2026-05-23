@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          ./gradlew :coordinator-server:test :coordinator-server:build --no-daemon 2>&1 | tee gradle-test.log
+          ./gradlew :coordinator-server:test :coordinator-server:build --rerun-tasks --no-daemon 2>&1 | tee gradle-test.log
           status=${PIPESTATUS[0]}
           {
             echo "exit_code=$status"
@@ -67,22 +67,18 @@ jobs:
           destination="pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}"
           report_dir="coordinator-server/build/reports/tests/test"
           publish_dir="public-test-report"
+          gradle_report_dir="$publish_dir/gradle"
 
           mkdir -p "$publish_dir"
           if [ -d "$report_dir" ]; then
-            cp -R "$report_dir"/. "$publish_dir"/
-          else
-            cat > "$publish_dir/index.html" <<'HTML'
-          <!doctype html>
-          <html lang="en">
-            <head><meta charset="utf-8"><title>Coordinator Test Report</title></head>
-            <body>
-              <h1>Coordinator Test Report</h1>
-              <p>No Gradle Test HTML report was produced. Check the workflow log for the failure details.</p>
-            </body>
-          </html>
-          HTML
+            mkdir -p "$gradle_report_dir"
+            cp -R "$report_dir"/. "$gradle_report_dir"/
           fi
+
+          python3 .github/scripts/generate_grouped_test_report.py \
+            coordinator-server/build/test-results/test \
+            "$publish_dir/index.html" \
+            --gradle-report-path "gradle/index.html"
 
           echo "url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${destination}/index.html" >> "$GITHUB_OUTPUT"
 
@@ -115,6 +111,9 @@ jobs:
             const canPublishPages = context.payload.pull_request.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`;
             const htmlReportUrl = canPublishPages
               ? (process.env.TEST_REPORT_HTML_URL || runUrl)
+              : (process.env.TEST_REPORT_ARTIFACT_URL || `${runUrl}#artifacts`);
+            const gradleReportUrl = canPublishPages
+              ? htmlReportUrl.replace(/index\.html$/, 'gradle/index.html')
               : (process.env.TEST_REPORT_ARTIFACT_URL || `${runUrl}#artifacts`);
             const logTail = process.env.TEST_LOG_TAIL || '(no test output captured)';
             const testResultsDir = 'coordinator-server/build/test-results/test';
@@ -195,22 +194,31 @@ jobs:
               results.totals.tests - results.totals.failures - results.totals.errors - results.totals.skipped,
               0
             );
-            const operationalSuite = results.suites.find((suite) =>
-              suite.name.endsWith('CoordinatorOperationalScenarioMatrixTest')
-            );
+            const runAttempt = process.env.GITHUB_RUN_ATTEMPT || '1';
+            const statusIcon = passed ? '✅' : '❌';
+            const resultSummary = `${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`;
             const body = [
               marker,
-              `## ${passed ? 'Passed' : 'Failed'}: PR test results`,
+              `### ${statusIcon} Coordinator tests ${passed ? 'passed' : 'failed'}`,
               '',
-              `- Commit: \`${context.payload.pull_request.head.sha}\``,
-              `- Command: \`./gradlew :coordinator-server:test :coordinator-server:build --no-daemon\``,
-              `- Result: ${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`,
-              operationalSuite ? `- Operational scenario matrix: ${operationalSuite.tests} scenarios` : '- Operational scenario matrix: not found',
-              `- Links: [workflow run](${runUrl}) / [Test HTML report](${htmlReportUrl})`,
+              '| Check | Details |',
+              '| --- | --- |',
+              `| Status | ${statusIcon} ${passed ? 'Passed' : 'Failed'} |`,
+              `| Run attempt | ${runAttempt} |`,
+              '| Command | `./gradlew :coordinator-server:test :coordinator-server:build --rerun-tasks --no-daemon` |',
+              `| Result | ${resultSummary} |`,
+              `| Reports | [Workflow run](${runUrl}) / [Coordinator test report](${htmlReportUrl}) |`,
+              `| Raw Gradle test report | [Open Gradle report](${gradleReportUrl}) |`,
+              '',
+              '### Improvements to address before Docker distribution',
+              '',
+              '- Add a Docker image build check for `coordinator-server`.',
+              '- Add a container smoke test that starts the coordinator image and verifies `/coord/v1/monitoring/health`.',
+              '- Add a publish workflow for versioned Docker tags before the first public release.',
             ];
 
             if (results.failedCases.length > 0) {
-              body.push('', '### Failed Cases', '', ...results.failedCases.slice(0, 20).map((testcase) => `- \`${testcase}\``));
+              body.push('', '### Failed Cases', '', ...results.failedCases.slice(0, 20).map((testcase) => `- ❌ \`${testcase}\``));
             }
 
             if (!passed) {
@@ -269,7 +277,7 @@ jobs:
           commit_message: "Publish PR test report for ${{ github.event.pull_request.head.sha }}"
 
   post_test_result:
-    if: always() && github.event.pull_request.draft == false
+    if: always() && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     needs: [test, publish_test_report]
     permissions:
@@ -289,31 +297,11 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const fs = require('fs');
-            const marker = '<!-- pr-test-results -->';
             const body = fs.readFileSync('pr-test-result-comment/body.md', 'utf8');
 
-            const { data: comments } = await github.rest.issues.listComments({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              per_page: 100,
+              body,
             });
-            const previous = comments.find((comment) =>
-              comment.user.type === 'Bot' && comment.body?.includes(marker)
-            );
-
-            if (previous) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: previous.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body,
-              });
-            }

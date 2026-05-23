@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.config
 
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
