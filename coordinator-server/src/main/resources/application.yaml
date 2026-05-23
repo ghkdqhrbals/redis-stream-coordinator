@@ -24,6 +24,7 @@ coordinator:
     admin-username: admin
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
     authenticate-member-api: false
+    users: []
   protocol:
     min-heartbeat-version: 1
     max-heartbeat-version: 1
@@ -46,6 +47,9 @@ coordinator:
     key-prefix: redis-stream:coord
   streams:
     provisioning-enabled: false
+  audit:
+    sink: log
+    redis-max-entries: 1000
   defaults:
     initial-shard-count: 12
     consumer-max-concurrency: 12

@@ -13,13 +13,27 @@ data class CoordinatorProperties(
     val redisCluster: RedisCluster = RedisCluster(),
     val store: Store = Store(),
     val streams: Streams = Streams(),
+    val audit: Audit = Audit(),
     val defaults: Defaults = Defaults(),
 ) {
     data class Api(
         val adminUsername: String = "admin",
         val adminPassword: String = "password",
         val authenticateMemberApi: Boolean = false,
+        val users: List<ApiUser> = emptyList(),
     )
+
+    data class ApiUser(
+        val username: String = "",
+        val password: String = "",
+        val roles: Set<ApiRole> = emptySet(),
+    )
+
+    enum class ApiRole {
+        ADMIN,
+        MONITOR,
+        MEMBER,
+    }
 
     data class Protocol(
         val minHeartbeatVersion: Int = 1,
@@ -42,8 +56,18 @@ data class CoordinatorProperties(
         val provisioningEnabled: Boolean = false,
     )
 
+    data class Audit(
+        val sink: AuditSink = AuditSink.LOG,
+        val redisMaxEntries: Long = 1_000,
+    )
+
     enum class StoreType {
         MEMORY,
+        REDIS,
+    }
+
+    enum class AuditSink {
+        LOG,
         REDIS,
     }
 

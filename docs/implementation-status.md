@@ -425,7 +425,7 @@ Expected response:
 * [x] Implement Redis active migration key.
 * [x] Implement Redis migration history keys.
 * [x] Implement Redis store revision key for stale write detection.
-* [ ] Implement Redis admin audit log.
+* [x] Implement Redis admin audit log.
 * [x] Add optimistic concurrency or Lua transaction boundaries for coordinator mutations.
 * [x] Add store-level tests.
 
@@ -442,7 +442,9 @@ Expected response:
 
 ### Phase 7: Observability and Operations
 
-* [ ] Add structured audit logs.
+* [x] Add ACL roles for admin, monitoring, and member APIs.
+* [x] Add structured audit logs for admin mutations.
+* [x] Add optional Redis-backed admin audit log sink.
 * [ ] Add Micrometer metrics from the PRD.
 * [ ] Add invariant violation metric.
 * [ ] Add active migration age metric.
@@ -518,6 +520,8 @@ Implemented tests:
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
+* HTTP integration covers ACL role enforcement and admin mutation audit events.
+* Redis audit log sink appends group-scoped JSON events and trims retained entries.
 * Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
 
@@ -529,7 +533,9 @@ coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorProvisioningFailureIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorRebalanceStateMachineFlowTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorAuditLogSinkTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorAclAuditHttpIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisStreamProvisioningIntegrationTest.kt
 redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/CoordinatorManagedConsumerTest.kt
@@ -544,12 +550,9 @@ redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/RedisSt
 
 Remaining work:
 
-* Redis admin audit log.
 * Coordinator event loop as a scheduled worker.
-* Admin audit logging.
 * Metrics listed in the PRD.
 * Rate limiting.
-* Full authorization model beyond Basic Auth.
 * Explicit Redis metadata `schemaVersion` and migration guard.
 * Coordinator server Docker image build and publish workflow.
 * Container smoke tests for the public Docker image.
