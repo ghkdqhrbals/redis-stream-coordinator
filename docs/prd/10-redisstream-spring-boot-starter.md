@@ -1,4 +1,4 @@
-# Consumer Spring Boot Starter and Integration Contract
+# RedisStream Spring Boot Starter and Integration Contract
 
 ## Goal
 
@@ -7,8 +7,10 @@ The coordinator server is only the control plane. Applications still need a runt
 This project provides that integration as a Spring Boot starter:
 
 ```text
-consumer-spring-boot-starter
+com.redisstream:redisstream-spring-boot-starter
 ```
+
+Public Kotlin APIs live under the `com.redisstream.consumer` package.
 
 The starter must be usable by any application without forcing a specific Redis Stream processing framework. The application owns Redis Stream reads, handler execution, `XACK`, retries, DLQ, idempotency, and storage of local worker state.
 
@@ -103,7 +105,7 @@ sequenceDiagram
 
 ## Producer Routing Client
 
-The consumer starter includes a `CoordinatorClient.producerRouting` method so applications can share the same coordinator HTTP client for producer routing metadata. Producer-side local caches must invalidate when `metadataVersion` changes.
+The RedisStream starter includes a `CoordinatorClient.producerRouting` method so applications can share the same coordinator HTTP client for producer routing metadata. Producer-side local caches must invalidate when `metadataVersion` changes.
 
 ## MVP Acceptance Criteria
 

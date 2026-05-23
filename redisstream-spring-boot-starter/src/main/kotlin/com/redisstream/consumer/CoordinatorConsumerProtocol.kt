@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator.consumer
+package com.redisstream.consumer
 
 object CoordinatorConsumerProtocol {
     const val MIN_HEARTBEAT_VERSION: Int = 1

@@ -1,17 +1,17 @@
 # Implementation Status
 
-Last updated: 2026-05-22
+Last updated: 2026-05-23
 
 ## Summary
 
-The repository now has Spring Boot 4 / Kotlin / Java 24 Gradle modules named `coordinator-server` and `consumer-spring-boot-starter`.
+The repository now has Spring Boot 4 / Kotlin / Java 24 Gradle modules named `coordinator-server` and `redisstream-spring-boot-starter`.
 
 The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, producer routing metadata, and basic monitoring responses.
 
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
 The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
 Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
-The consumer starter provides Spring Boot auto-configuration, a coordinator HTTP client, and a shard lifecycle callback contract that application code can implement.
+The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, and a shard lifecycle callback contract that application code can implement.
 
 ## Build and Tooling
 
@@ -35,7 +35,7 @@ Verified:
 ./gradlew :coordinator-server:compileJava
 ./gradlew :coordinator-server:test
 ./gradlew :coordinator-server:build
-./gradlew :consumer-spring-boot-starter:test
+./gradlew :redisstream-spring-boot-starter:test
 ```
 
 All passed.
@@ -70,7 +70,7 @@ Modules:
 
 ```text
 coordinator-server
-consumer-spring-boot-starter
+com.redisstream:redisstream-spring-boot-starter
 ```
 
 Main files:
@@ -94,15 +94,15 @@ Main files:
 Consumer starter files:
 
 * `CoordinatorConsumerModels.kt`
-  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+  * package: `com.redisstream.consumer`
 * `CoordinatorClient.kt`
-  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+  * package: `com.redisstream.consumer`
 * `CoordinatorManagedConsumer.kt`
-  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+  * package: `com.redisstream.consumer`
 * `CoordinatorShardLifecycle.kt`
-  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+  * package: `com.redisstream.consumer`
 * `CoordinatorConsumerAutoConfiguration.kt`
-  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.consumer`
+  * package: `com.redisstream.consumer`
 
 ## Implemented API Surface
 
@@ -444,9 +444,9 @@ Expected response:
 * [ ] Add rate limiting for admin APIs.
 * [ ] Add operational runbook.
 
-### Phase 8: Consumer Spring Boot Starter
+### Phase 8: RedisStream Spring Boot Starter
 
-* [x] Add `consumer-spring-boot-starter` module.
+* [x] Add `redisstream-spring-boot-starter` module.
 * [x] Add coordinator DTOs for heartbeat and producer routing responses.
 * [x] Add overridable `CoordinatorClient`.
 * [x] Add `RestClient`-based coordinator HTTP client.

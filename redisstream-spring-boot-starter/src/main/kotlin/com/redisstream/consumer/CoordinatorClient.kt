@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator.consumer
+package com.redisstream.consumer
 
 import org.springframework.http.HttpHeaders
 import org.springframework.web.client.RestClient

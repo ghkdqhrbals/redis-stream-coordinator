@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator.consumer
+package com.redisstream.consumer
 
 import java.time.Instant
 

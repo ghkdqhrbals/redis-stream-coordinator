@@ -12,7 +12,7 @@ The project has four separately tracked compatibility axes:
 
 | Axis | Scope | Compatibility rule |
 | --- | --- | --- |
-| Artifact version | Gradle/Maven modules such as `coordinator-server` and `consumer-spring-boot-starter` | Semantic Versioning. |
+| Artifact version | Gradle/Maven modules such as `coordinator-server` and `redisstream-spring-boot-starter` | Semantic Versioning. |
 | Heartbeat protocol version | Member heartbeat request/response schema | Coordinator accepts a configured version range. |
 | HTTP API version | REST path prefix such as `/coord/v1` | Breaking API changes require a new path prefix. |
 | Redis metadata schema version | Persisted coordinator aggregate and projection format | Breaking schema changes require migration code and a documented upgrade path. |
@@ -36,7 +36,7 @@ Default support target:
 * Current minor version: `N`
 * Previous minor version: `N-1`
 
-For example, `1.4.x` coordinator should accept `1.3.x` consumer starter protocol when the heartbeat protocol remains within the configured supported range.
+For example, `1.4.x` coordinator should accept `1.3.x` RedisStream starter protocol when the heartbeat protocol remains within the configured supported range.
 
 Security fixes may be backported to the latest patch of the current minor line. Broader backports are best-effort until the project publishes a formal support matrix.
 
@@ -115,7 +115,7 @@ Every release should update:
 * supported heartbeat protocol range
 * migration notes for Redis schema changes
 * deprecation list
-* test result summary for coordinator and consumer starter modules
+* test result summary for coordinator and RedisStream starter modules
 
 ## Required Tests
 
@@ -124,5 +124,5 @@ Versioning changes must include tests for:
 * coordinator accepts the oldest supported heartbeat protocol version
 * coordinator accepts the newest supported heartbeat protocol version
 * coordinator rejects below-minimum and above-maximum heartbeat versions
-* consumer starter fails fast when configured with a locally unsupported protocol version
+* RedisStream starter fails fast when configured with a locally unsupported protocol version
 * rolling-upgrade behavior when old and new members heartbeat against the same group

@@ -22,7 +22,7 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 ## Modules
 
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
-* `consumer-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, receive assignment changes, and implement shard lifecycle callbacks.
+* `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, receive assignment changes, and implement shard lifecycle callbacks.
 
 ## Versioning
 
@@ -41,6 +41,14 @@ See [Versioning and Compatibility Policy](docs/prd/11-versioning-compatibility.m
 Applications implement `CoordinatorShardLifecycle` and keep ownership of actual Redis Stream reads, handler execution, `XACK`, retry, DLQ, and idempotency.
 
 ```kotlin
+implementation("com.redisstream:redisstream-spring-boot-starter:<version>")
+```
+
+```kotlin
+import com.redisstream.consumer.CoordinatorConsumerContext
+import com.redisstream.consumer.CoordinatorShard
+import com.redisstream.consumer.CoordinatorShardLifecycle
+
 @Component
 class OrdersShardLifecycle : CoordinatorShardLifecycle {
     override fun onAssigned(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext) {
@@ -74,7 +82,7 @@ redis-stream-coordinator:
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and a consumer Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, consumer heartbeat integration, and a Codex review workflow.
+This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, consumer heartbeat integration, and a Codex review workflow.
 
 ## License
 

@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator.consumer
+package com.redisstream.consumer
 
 interface CoordinatorShardLifecycle {
     fun onAssigned(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext)

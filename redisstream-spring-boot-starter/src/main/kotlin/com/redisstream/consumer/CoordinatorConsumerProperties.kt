@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator.consumer
+package com.redisstream.consumer
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration

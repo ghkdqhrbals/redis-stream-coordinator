@@ -20,7 +20,7 @@
 7. [MVP Scope, Tradeoffs, Risks, and Open Questions](prd/07-mvp-risks-open-questions.md)
 8. [KIP-848 Implementation Coverage](prd/08-kip848-implementation-coverage.md)
 9. [Coordinator API Endpoints](prd/09-api-endpoints.md)
-10. [Consumer Spring Boot Starter and Integration Contract](prd/10-consumer-spring-boot-starter.md)
+10. [RedisStream Spring Boot Starter and Integration Contract](prd/10-redisstream-spring-boot-starter.md)
 11. [Versioning and Compatibility Policy](prd/11-versioning-compatibility.md)
 
 ## Product Summary
