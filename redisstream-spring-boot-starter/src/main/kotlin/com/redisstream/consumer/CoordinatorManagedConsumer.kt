@@ -42,17 +42,24 @@ class CoordinatorManagedConsumer(
     }
 
     override fun stop() {
-        if (!running.compareAndSet(true, false)) {
-            return
+        val wasRunning = running.compareAndSet(true, false)
+        if (wasRunning) {
+            task?.cancel(false)
+            task = null
         }
-        task?.cancel(true)
-        executor?.shutdownNow()
-        task = null
-        executor = null
+        if (properties.gracefulLeaveOnStop) {
+            runCatching { leaveOnce() }
+        }
+        if (wasRunning) {
+            executor?.shutdownNow()
+            executor = null
+        }
+        (lifecycle as? AutoCloseable)?.close()
     }
 
     override fun isRunning(): Boolean = running.get()
 
+    @Synchronized
     fun pollOnce(): HeartbeatResponse {
         require(properties.streamPrefix.isNotBlank()) { "redis-stream-coordinator.consumer.stream-prefix must be set" }
         require(properties.consumerGroup.isNotBlank()) { "redis-stream-coordinator.consumer.consumer-group must be set" }
@@ -84,6 +91,63 @@ class CoordinatorManagedConsumer(
         )
 
         apply(response)
+        return response
+    }
+
+    @Synchronized
+    fun leaveOnce(): HeartbeatResponse? {
+        require(properties.streamPrefix.isNotBlank()) { "redis-stream-coordinator.consumer.stream-prefix must be set" }
+        require(properties.consumerGroup.isNotBlank()) { "redis-stream-coordinator.consumer.consumer-group must be set" }
+        require(CoordinatorConsumerProtocol.supportsHeartbeat(properties.protocolVersion)) {
+            "Unsupported heartbeat protocol version ${properties.protocolVersion}; supported range is " +
+                "${CoordinatorConsumerProtocol.MIN_HEARTBEAT_VERSION}..${CoordinatorConsumerProtocol.MAX_HEARTBEAT_VERSION}"
+        }
+        if (memberEpoch == 0L && ownedShards.isEmpty() && revokingShards.isEmpty()) {
+            return null
+        }
+
+        val leavingShards = (ownedShards + revokingShards.keys).toSortedSet()
+        if (leavingShards.isNotEmpty()) {
+            val completed = lifecycle.onRevoked(leavingShards, lastContext)
+            revokingShards = leavingShards.associateWith { shard ->
+                if (shard in completed) {
+                    RevokingShardReport(shard, RevokingShardState.REVOKED, inFlight = 0, ackedAt = Instant.now())
+                } else {
+                    RevokingShardReport(shard, RevokingShardState.DRAINING, inFlight = 1)
+                }
+            }
+        }
+
+        val response = client.heartbeat(
+            streamPrefix = properties.streamPrefix,
+            consumerGroup = properties.consumerGroup,
+            memberId = properties.memberId,
+            request = HeartbeatRequest(
+                protocolVersion = properties.protocolVersion,
+                requestId = UUID.randomUUID().toString(),
+                memberId = properties.memberId,
+                memberName = properties.memberName,
+                memberEpoch = -1,
+                rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
+                metadataVersion = metadataVersion,
+                runtimeConsumerCapacity = RuntimeConsumerCapacity(
+                    runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
+                    availableConcurrency = 0,
+                ),
+                ownedShards = ownedShards,
+                revokingShards = revokingShards.values.toList(),
+            ),
+        )
+
+        if (response.status == HeartbeatStatus.OK ||
+            response.status == HeartbeatStatus.UNKNOWN_MEMBER_ID ||
+            response.status == HeartbeatStatus.FENCED_MEMBER_EPOCH
+        ) {
+            memberEpoch = 0
+            metadataVersion = 0
+            ownedShards = emptySet()
+            revokingShards = emptyMap()
+        }
         return response
     }
 
@@ -121,17 +185,22 @@ class CoordinatorManagedConsumer(
         if (response.assignment.pendingShards.isNotEmpty()) {
             lifecycle.onPending(response.assignment.pendingShards.toSortedSet(), context)
         }
+        val nextRevokingShards = revokingShards
+            .filterValues { it.state != RevokingShardState.REVOKED || it.inFlight != 0 }
+            .toMutableMap()
         if (revoked.isNotEmpty()) {
             val completed = lifecycle.onRevoked(revoked.toSortedSet(), context)
-            revokingShards = revoked.associateWith { shard ->
+            revoked.forEach { shard ->
                 if (shard in completed) {
-                    RevokingShardReport(shard, RevokingShardState.REVOKED, inFlight = 0, ackedAt = Instant.now())
+                    nextRevokingShards[shard] =
+                        RevokingShardReport(shard, RevokingShardState.REVOKED, inFlight = 0, ackedAt = Instant.now())
                 } else {
-                    RevokingShardReport(shard, RevokingShardState.DRAINING, inFlight = 1)
+                    nextRevokingShards[shard] = RevokingShardReport(shard, RevokingShardState.DRAINING, inFlight = 1)
                 }
             }
+            revokingShards = nextRevokingShards
         } else {
-            revokingShards = revokingShards.filterValues { it.state != RevokingShardState.REVOKED || it.inFlight != 0 }
+            revokingShards = nextRevokingShards.filterValues { it.state != RevokingShardState.REVOKED || it.inFlight != 0 }
         }
         ownedShards = nextAssigned
     }

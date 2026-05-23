@@ -84,9 +84,19 @@ class ProducerRoutingCache(
     }
 
     private fun validate(metadata: ProducerRoutingResponse) {
+        require(metadata.streamPrefix == streamPrefix) {
+            "producer routing streamPrefix ${metadata.streamPrefix} does not match configured $streamPrefix"
+        }
+        require(metadata.consumerGroup == consumerGroup) {
+            "producer routing consumerGroup ${metadata.consumerGroup} does not match configured $consumerGroup"
+        }
         require(metadata.shardCount > 0) { "producer routing shardCount must be positive" }
         require(metadata.shards.isNotEmpty()) { "producer routing must include active shards" }
-        require(metadata.shards.count { it.streamVersion == metadata.activeWriteVersion } == metadata.shardCount) {
+        val activeShardIndexes = metadata.shards
+            .filter { it.streamVersion == metadata.activeWriteVersion }
+            .map { it.shardIndex }
+            .toSortedSet()
+        require(activeShardIndexes == (0 until metadata.shardCount).toSortedSet()) {
             "producer routing active shard list does not match shardCount"
         }
     }

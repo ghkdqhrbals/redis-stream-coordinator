@@ -50,6 +50,46 @@ class RedisStreamPublisherTest {
         assertEquals(emptyList(), writer.writes)
     }
 
+    @Test
+    fun `publisher convenience payload method writes payload field`() {
+        val writer = RecordingRedisStreamWriter()
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                consumerGroup = "orders-consumer",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = writer,
+        )
+
+        publisher.publish("order-1", "created")
+
+        assertEquals(mapOf("payload" to "created"), writer.writes.single().fields)
+    }
+
+    @Test
+    fun `publisher batch method preserves request order`() {
+        val writer = RecordingRedisStreamWriter()
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                consumerGroup = "orders-consumer",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = writer,
+        )
+
+        val published = publisher.publishAll(
+            listOf(
+                RedisStreamPublishRequest("order-1", mapOf("payload" to "created")),
+                RedisStreamPublishRequest("order-2", mapOf("payload" to "paid")),
+            ),
+        )
+
+        assertEquals(listOf("created", "paid"), writer.writes.map { it.fields.getValue("payload") })
+        assertEquals(2, published.size)
+    }
+
     private fun routing(): ProducerRoutingResponse =
         ProducerRoutingResponse(
             streamPrefix = "orders",

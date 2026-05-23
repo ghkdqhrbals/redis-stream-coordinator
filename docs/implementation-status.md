@@ -12,6 +12,7 @@ The coordinator state defaults to memory, and group-level metadata can also be s
 The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
 Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
 The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, a shard lifecycle callback contract that application code can implement, a producer routing metadata cache, a Redis Stream publisher, and an opt-in Redis Stream consumer adapter.
+The starter also supports graceful consumer leave on shutdown and convenience producer publish APIs.
 
 ## Build and Tooling
 
@@ -99,6 +100,7 @@ Consumer starter files:
   * package: `com.redisstream.consumer`
 * `CoordinatorManagedConsumer.kt`
   * package: `com.redisstream.consumer`
+  * graceful leave heartbeat support
 * `CoordinatorShardLifecycle.kt`
   * package: `com.redisstream.consumer`
 * `CoordinatorConsumerAutoConfiguration.kt`
@@ -464,8 +466,10 @@ Expected response:
 * [x] Add Spring Boot auto-configuration.
 * [x] Add assignment and revoke callback tests.
 * [x] Add repeated revoke callback support for long drain windows.
+* [x] Add graceful leave heartbeat on managed consumer shutdown.
 * [x] Add producer routing metadata cache component.
 * [x] Add Redis Stream publisher.
+* [x] Add convenience payload and ordered batch publish APIs.
 * [x] Add built-in Redis Stream polling adapter.
 * [ ] Add consumer-side Micrometer metrics.
 
@@ -513,10 +517,17 @@ Implemented tests:
 * Consumer starter sends join heartbeat and notifies assigned shards.
 * Consumer starter detects removed assignment and reports revoked shards.
 * Consumer starter retries incomplete revoke callbacks and reports `REVOKED` after application drain completes.
+* Consumer starter preserves earlier draining revoke reports when another shard is revoked before the previous drain completes.
+* Consumer starter notifies pending shards without reporting them as owned.
+* Consumer starter keeps owned shards across `RETRY` responses and rejoins after fencing.
+* Consumer starter sends graceful leave heartbeat with revoked shard reports.
 * Consumer starter fails fast when configured with a locally unsupported heartbeat protocol version.
 * Producer routing cache reuses metadata inside the refresh interval, refreshes expired metadata, replaces cached metadata when `metadataVersion` changes, and rejects unsupported hash algorithms.
+* Producer routing cache rejects metadata for the wrong stream/group and incomplete active shard indexes.
 * Redis Stream publisher routes by partition key and appends records to the active stream shard.
+* Redis Stream publisher supports convenience payload and ordered batch publish APIs.
 * Built-in Redis Stream consumer lifecycle polls assigned shards, calls the application handler, and acknowledges successfully handled records.
+* Built-in Redis Stream consumer leaves failed handler messages unacked so the application's Redis retry policy can recover them.
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.

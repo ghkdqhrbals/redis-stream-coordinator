@@ -39,6 +39,7 @@ Rules:
 * `onRevoked` stops new reads for revoked shards, drains local in-flight work, and returns the shards that are fully revoked.
 * If `onRevoked` returns only part of the requested set, the starter keeps reporting the remaining shards as `DRAINING` and calls `onRevoked` again on later heartbeat cycles.
 * `onFenced` stops all local workers and allows the starter to rejoin with `memberEpoch=0`.
+* When `graceful-leave-on-stop=true`, the managed consumer sends a final `memberEpoch=-1` heartbeat during shutdown and reports revoked or draining shards.
 
 ## Starter Responsibilities
 
@@ -87,6 +88,7 @@ redis-stream-coordinator:
     runtime-max-concurrency: 4
     heartbeat-interval: 3s
     rebalance-timeout: 60s
+    graceful-leave-on-stop: true
     username: member
     password: member-password
 ```
@@ -147,6 +149,8 @@ redis-stream-coordinator:
 
 Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher currently supports `murmur3`, `murmur3_32`, and `murmur3-32` names.
 
+`RedisStreamPublisher` supports single-message field maps, a convenience payload method that writes the `payload` field, and ordered best-effort batch publishing through `publishAll`.
+
 ## MVP Acceptance Criteria
 
 * A Spring Boot application can add the starter and implement `CoordinatorShardLifecycle`.
@@ -156,9 +160,12 @@ Application producers can call `ProducerRoutingCache.route(partitionKey)` and wr
 * The starter notifies revoked shards and reports revoke completion to the coordinator.
 * The starter retries incomplete revoke callbacks across heartbeat cycles for long drain windows.
 * The starter resets local assignment state on fencing and rejoins.
+* The starter can send a graceful leave heartbeat on shutdown.
 * The starter exposes an overridable `CoordinatorClient`.
 * The starter provides a producer routing cache that refreshes and replaces metadata by `metadataVersion`.
+* The starter rejects producer routing metadata that belongs to a different stream/group or omits active shard indexes.
 * The starter provides a Redis Stream publisher that routes by partition key and appends to the active shard.
+* The starter provides convenience payload and ordered batch publish APIs.
 * The starter provides an opt-in Redis Stream consumer adapter that polls assigned shards and acknowledges successfully handled records.
 
 ## Future Work

@@ -17,6 +17,7 @@ class CoordinatorConsumerProperties {
     var heartbeatInterval: Duration = Duration.ofSeconds(3)
     var rebalanceTimeout: Duration = Duration.ofSeconds(60)
     var runtimeMaxConcurrency: Int = 1
+    var gracefulLeaveOnStop: Boolean = true
     var username: String? = null
     var password: String? = null
     var redis: RedisPolling = RedisPolling()

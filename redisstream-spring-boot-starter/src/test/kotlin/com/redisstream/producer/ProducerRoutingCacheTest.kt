@@ -99,26 +99,64 @@ class ProducerRoutingCacheTest {
         }
     }
 
+    @Test
+    fun `routing metadata for a different group is rejected`() {
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            client = ScriptedRoutingClient(
+                routing(version = 1, activeWriteVersion = 1, shardCount = 2, consumerGroup = "other-consumer"),
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            cache.route("order-1")
+        }
+    }
+
+    @Test
+    fun `routing metadata must include each active shard index exactly once`() {
+        val metadata = routing(version = 1, activeWriteVersion = 1, shardCount = 2)
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            client = ScriptedRoutingClient(
+                metadata.copy(
+                    shards = listOf(
+                        ProducerRoutingShard(1, 0, "orders:v1:shard:0", 0),
+                        ProducerRoutingShard(1, 0, "orders:v1:shard:0", 0),
+                    ),
+                ),
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            cache.route("order-1")
+        }
+    }
+
     private fun routing(
         version: Long,
         activeWriteVersion: Int,
         shardCount: Int,
         hashAlgorithm: String = "murmur3",
+        streamPrefix: String = "orders",
+        consumerGroup: String = "orders-consumer",
     ): ProducerRoutingResponse =
         ProducerRoutingResponse(
-            streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            streamPrefix = streamPrefix,
+            consumerGroup = consumerGroup,
             metadataVersion = version,
             activeWriteVersion = activeWriteVersion,
             shardCount = shardCount,
             hashAlgorithm = hashAlgorithm,
             hashSeed = "default",
-            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+            streamKeyPattern = "$streamPrefix:v{streamVersion}:shard:{shardIndex}",
             shards = (0 until shardCount).map { shardIndex ->
                 ProducerRoutingShard(
                     streamVersion = activeWriteVersion,
                     shardIndex = shardIndex,
-                    streamKey = "orders:v$activeWriteVersion:shard:$shardIndex",
+                    streamKey = "$streamPrefix:v$activeWriteVersion:shard:$shardIndex",
                     redisSlot = shardIndex,
                 )
             },

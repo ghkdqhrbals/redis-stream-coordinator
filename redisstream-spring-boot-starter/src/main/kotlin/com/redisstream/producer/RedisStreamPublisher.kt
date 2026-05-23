@@ -11,8 +11,19 @@ data class PublishedRedisStreamMessage(
     val route: ProducerRoute,
 )
 
+data class RedisStreamPublishRequest(
+    val partitionKey: String,
+    val fields: Map<String, String>,
+)
+
 interface RedisStreamPublisher {
     fun publish(partitionKey: String, fields: Map<String, String>): PublishedRedisStreamMessage
+
+    fun publish(partitionKey: String, payload: String): PublishedRedisStreamMessage =
+        publish(partitionKey, mapOf("payload" to payload))
+
+    fun publishAll(records: Iterable<RedisStreamPublishRequest>): List<PublishedRedisStreamMessage> =
+        records.map { publish(it.partitionKey, it.fields) }
 }
 
 class RoutingRedisStreamPublisher(

@@ -3,6 +3,7 @@ package com.redisstream.consumer
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class RedisStreamConsumerLifecycleTest {
@@ -52,6 +53,33 @@ class RedisStreamConsumerLifecycleTest {
         assertEquals(setOf(shard), revoked)
         assertEquals(0, polled)
         assertTrue(reader.reads.isEmpty())
+    }
+
+    @Test
+    fun `handler failure leaves message unacked for Redis Stream retry policy`() {
+        val shard = CoordinatorShard(1, 0)
+        val reader = ScriptedRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        val lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RedisStreamMessageHandler { error("handler failed") },
+            startPollersOnAssignment = false,
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+
+        assertFailsWith<IllegalStateException> {
+            lifecycle.pollOnce(shard)
+        }
+        assertTrue(reader.acks.isEmpty())
+        assertEquals(setOf(shard), lifecycle.onRevoked(setOf(shard), context()))
     }
 
     private fun properties(): CoordinatorConsumerProperties =
