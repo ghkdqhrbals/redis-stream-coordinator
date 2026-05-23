@@ -11,7 +11,7 @@ The current implementation is an MVP control-plane server for the Redis Stream C
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
 The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
 Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
-The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, a shard lifecycle callback contract that application code can implement, and a producer routing metadata cache that maps partition keys to active Redis Stream shard keys.
+The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, a shard lifecycle callback contract that application code can implement, a producer routing metadata cache, a Redis Stream publisher, and an opt-in Redis Stream consumer adapter.
 
 ## Build and Tooling
 
@@ -103,7 +103,11 @@ Consumer starter files:
   * package: `com.redisstream.consumer`
 * `CoordinatorConsumerAutoConfiguration.kt`
   * package: `com.redisstream.consumer`
+* `RedisStreamConsumerAdapter.kt`
+  * package: `com.redisstream.consumer`
 * `ProducerRoutingCache.kt`, `ProducerRoutingAutoConfiguration.kt`
+  * package: `com.redisstream.producer`
+* `RedisStreamPublisher.kt`
   * package: `com.redisstream.producer`
 
 ## Implemented API Surface
@@ -459,7 +463,8 @@ Expected response:
 * [x] Add assignment and revoke callback tests.
 * [x] Add repeated revoke callback support for long drain windows.
 * [x] Add producer routing metadata cache component.
-* [ ] Add built-in Redis Stream polling adapter.
+* [x] Add Redis Stream publisher.
+* [x] Add built-in Redis Stream polling adapter.
 * [ ] Add consumer-side Micrometer metrics.
 
 ### Phase 9: Docker Distribution
@@ -508,6 +513,8 @@ Implemented tests:
 * Consumer starter retries incomplete revoke callbacks and reports `REVOKED` after application drain completes.
 * Consumer starter fails fast when configured with a locally unsupported heartbeat protocol version.
 * Producer routing cache reuses metadata inside the refresh interval, refreshes expired metadata, replaces cached metadata when `metadataVersion` changes, and rejects unsupported hash algorithms.
+* Redis Stream publisher routes by partition key and appends records to the active stream shard.
+* Built-in Redis Stream consumer lifecycle polls assigned shards, calls the application handler, and acknowledges successfully handled records.
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
@@ -526,8 +533,11 @@ coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisStreamProvisioningIntegrationTest.kt
 redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/CoordinatorManagedConsumerTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/CoordinatorConsumerAutoConfigurationTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/RedisStreamConsumerLifecycleTest.kt
 redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/ProducerRoutingCacheTest.kt
 redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/ProducerRoutingAutoConfigurationTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/RedisStreamPublisherTest.kt
 ```
 
 ## Not Implemented Yet
@@ -540,7 +550,6 @@ Remaining work:
 * Metrics listed in the PRD.
 * Rate limiting.
 * Full authorization model beyond Basic Auth.
-* Built-in Redis Stream polling adapter.
 * Explicit Redis metadata `schemaVersion` and migration guard.
 * Coordinator server Docker image build and publish workflow.
 * Container smoke tests for the public Docker image.

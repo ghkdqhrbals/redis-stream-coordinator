@@ -38,10 +38,37 @@ See [Versioning and Compatibility Policy](docs/prd/11-versioning-compatibility.m
 
 ## Consumer Integration
 
-Applications implement `CoordinatorShardLifecycle` and keep ownership of actual Redis Stream reads, handler execution, `XACK`, retry, DLQ, and idempotency.
+Applications can implement `CoordinatorShardLifecycle` directly and keep ownership of actual Redis Stream reads, handler execution, `XACK`, retry, DLQ, and idempotency.
 
 ```kotlin
 implementation("com.redisstream:redisstream-spring-boot-starter:<version>")
+```
+
+For the built-in Redis Stream polling adapter, provide a `RedisStreamMessageHandler` bean and enable Redis polling:
+
+```kotlin
+import com.redisstream.consumer.ConsumedRedisStreamMessage
+import com.redisstream.consumer.RedisStreamMessageHandler
+
+@Component
+class OrdersMessageHandler : RedisStreamMessageHandler {
+    override fun handle(message: ConsumedRedisStreamMessage) {
+        // Run business processing. The starter XACKs only after this returns successfully.
+    }
+}
+```
+
+```yaml
+redis-stream-coordinator:
+  consumer:
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    member-name: orders-worker
+    redis:
+      enabled: true
+      poll-batch-size: 10
+      poll-timeout: 1s
 ```
 
 ```kotlin
@@ -75,13 +102,15 @@ redis-stream-coordinator:
     runtime-max-concurrency: 4
 ```
 
-Producer applications can also use the starter to cache coordinator routing metadata and resolve a partition key to the active Redis Stream shard:
+Producer applications can use the starter to route and publish to the active Redis Stream shard:
 
 ```kotlin
-import com.redisstream.producer.ProducerRoutingCache
+import com.redisstream.producer.RedisStreamPublisher
 
-val route = producerRoutingCache.route(orderId)
-redisTemplate.opsForStream<String, String>().add(route.streamKey, payload)
+redisStreamPublisher.publish(
+    partitionKey = orderId,
+    fields = mapOf("payload" to payload),
+)
 ```
 
 ```yaml

@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
+import org.springframework.data.redis.connection.RedisConnectionFactory
 
 @AutoConfiguration
 @EnableConfigurationProperties(CoordinatorConsumerProperties::class)
@@ -20,6 +21,27 @@ class CoordinatorConsumerAutoConfiguration {
     @ConditionalOnMissingBean
     fun coordinatorClient(properties: CoordinatorConsumerProperties): CoordinatorClient =
         RestClientCoordinatorClient(coordinatorRestClient(properties))
+
+    @Bean
+    @ConditionalOnBean(RedisConnectionFactory::class)
+    @ConditionalOnMissingBean
+    fun redisStreamReader(redisConnectionFactory: RedisConnectionFactory): RedisStreamReader =
+        SpringDataRedisStreamReader(redisConnectionFactory)
+
+    @Bean
+    @ConditionalOnBean(RedisStreamMessageHandler::class, RedisStreamReader::class)
+    @ConditionalOnMissingBean(CoordinatorShardLifecycle::class)
+    @ConditionalOnProperty(
+        prefix = "redis-stream-coordinator.consumer.redis",
+        name = ["enabled"],
+        havingValue = "true",
+    )
+    fun redisStreamConsumerLifecycle(
+        properties: CoordinatorConsumerProperties,
+        reader: RedisStreamReader,
+        handler: RedisStreamMessageHandler,
+    ): CoordinatorShardLifecycle =
+        RedisStreamConsumerLifecycle(properties, reader, handler)
 
     @Bean
     @ConditionalOnBean(CoordinatorShardLifecycle::class)

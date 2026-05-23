@@ -13,6 +13,9 @@ data class CoordinatorShard(
         compareValuesBy(this, other, CoordinatorShard::streamVersion, CoordinatorShard::shardIndex)
 }
 
+fun CoordinatorShard.streamKey(streamPrefix: String): String =
+    "$streamPrefix:v$streamVersion:shard:$shardIndex"
+
 data class RuntimeConsumerCapacity(
     val runtimeMaxConcurrency: Int,
     val availableConcurrency: Int,

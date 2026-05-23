@@ -5,9 +5,11 @@ import com.redisstream.consumer.RestClientCoordinatorClient
 import com.redisstream.consumer.coordinatorRestClient
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
+import org.springframework.data.redis.connection.RedisConnectionFactory
 
 @AutoConfiguration
 @EnableConfigurationProperties(ProducerRoutingProperties::class)
@@ -34,4 +36,19 @@ class ProducerRoutingAutoConfiguration {
             refreshInterval = properties.routingRefreshInterval,
         )
     }
+
+    @Bean
+    @ConditionalOnBean(RedisConnectionFactory::class)
+    @ConditionalOnMissingBean
+    fun redisStreamWriter(redisConnectionFactory: RedisConnectionFactory): RedisStreamWriter =
+        SpringDataRedisStreamWriter(redisConnectionFactory)
+
+    @Bean
+    @ConditionalOnBean(RedisStreamWriter::class)
+    @ConditionalOnMissingBean
+    fun redisStreamPublisher(
+        routingCache: ProducerRoutingCache,
+        writer: RedisStreamWriter,
+    ): RedisStreamPublisher =
+        RoutingRedisStreamPublisher(routingCache, writer)
 }

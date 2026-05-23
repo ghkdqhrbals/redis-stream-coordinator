@@ -10,9 +10,9 @@ This project provides that integration as a Spring Boot starter:
 com.redisstream:redisstream-spring-boot-starter
 ```
 
-Public Kotlin APIs live under the `com.redisstream.consumer` package.
+Public Kotlin APIs live under `com.redisstream.consumer` and `com.redisstream.producer`.
 
-The starter must be usable by any application without forcing a specific Redis Stream processing framework. The application owns Redis Stream reads, handler execution, `XACK`, retries, DLQ, idempotency, and storage of local worker state.
+The starter must be usable by any application without forcing a specific Redis Stream processing framework. Applications can either implement shard lifecycle callbacks directly, or opt into the built-in Redis Stream polling adapter. Application code still owns business handler execution, retries, DLQ, idempotency, and transaction boundaries.
 
 ## Public Contract
 
@@ -53,7 +53,7 @@ The starter owns:
 * assignment diffing
 * listener callbacks for assign, pending, revoke, and fenced states
 
-The starter does not own:
+In direct lifecycle mode, the starter does not own:
 
 * Redis Stream polling
 * payload deserialization
@@ -62,6 +62,16 @@ The starter does not own:
 * retry and DLQ
 * idempotency markers
 * business transaction boundaries
+
+In built-in Redis polling mode, the starter owns:
+
+* shard-key derivation from coordinator assignments
+* `XREADGROUP`
+* handler invocation through `RedisStreamMessageHandler`
+* successful-message `XACK`
+* stopping shard pollers during revoke/fencing
+
+The built-in polling mode still does not own retries, DLQ, idempotency markers, or business transaction boundaries.
 
 ## Spring Boot Configuration
 
@@ -82,6 +92,22 @@ redis-stream-coordinator:
 ```
 
 If a `CoordinatorShardLifecycle` bean exists, auto-configuration creates a `CoordinatorManagedConsumer` bean. Applications can override `CoordinatorClient` or `CoordinatorManagedConsumer` with their own beans.
+
+Alternatively, applications can enable the built-in Redis Stream consumer adapter by providing a `RedisStreamMessageHandler` bean and enabling `redis-stream-coordinator.consumer.redis.enabled`.
+
+```yaml
+redis-stream-coordinator:
+  consumer:
+    enabled: true
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    member-name: orders-worker
+    redis:
+      enabled: true
+      poll-batch-size: 10
+      poll-timeout: 1s
+```
 
 ## Runtime Flow
 
@@ -119,7 +145,7 @@ redis-stream-coordinator:
     routing-refresh-interval: 30s
 ```
 
-Application producers call `route(partitionKey)` and write to the returned `streamKey`. The built-in hasher currently supports `murmur3`, `murmur3_32`, and `murmur3-32` names.
+Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher currently supports `murmur3`, `murmur3_32`, and `murmur3-32` names.
 
 ## MVP Acceptance Criteria
 
@@ -132,9 +158,10 @@ Application producers call `route(partitionKey)` and write to the returned `stre
 * The starter resets local assignment state on fencing and rejoins.
 * The starter exposes an overridable `CoordinatorClient`.
 * The starter provides a producer routing cache that refreshes and replaces metadata by `metadataVersion`.
+* The starter provides a Redis Stream publisher that routes by partition key and appends to the active shard.
+* The starter provides an opt-in Redis Stream consumer adapter that polls assigned shards and acknowledges successfully handled records.
 
 ## Future Work
 
-* Built-in Redis Stream polling adapter.
 * Micrometer metrics for heartbeat latency, assignment lag, pending shards, and revoke duration.
 * Backoff and circuit-breaker policy for coordinator unavailability.

@@ -19,4 +19,11 @@ class CoordinatorConsumerProperties {
     var runtimeMaxConcurrency: Int = 1
     var username: String? = null
     var password: String? = null
+    var redis: RedisPolling = RedisPolling()
+
+    class RedisPolling {
+        var enabled: Boolean = false
+        var pollBatchSize: Long = 10
+        var pollTimeout: Duration = Duration.ofSeconds(1)
+    }
 }

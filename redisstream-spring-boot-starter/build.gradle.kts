@@ -21,6 +21,7 @@ dependencies {
     api(platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES))
 
     api("org.springframework.boot:spring-boot-autoconfigure")
+    api("org.springframework.data:spring-data-redis")
     api("org.springframework:spring-context")
     api("org.springframework:spring-web")
 
