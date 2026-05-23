@@ -107,6 +107,20 @@ sequenceDiagram
 
 The RedisStream starter includes a `CoordinatorClient.producerRouting` method so applications can share the same coordinator HTTP client for producer routing metadata. Producer-side local caches must invalidate when `metadataVersion` changes.
 
+The starter also provides a `ProducerRoutingCache` component under `com.redisstream.producer`. It fetches `/producer-routing`, caches the response for `redis-stream-coordinator.producer.routing-refresh-interval`, and replaces the cached metadata when a refreshed response has a newer `metadataVersion`.
+
+```yaml
+redis-stream-coordinator:
+  producer:
+    enabled: true
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    routing-refresh-interval: 30s
+```
+
+Application producers call `route(partitionKey)` and write to the returned `streamKey`. The built-in hasher currently supports `murmur3`, `murmur3_32`, and `murmur3-32` names.
+
 ## MVP Acceptance Criteria
 
 * A Spring Boot application can add the starter and implement `CoordinatorShardLifecycle`.
@@ -117,10 +131,10 @@ The RedisStream starter includes a `CoordinatorClient.producerRouting` method so
 * The starter retries incomplete revoke callbacks across heartbeat cycles for long drain windows.
 * The starter resets local assignment state on fencing and rejoins.
 * The starter exposes an overridable `CoordinatorClient`.
+* The starter provides a producer routing cache that refreshes and replaces metadata by `metadataVersion`.
 
 ## Future Work
 
 * Built-in Redis Stream polling adapter.
-* Producer routing cache component with metadata-version invalidation.
 * Micrometer metrics for heartbeat latency, assignment lag, pending shards, and revoke duration.
 * Backoff and circuit-breaker policy for coordinator unavailability.

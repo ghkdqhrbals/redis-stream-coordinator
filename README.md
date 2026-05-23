@@ -75,6 +75,25 @@ redis-stream-coordinator:
     runtime-max-concurrency: 4
 ```
 
+Producer applications can also use the starter to cache coordinator routing metadata and resolve a partition key to the active Redis Stream shard:
+
+```kotlin
+import com.redisstream.producer.ProducerRoutingCache
+
+val route = producerRoutingCache.route(orderId)
+redisTemplate.opsForStream<String, String>().add(route.streamKey, payload)
+```
+
+```yaml
+redis-stream-coordinator:
+  producer:
+    enabled: true
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    routing-refresh-interval: 30s
+```
+
 ## Documentation
 
 * [Implementation Status](docs/implementation-status.md)

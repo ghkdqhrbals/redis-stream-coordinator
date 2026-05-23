@@ -1,1 +1,2 @@
 com.redisstream.consumer.CoordinatorConsumerAutoConfiguration
+com.redisstream.producer.ProducerRoutingAutoConfiguration

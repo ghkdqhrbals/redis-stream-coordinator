@@ -11,7 +11,7 @@ The current implementation is an MVP control-plane server for the Redis Stream C
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
 The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
 Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
-The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, and a shard lifecycle callback contract that application code can implement.
+The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, a shard lifecycle callback contract that application code can implement, and a producer routing metadata cache that maps partition keys to active Redis Stream shard keys.
 
 ## Build and Tooling
 
@@ -103,6 +103,8 @@ Consumer starter files:
   * package: `com.redisstream.consumer`
 * `CoordinatorConsumerAutoConfiguration.kt`
   * package: `com.redisstream.consumer`
+* `ProducerRoutingCache.kt`, `ProducerRoutingAutoConfiguration.kt`
+  * package: `com.redisstream.producer`
 
 ## Implemented API Surface
 
@@ -456,7 +458,7 @@ Expected response:
 * [x] Add Spring Boot auto-configuration.
 * [x] Add assignment and revoke callback tests.
 * [x] Add repeated revoke callback support for long drain windows.
-* [ ] Add producer routing metadata cache component.
+* [x] Add producer routing metadata cache component.
 * [ ] Add built-in Redis Stream polling adapter.
 * [ ] Add consumer-side Micrometer metrics.
 
@@ -505,6 +507,7 @@ Implemented tests:
 * Consumer starter detects removed assignment and reports revoked shards.
 * Consumer starter retries incomplete revoke callbacks and reports `REVOKED` after application drain completes.
 * Consumer starter fails fast when configured with a locally unsupported heartbeat protocol version.
+* Producer routing cache reuses metadata inside the refresh interval, refreshes expired metadata, replaces cached metadata when `metadataVersion` changes, and rejects unsupported hash algorithms.
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
@@ -522,6 +525,9 @@ coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisStreamProvisioningIntegrationTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/CoordinatorManagedConsumerTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/ProducerRoutingCacheTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/ProducerRoutingAutoConfigurationTest.kt
 ```
 
 ## Not Implemented Yet
@@ -534,8 +540,6 @@ Remaining work:
 * Metrics listed in the PRD.
 * Rate limiting.
 * Full authorization model beyond Basic Auth.
-* Producer routing metadata client cache contract.
-* Consumer starter producer routing metadata cache.
 * Built-in Redis Stream polling adapter.
 * Explicit Redis metadata `schemaVersion` and migration guard.
 * Coordinator server Docker image build and publish workflow.
@@ -554,9 +558,9 @@ Explicitly still out of scope for the coordinator:
 
 ## Suggested Next Step
 
-Next implementation step should be to tighten producer/consumer client behavior and Redis provisioning failure semantics:
+Next implementation step should be to prepare public Docker distribution and keep tightening runtime safety:
 
-1. Add metadata-version based cache invalidation guidance for producer clients.
-2. Add coordinator server Docker image build and smoke test.
-3. Add retry/failure integration tests for stream provisioning.
-4. Complete stricter stale member fencing semantics.
+1. Add coordinator server Docker image build and smoke test.
+2. Add retry/failure integration tests for stream provisioning.
+3. Complete stricter stale member fencing semantics.
+4. Add Micrometer metrics for coordinator and starter runtime behavior.

@@ -44,9 +44,19 @@ class RestClientCoordinatorClient(
 }
 
 fun coordinatorRestClient(properties: CoordinatorConsumerProperties): RestClient {
-    val builder = RestClient.builder().baseUrl(properties.coordinatorBaseUrl)
-    val username = properties.username
-    val password = properties.password
+    return coordinatorRestClient(
+        coordinatorBaseUrl = properties.coordinatorBaseUrl,
+        username = properties.username,
+        password = properties.password,
+    )
+}
+
+fun coordinatorRestClient(
+    coordinatorBaseUrl: String,
+    username: String?,
+    password: String?,
+): RestClient {
+    val builder = RestClient.builder().baseUrl(coordinatorBaseUrl)
     if (!username.isNullOrBlank() && password != null) {
         builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Basic ${basicAuth(username, password)}")
     }
