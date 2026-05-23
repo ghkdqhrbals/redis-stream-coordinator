@@ -1,5 +1,7 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.api
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -32,6 +34,13 @@ class AdminController(
         @PathVariable consumerGroup: String,
     ): GroupResponse =
         coordinator.getGroup(streamPrefix, consumerGroup)
+
+    @GetMapping("/producer-routing")
+    fun getProducerRouting(
+        @PathVariable streamPrefix: String,
+        @PathVariable consumerGroup: String,
+    ): ProducerRoutingResponse =
+        coordinator.producerRouting(streamPrefix, consumerGroup)
 
     @PostMapping("/scale")
     fun scaleGroup(

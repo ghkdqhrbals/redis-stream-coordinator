@@ -21,8 +21,8 @@ fun org.gradle.api.Project.ensurePrepareKotlinBuildScriptModelTask() {
 ensurePrepareKotlinBuildScriptModelTask()
 
 subprojects {
-    group = "io.github.ghkdqhrbals"
-    version = "0.1.0-SNAPSHOT"
+    group = "com.redisstream"
+    version = providers.gradleProperty("projectVersion").get()
 
     tasks.register("wrapper") {
         group = "Build Setup"

@@ -24,6 +24,9 @@ coordinator:
     admin-username: admin
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
     authenticate-member-api: false
+  protocol:
+    min-heartbeat-version: 1
+    max-heartbeat-version: 1
   redis-cluster:
     node-mappings:
       - advertised-host: redis-node-1
@@ -41,6 +44,8 @@ coordinator:
   store:
     type: memory
     key-prefix: redis-stream:coord
+  streams:
+    provisioning-enabled: false
   defaults:
     initial-shard-count: 12
     consumer-max-concurrency: 12

@@ -1,8 +1,19 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.service
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateConflictException
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateStore
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.NoopStreamShardProvisioner
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.RedisStreamShardKeys
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.RedisStreamShardProvisioningPlan
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardProvisioner
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardProvisioningPlan
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardKeys
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Instant
@@ -12,13 +23,14 @@ class CoordinatorService(
     private val properties: CoordinatorProperties,
     private val stateStore: CoordinatorStateStore,
     private val redisConnectionFactory: ObjectProvider<RedisConnectionFactory>,
+    private val streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     @Synchronized
     fun createGroup(streamPrefix: String, consumerGroup: String, request: CreateGroupRequest): GroupResponse {
         val key = GroupKey(streamPrefix, consumerGroup)
         if (stateStore.contains(key)) {
-            throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
+            throw CoordinatorException(CoordinatorError.GROUP_ALREADY_EXISTS)
         }
 
         val now = Instant.now(clock)
@@ -43,7 +55,16 @@ class CoordinatorService(
         )
         reconcile(group, now)
         if (!stateStore.putIfAbsent(key, group)) {
-            throw CoordinatorException(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists")
+            throw CoordinatorException(CoordinatorError.GROUP_ALREADY_EXISTS)
+        }
+        // Provision after the state claim is won so rejected concurrent creates cannot leave stream keys behind.
+        try {
+            streamProvisioner.provision(group.streamShardProvisioningPlan())
+        } catch (error: RuntimeException) {
+            runCatching { stateStore.deleteIfRevision(key, group.storeRevision) }
+                .exceptionOrNull()
+                ?.let(error::addSuppressed)
+            throw error
         }
         return group.toResponse()
     }
@@ -58,6 +79,15 @@ class CoordinatorService(
         }
 
     @Synchronized
+    fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+        requireGroup(streamPrefix, consumerGroup).let { group ->
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
+            }
+            group.toProducerRoutingResponse()
+        }
+
+    @Synchronized
     fun scaleGroup(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration =
         withStateConflictRetry { scaleGroupOnce(streamPrefix, consumerGroup, request) }
 
@@ -66,8 +96,14 @@ class CoordinatorService(
         val now = Instant.now(clock)
         expireMembers(group, now)
 
-        group.activeMigrationId?.let {
-            throw CoordinatorException(HttpStatus.CONFLICT, "ACTIVE_MIGRATION_EXISTS", "Group already has an active migration")
+        val activeMigration = group.activeMigrationId?.let { group.migrations[it] }
+        if (activeMigration != null) {
+            if (activeMigration.state == MigrationState.PREPARING &&
+                activeMigration.toShardCount == request.targetShardCount
+            ) {
+                return provisionAndActivatePreparedMigration(group, activeMigration, request, now)
+            }
+            throw CoordinatorException(CoordinatorError.ACTIVE_MIGRATION_EXISTS)
         }
 
         val fromVersion = group.activeWriteVersion
@@ -93,16 +129,39 @@ class CoordinatorService(
             toVersion = toVersion,
             fromShardCount = fromShardCount,
             toShardCount = request.targetShardCount,
-            state = MigrationState.ACTIVE,
+            state = MigrationState.PREPARING,
             createdAt = now,
             updatedAt = now,
         )
 
         group.migrations[migration.migrationId] = migration
         group.activeMigrationId = migration.migrationId
-        group.shardCountsByVersion[toVersion] = request.targetShardCount
-        group.activeWriteVersion = toVersion
-        group.readableVersions = setOf(fromVersion, toVersion)
+        group.updatedAt = now
+        stateStore.save(group.key(), group)
+        return provisionAndActivatePreparedMigration(group, migration, request, now)
+    }
+
+    private fun provisionAndActivatePreparedMigration(
+        group: GroupMetadata,
+        migration: Migration,
+        request: ScaleGroupRequest,
+        now: Instant,
+    ): Migration {
+        // Commit PREPARING first; conflict retries must not create Redis shards without matching coordinator state.
+        streamProvisioner.provision(
+            RedisStreamShardProvisioningPlan.forVersion(
+                streamPrefix = group.streamPrefix,
+                consumerGroup = group.consumerGroup,
+                streamVersion = migration.toVersion,
+                shardCount = migration.toShardCount,
+            ),
+        )
+
+        migration.state = MigrationState.ACTIVE
+        migration.updatedAt = now
+        group.shardCountsByVersion[migration.toVersion] = migration.toShardCount
+        group.activeWriteVersion = migration.toVersion
+        group.readableVersions = setOf(migration.fromVersion, migration.toVersion)
         request.consumerConcurrencyPolicy?.let { group.consumerConcurrencyPolicy = it }
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
@@ -157,7 +216,7 @@ class CoordinatorService(
     @Synchronized
     fun getMigration(streamPrefix: String, consumerGroup: String, migrationId: String): Migration =
         requireGroup(streamPrefix, consumerGroup).migrations[migrationId]
-            ?: throw CoordinatorException(HttpStatus.NOT_FOUND, "MIGRATION_NOT_FOUND", "Migration not found")
+            ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
 
     @Synchronized
     fun rollbackMigration(streamPrefix: String, consumerGroup: String, migrationId: String): Migration =
@@ -166,13 +225,13 @@ class CoordinatorService(
     private fun rollbackMigrationOnce(streamPrefix: String, consumerGroup: String, migrationId: String): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
         val migration = group.migrations[migrationId]
-            ?: throw CoordinatorException(HttpStatus.NOT_FOUND, "MIGRATION_NOT_FOUND", "Migration not found")
+            ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
 
         if (migration.state == MigrationState.ROLLED_BACK || migration.state == MigrationState.ROLLING_BACK) {
             return migration
         }
         if (group.activeMigrationId != migrationId || migration.state != MigrationState.ACTIVE) {
-            throw CoordinatorException(HttpStatus.UNPROCESSABLE_ENTITY, "ROLLBACK_NOT_ALLOWED", "Migration cannot be rolled back")
+            throw CoordinatorException(CoordinatorError.ROLLBACK_NOT_ALLOWED)
         }
 
         val now = Instant.now(clock)
@@ -203,7 +262,7 @@ class CoordinatorService(
         memberId: String,
         request: HeartbeatRequest,
     ): HeartbeatResponse {
-        if (request.protocolVersion != 1) {
+        if (!properties.protocol.supportsHeartbeat(request.protocolVersion)) {
             return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNSUPPORTED_PROTOCOL)
         }
         if (request.memberId != memberId) {
@@ -213,7 +272,7 @@ class CoordinatorService(
         val group = try {
             requireGroup(streamPrefix, consumerGroup)
         } catch (error: CoordinatorException) {
-            if (error.status == HttpStatus.NOT_FOUND) {
+            if (error.error == CoordinatorError.GROUP_NOT_FOUND) {
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
             }
             throw error
@@ -223,15 +282,38 @@ class CoordinatorService(
         val membersExpired = expireMembers(group, now)
         val existing = group.members[memberId]
         val member = when {
-            request.memberEpoch == 0L -> registerOrRejoinMember(group, memberId, request, now)
-            request.memberEpoch == -1L && existing == null ->
+            request.memberEpoch < -1L -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
+            }
+            existing == null && request.memberEpoch == 0L -> registerOrRejoinMember(group, memberId, request, now)
+            existing == null && request.memberEpoch == -1L ->
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
-            request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
             existing == null -> return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
-            existing.state == MemberState.FENCED ||
-                existing.state == MemberState.EXPIRED ||
-                request.memberEpoch > existing.memberEpoch ||
-                (request.memberEpoch > 0 && request.memberEpoch < existing.memberEpoch) -> {
+            request.memberEpoch == 0L && (existing.state == MemberState.EXPIRED || existing.state == MemberState.FENCED) ->
+                registerOrRejoinMember(group, memberId, request, now)
+            request.memberEpoch == 0L -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
+            }
+            request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
+            existing.state == MemberState.FENCED || existing.state == MemberState.EXPIRED -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return fencedHeartbeat(group, request, memberId, existing)
+            }
+            request.memberEpoch > existing.memberEpoch -> {
+                if (membersExpired) {
+                    stateStore.save(group.key(), group)
+                }
+                return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
+            }
+            request.memberEpoch < existing.memberEpoch -> {
                 if (membersExpired) {
                     stateStore.save(group.key(), group)
                 }
@@ -260,6 +342,7 @@ class CoordinatorService(
 
         reconcile(group, now)
         enforceRebalanceTimeouts(group, now)
+        advanceMigrationDrainState(group, now)
         if (member.state == MemberState.FENCED) {
             stateStore.save(group.key(), group)
             return fencedHeartbeat(group, request, memberId, member)
@@ -340,7 +423,8 @@ class CoordinatorService(
         return AssignmentsResponse(
             targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
             currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
-            revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }.filterValues { it.isNotEmpty() },
+            revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }
+                .filterValues { it.isNotEmpty() },
             invariantViolations = invariantViolations(group),
         )
     }
@@ -356,7 +440,7 @@ class CoordinatorService(
 
     private fun requireGroup(streamPrefix: String, consumerGroup: String): GroupMetadata =
         stateStore.get(GroupKey(streamPrefix, consumerGroup))
-            ?: throw CoordinatorException(HttpStatus.NOT_FOUND, "GROUP_NOT_FOUND", "Group not found")
+            ?: throw CoordinatorException(CoordinatorError.GROUP_NOT_FOUND)
 
     private fun <T> withStateConflictRetry(block: () -> T): T {
         var attempts = 0
@@ -366,11 +450,7 @@ class CoordinatorService(
             } catch (error: CoordinatorStateConflictException) {
                 attempts += 1
                 if (attempts >= 3) {
-                    throw CoordinatorException(
-                        HttpStatus.CONFLICT,
-                        "STATE_VERSION_CONFLICT",
-                        "Coordinator state changed concurrently; retry the request",
-                    )
+                    throw CoordinatorException(CoordinatorError.STATE_VERSION_CONFLICT)
                 }
             }
         }
@@ -413,7 +493,8 @@ class CoordinatorService(
     private fun refreshOperationalState(group: GroupMetadata, now: Instant): Boolean {
         val expired = expireMembers(group, now)
         val timedOut = enforceRebalanceTimeouts(group, now)
-        return expired || timedOut
+        val migrationAdvanced = advanceMigrationDrainState(group, now)
+        return expired || timedOut || migrationAdvanced
     }
 
     private fun markLeaving(
@@ -522,9 +603,60 @@ class CoordinatorService(
         return changed
     }
 
+    private fun advanceMigrationDrainState(group: GroupMetadata, now: Instant): Boolean {
+        val migration = group.activeMigrationId?.let { group.migrations[it] } ?: return false
+        return when (migration.state) {
+            MigrationState.ACTIVE -> startMigrationDrainIfReady(group, migration, now)
+            MigrationState.DRAINING -> completeMigrationDrainIfReady(group, migration, now)
+            else -> false
+        }
+    }
+
+    private fun startMigrationDrainIfReady(
+        group: GroupMetadata,
+        migration: Migration,
+        now: Instant,
+    ): Boolean {
+        val liveMembers = group.liveMembers()
+        if (liveMembers.isEmpty() || group.state != GroupState.STABLE) {
+            return false
+        }
+        if (!liveMembers.all { member -> member.currentAssignment == group.targetAssignments[member.memberId].orEmpty() }) {
+            return false
+        }
+
+        migration.state = MigrationState.DRAINING
+        migration.updatedAt = now
+        group.readableVersions = setOf(migration.toVersion)
+        bumpMetadata(group, now, bumpGroupEpoch = true)
+        reconcile(group, now)
+        return true
+    }
+
+    private fun completeMigrationDrainIfReady(
+        group: GroupMetadata,
+        migration: Migration,
+        now: Instant,
+    ): Boolean {
+        val oldVersionStillOwned = group.liveMembers().any { member ->
+            member.currentAssignment.any { it.streamVersion == migration.fromVersion } ||
+                member.revoking.any { it.streamVersion == migration.fromVersion }
+        }
+        if (oldVersionStillOwned) {
+            return false
+        }
+
+        migration.state = MigrationState.DEPRECATED
+        migration.updatedAt = now
+        group.activeMigrationId = null
+        group.readableVersions = setOf(migration.toVersion)
+        bumpMetadata(group, now, bumpGroupEpoch = false)
+        reconcile(group, now)
+        return true
+    }
+
     private fun reconcile(group: GroupMetadata, now: Instant) {
-        val liveMembers = group.members.values
-            .filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
+        val liveMembers = group.liveMembers()
             .sortedBy { it.memberId }
 
         if (liveMembers.isEmpty()) {
@@ -650,6 +782,9 @@ class CoordinatorService(
             (0 until count).map { ShardId(version, it) }
         }.sorted()
 
+    private fun GroupMetadata.liveMembers(): List<MemberMetadata> =
+        members.values.filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
+
     private fun GroupMetadata.assignedMaxConcurrency(memberName: String): Int =
         consumerConcurrencyPolicy.memberOverrides[memberName]
             ?: consumerConcurrencyPolicy.defaultMaxConcurrency
@@ -673,6 +808,28 @@ class CoordinatorService(
             targetAssignmentSummary = targetAssignments.mapValues { it.value.size },
             currentAssignmentSummary = members.mapValues { it.value.currentAssignment.size },
         )
+
+    private fun GroupMetadata.toProducerRoutingResponse(): ProducerRoutingResponse {
+        val activeShardKeys = streamShardKeys(activeWriteVersion)
+        return ProducerRoutingResponse(
+            streamPrefix = streamPrefix,
+            consumerGroup = consumerGroup,
+            metadataVersion = metadataVersion,
+            activeWriteVersion = activeWriteVersion,
+            shardCount = shardCountsByVersion.getValue(activeWriteVersion),
+            hashAlgorithm = hashAlgorithm,
+            hashSeed = hashSeed,
+            streamKeyPattern = RedisStreamShardKeys.keyPattern(streamPrefix),
+            shards = activeShardKeys.map { shardKey ->
+                ProducerRoutingShard(
+                    streamVersion = shardKey.streamVersion,
+                    shardIndex = shardKey.shardIndex,
+                    streamKey = shardKey.value,
+                    redisSlot = shardKey.slot,
+                )
+            },
+        )
+    }
 
     private fun invariantViolations(group: GroupMetadata): List<String> {
         val violations = mutableListOf<String>()

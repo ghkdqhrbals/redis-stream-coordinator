@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.domain
 
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
@@ -197,6 +197,25 @@ data class ConsumerConcurrencyResponse(
     val groupEpoch: Long,
     val consumerConcurrencyPolicy: ConsumerConcurrencyPolicy,
     val affectedMembers: List<String>,
+)
+
+data class ProducerRoutingShard(
+    val streamVersion: Int,
+    val shardIndex: Int,
+    val streamKey: String,
+    val redisSlot: Int,
+)
+
+data class ProducerRoutingResponse(
+    val streamPrefix: String,
+    val consumerGroup: String,
+    val metadataVersion: Long,
+    val activeWriteVersion: Int,
+    val shardCount: Int,
+    val hashAlgorithm: String,
+    val hashSeed: String,
+    val streamKeyPattern: String,
+    val shards: List<ProducerRoutingShard>,
 )
 
 data class HealthResponse(

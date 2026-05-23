@@ -1,4 +1,4 @@
-package io.github.ghkdqhrbals.redisstreamcoordinator
+package io.github.ghkdqhrbals.redisstreamcoordinator.config
 
 import io.lettuce.core.internal.HostAndPort
 import io.lettuce.core.resource.ClientResources

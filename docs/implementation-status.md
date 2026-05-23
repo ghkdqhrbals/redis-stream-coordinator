@@ -1,15 +1,17 @@
 # Implementation Status
 
-Last updated: 2026-05-21
+Last updated: 2026-05-23
 
 ## Summary
 
-The repository now has a Spring Boot 4 / Kotlin / Java 24 Gradle module named `coordinator-server`.
+The repository now has Spring Boot 4 / Kotlin / Java 24 Gradle modules named `coordinator-server` and `redisstream-spring-boot-starter`.
 
-The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, and basic monitoring responses.
+The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, producer routing metadata, and basic monitoring responses.
 
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
-The module is connected to a local three-node Redis Cluster for connectivity and metadata-store work.
+The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
+Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
+The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, a shard lifecycle callback contract that application code can implement, a producer routing metadata cache, a Redis Stream publisher, and an opt-in Redis Stream consumer adapter.
 
 ## Build and Tooling
 
@@ -22,6 +24,7 @@ Implemented:
 * Java toolchain `24`.
 * Foojay toolchain resolver so Gradle can provision Java 24 when it is not installed locally.
 * Version catalog for project plugin versions.
+* Central project artifact version via `gradle.properties`.
 * `.gitignore` for Gradle, IDE, build, and swap files.
 * IntelliJ setup guide: [`docs/intellij-setup.md`](intellij-setup.md).
 * Docker Compose Redis Cluster with three master nodes.
@@ -32,6 +35,7 @@ Verified:
 ./gradlew :coordinator-server:compileJava
 ./gradlew :coordinator-server:test
 ./gradlew :coordinator-server:build
+./gradlew :redisstream-spring-boot-starter:test
 ```
 
 All passed.
@@ -51,27 +55,60 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true \
   ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest
 ```
 
-On pull requests, the `PR test results` workflow runs PR code in a read-only test job, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, and updates a PR comment from a separate job that only has comment-related write permissions.
+Provisioning-focused Redis integration tests can be run with:
 
-## Implemented Module
+```bash
+REDIS_COORDINATOR_INTEGRATION_TESTS=true \
+  ./gradlew :coordinator-server:test --tests io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest
+```
 
-Module:
+On pull requests, the `PR test results` workflow reruns PR tests with `--rerun-tasks` in a read-only test job, uploads the Gradle test report as the `coordinator-gradle-test-report` artifact, publishes a grouped HTML test report with expandable scenario sections, and posts a new PR comment for same-repository PRs with `issues: write` and `pull-requests: write`. Fork PR comments are handled by the separate `PR test result comments` workflow from the completed workflow artifact.
+
+## Implemented Modules
+
+Modules:
 
 ```text
 coordinator-server
+com.redisstream:redisstream-spring-boot-starter
 ```
 
 Main files:
 
 * `CoordinatorModels.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.domain`
 * `CoordinatorService.kt`
-* `CoordinatorControllers.kt`
-* `CoordinatorAuth.kt`
-* `CoordinatorErrors.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.service`
+* `CoordinatorControllers.kt`, `CoordinatorErrors.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.api`
+* `CoordinatorAuth.kt`, `CoordinatorProperties.kt`, `RedisClientConfig.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.config`
 * `RedisStreamCoordinatorApplication.kt`
 * `application.yaml`
 * `CoordinatorStateStore.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.store`
+* `RedisStreamProvisioning.kt`, `RedisStreamShardKeys.kt`
+  * package: `io.github.ghkdqhrbals.redisstreamcoordinator.stream`
 * root `compose.yaml`
+
+Consumer starter files:
+
+* `CoordinatorConsumerModels.kt`
+  * package: `com.redisstream.consumer`
+* `CoordinatorClient.kt`
+  * package: `com.redisstream.consumer`
+* `CoordinatorManagedConsumer.kt`
+  * package: `com.redisstream.consumer`
+* `CoordinatorShardLifecycle.kt`
+  * package: `com.redisstream.consumer`
+* `CoordinatorConsumerAutoConfiguration.kt`
+  * package: `com.redisstream.consumer`
+* `RedisStreamConsumerAdapter.kt`
+  * package: `com.redisstream.consumer`
+* `ProducerRoutingCache.kt`, `ProducerRoutingAutoConfiguration.kt`
+  * package: `com.redisstream.producer`
+* `RedisStreamPublisher.kt`
+  * package: `com.redisstream.producer`
 
 ## Implemented API Surface
 
@@ -85,6 +122,7 @@ Implemented admin APIs:
 
 * `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`
 * `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`
+* `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing`
 * `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale`
 * `PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency`
 * `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}`
@@ -113,12 +151,16 @@ Implemented:
 * Graceful leave through heartbeat with `memberEpoch=-1`.
 * Member lease expiration based on `member-lease-ttl`.
 * Group epoch, metadata version, and assignment epoch tracking.
+* Configurable heartbeat protocol compatibility range.
+* Coordinator-issued member epoch validation that rejects active epoch reset, client-advanced epochs, and unsupported negative epochs.
 * Sticky assignment with minimal movement and balancing across live members.
 * `assignedShards` and `pendingShards` separation.
 * Revoke-before-assign rule: a shard is not assigned to a new owner while another active/leaving member still reports ownership or revocation.
 * Scale request that creates a next stream version and keeps old/new versions readable.
+* Automatic migration drain transition: old/new assignments converge, old version is removed from targets, and the migration becomes `DEPRECATED` after members report old shard drain completion.
 * Rollback for active migration.
 * Monitoring summaries for members, assignments, migrations, and invariant violations.
+* Shared `CoordinatorError` enum for HTTP status, error code, and default error message management.
 * Basic Auth for admin and monitoring APIs.
 * Optional Basic Auth for member heartbeat API via config.
 * Spring Data Redis dependency and Redis Cluster connectivity health check.
@@ -128,6 +170,10 @@ Implemented:
 * Redis projected keys for member metadata, target assignments, current assignments, active migration, and migration history.
 * Redis group-scoped aggregate/projection keys are replaced through one Lua script to avoid reader-visible partial projection updates.
 * Redis-backed saves use a coordinator `storeRevision` compare-and-set guard and retry mutation requests on transient state conflicts.
+* Redis Stream shard key helper with Redis Cluster hash-slot calculation and equal-master-range distribution planning.
+* Opt-in Redis Stream shard provisioning through `coordinator.streams.provisioning-enabled=true`.
+* Redis Stream consumer group provisioning with idempotent `XGROUP CREATE ... MKSTREAM` semantics during group creation and scale.
+* Stream provisioning is ordered after coordinator state ownership/preparation commits, so rejected create races and failed scale save retries do not leave untracked Redis Stream versions.
 
 ## Verified Runtime Smoke Test
 
@@ -318,6 +364,7 @@ Expected response:
 
 * [x] Add admin group creation API.
 * [x] Add admin group metadata read API.
+* [x] Add producer routing metadata API.
 * [x] Add shard scale API.
 * [x] Add consumer concurrency update API.
 * [x] Add migration lookup API.
@@ -338,6 +385,7 @@ Expected response:
 * [x] Track `groupEpoch`.
 * [x] Track `metadataVersion`.
 * [x] Track `assignmentEpoch`.
+* [x] Add configurable heartbeat protocol compatibility range.
 * [x] Track active write version and readable versions.
 * [x] Track member metadata and lease expiry.
 * [x] Support member join/rejoin with `memberEpoch=0`.
@@ -349,11 +397,12 @@ Expected response:
 * [x] Enforce revoke-before-assign.
 * [x] Create next stream version on scale.
 * [x] Keep old and new versions readable during migration.
+* [x] Expose active write routing metadata for producers.
 * [x] Support active migration rollback.
 * [x] Advance assignment epoch for capacity-policy-driven rebalances.
 * [ ] Complete stricter stale member fencing semantics.
 * [x] Add rebalance timeout handling.
-* [ ] Add automatic migration drain completion and `DEPRECATED` transition.
+* [x] Add automatic migration drain completion and `DEPRECATED` transition.
 
 ### Phase 4: Redis Cluster Environment
 
@@ -382,13 +431,14 @@ Expected response:
 
 ### Phase 6: Redis Stream Shard Operations
 
-* [ ] Create stream shard keys during group creation.
-* [ ] Create Redis consumer groups for each shard.
-* [ ] Create next-version shard keys during scale.
-* [ ] Create consumer groups for next-version shards.
-* [ ] Validate stream version and shard count metadata.
-* [ ] Add shard key format helper.
-* [ ] Add hash-slot distribution helper.
+* [x] Create stream shard keys during group creation when stream provisioning is enabled.
+* [x] Create Redis consumer groups for each shard when stream provisioning is enabled.
+* [x] Create next-version shard keys during scale when stream provisioning is enabled.
+* [x] Create consumer groups for next-version shards when stream provisioning is enabled.
+* [x] Validate stream version and shard count metadata before building shard keys.
+* [x] Add shard key format helper.
+* [x] Add hash-slot distribution helper.
+* [x] Add producer routing response with active shard keys and Redis slots.
 
 ### Phase 7: Observability and Operations
 
@@ -400,6 +450,31 @@ Expected response:
 * [ ] Add rate limiting for admin APIs.
 * [ ] Add operational runbook.
 
+### Phase 8: RedisStream Spring Boot Starter
+
+* [x] Add `redisstream-spring-boot-starter` module.
+* [x] Add coordinator DTOs for heartbeat and producer routing responses.
+* [x] Add overridable `CoordinatorClient`.
+* [x] Add `RestClient`-based coordinator HTTP client.
+* [x] Add `CoordinatorShardLifecycle` callback interface for application-owned shard workers.
+* [x] Add `CoordinatorManagedConsumer` heartbeat lifecycle.
+* [x] Add consumer-side supported heartbeat protocol constants and validation.
+* [x] Add Spring Boot auto-configuration.
+* [x] Add assignment and revoke callback tests.
+* [x] Add repeated revoke callback support for long drain windows.
+* [x] Add producer routing metadata cache component.
+* [x] Add Redis Stream publisher.
+* [x] Add built-in Redis Stream polling adapter.
+* [ ] Add consumer-side Micrometer metrics.
+
+### Phase 9: Docker Distribution
+
+* [x] Add Docker Compose Redis Cluster for local development and integration tests.
+* [ ] Add coordinator server Docker image build.
+* [ ] Add container smoke test for `/coord/v1/monitoring/health`.
+* [ ] Add versioned Docker tag publishing workflow.
+* [ ] Add Docker usage guide for public users.
+
 ## Tests Added
 
 Implemented tests:
@@ -409,20 +484,39 @@ Implemented tests:
 * Scale request creates next stream version and exposes old/new readable versions.
 * Duplicate group creation is rejected.
 * Invalid heartbeat path/body member mismatch is rejected.
+* Coordinator accepts heartbeat protocol versions inside the configured supported range and rejects versions outside it.
+* Active members cannot reset `memberEpoch` to `0`.
+* Members cannot advance `memberEpoch` beyond the coordinator-issued value.
+* Negative `memberEpoch` values other than `-1` are rejected.
 * Missing group heartbeat is rejected as `UNKNOWN_MEMBER_ID`.
 * Unknown member cannot leave by sending `memberEpoch=-1`.
 * Expired member is removed from target assignment and shards are reassigned after lease expiry.
 * Consumer concurrency policy changes rebalance target assignments by member weight.
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
 * Rebalance timeout fences an old owner that does not revoke a moved shard and keeps a timely revoker active.
+* Category-level grouped workflows cover member expiration, expired rejoin, member join balancing, graceful leave, empty group transition, partition upscaling, producer routing after scale, and new stream topic creation.
+* Producer routing metadata exposes active write version, shard count, hash policy, stream key pattern, and active shard keys.
+* HTTP integration covers scale-triggered producer routing updates and graceful leave monitoring.
+* Mockito-backed integration tests verify failed create provisioning removes unpublished metadata, failed scale provisioning leaves retryable `PREPARING` metadata, and save-conflict retries do not provision untracked shard versions.
+* Rebalance state-machine workflow scenarios cover member expiration, heartbeat reconciliation, sticky shard retention, and redistribution invariants.
 * Rollback restores previous stream version and rejects unknown migration IDs.
 * Expired member can rejoin with `memberEpoch=0`.
-* 432 focused Kafka-style operational matrix scenarios cover shard counts, member counts, scale up/down/rollback, steady/add/leave/expire/restart/replace churn, and uniform/skewed member capacity with descriptive scenario names.
 * In-memory state store supports create/get/save/list.
 * Coordinator state survives service instance replacement when the same state store is reused.
 * Redis state projection splits aggregate state into member, target, current assignment, migration, and active migration sections.
 * Redis key helper keeps group-scoped keys in a single Redis Cluster hash slot and preserves configured prefix formatting.
 * Redis-backed store rejects stale coordinator snapshots instead of overwriting newer state.
+* Redis Stream shard key helper rejects hash-tag unsafe stream prefixes, validates version/shard counts, calculates Redis Cluster slots, and estimates distribution across equal master ranges.
+* Coordinator service calls shard provisioning on group creation and scale.
+* Consumer starter sends join heartbeat and notifies assigned shards.
+* Consumer starter detects removed assignment and reports revoked shards.
+* Consumer starter retries incomplete revoke callbacks and reports `REVOKED` after application drain completes.
+* Consumer starter fails fast when configured with a locally unsupported heartbeat protocol version.
+* Producer routing cache reuses metadata inside the refresh interval, refreshes expired metadata, replaces cached metadata when `metadataVersion` changes, and rejects unsupported hash algorithms.
+* Redis Stream publisher routes by partition key and appends records to the active stream shard.
+* Built-in Redis Stream consumer lifecycle polls assigned shards, calls the application handler, and acknowledges successfully handled records.
+* Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
+* Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
 * Gated Redis integration verifies aggregate and projected PRD keys against a local Redis Cluster.
 * Spring application context loads.
@@ -431,34 +525,37 @@ Test files:
 
 ```text
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorServiceTest.kt
-coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorOperationalScenarioMatrixTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorGroupedWorkflowTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorProvisioningFailureIntegrationTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorRebalanceStateMachineFlowTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorStateStoreTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/CoordinatorHttpIntegrationTest.kt
 coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisCoordinatorStateStoreIntegrationTest.kt
+coordinator-server/src/test/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/RedisStreamProvisioningIntegrationTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/CoordinatorManagedConsumerTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/CoordinatorConsumerAutoConfigurationTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/consumer/RedisStreamConsumerLifecycleTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/ProducerRoutingCacheTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/ProducerRoutingAutoConfigurationTest.kt
+redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/RedisStreamPublisherTest.kt
 ```
 
 ## Not Implemented Yet
 
 Remaining work:
 
-* Full Redis-backed coordinator metadata store.
-* Redis key model from PRD:
-  * group metadata
-  * members
-  * target assignment
-  * current assignment
-  * migrations
-  * audit log
+* Redis admin audit log.
 * Coordinator event loop as a scheduled worker.
-* Redis Stream shard and consumer group creation during scale/create.
 * Admin audit logging.
 * Metrics listed in the PRD.
 * Rate limiting.
 * Full authorization model beyond Basic Auth.
-* Migration drain progress and automatic `DEPRECATED` transition.
-* Producer routing metadata API/cache.
+* Explicit Redis metadata `schemaVersion` and migration guard.
+* Coordinator server Docker image build and publish workflow.
+* Container smoke tests for the public Docker image.
+* Docker usage guide for public users.
 * More complete epoch fencing semantics.
-* Integration tests with Redis.
+* Broader Redis integration tests that stress idempotent provisioning retry and failure handling.
 
 Explicitly still out of scope for the coordinator:
 
@@ -470,9 +567,9 @@ Explicitly still out of scope for the coordinator:
 
 ## Suggested Next Step
 
-Next implementation step should be to harden Redis-backed operations:
+Next implementation step should be to prepare public Docker distribution and keep tightening runtime safety:
 
-1. Keep group metadata as the aggregate source of truth during the transition.
-2. Add Redis integration tests that run against the local three-node cluster by default in CI.
-3. Add producer routing metadata API/cache.
-4. Promote projected Redis keys to read paths once the read model is ready.
+1. Add coordinator server Docker image build and smoke test.
+2. Add retry/failure integration tests for stream provisioning.
+3. Complete stricter stale member fencing semantics.
+4. Add Micrometer metrics for coordinator and starter runtime behavior.
