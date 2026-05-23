@@ -1,5 +1,6 @@
 package com.redisstream.consumer
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,6 +34,33 @@ class RedisStreamConsumerLifecycleTest {
         assertEquals(listOf("orders:v1:shard:0"), reader.reads.map { it.streamKey })
         assertEquals(listOf("1-0"), reader.acks.map { it.recordId })
         assertEquals(listOf(mapOf("payload" to "created")), handler.messages.map { it.fields })
+    }
+
+    @Test
+    fun `consumer lifecycle records message success and ack metrics`() {
+        val shard = CoordinatorShard(1, 0)
+        val registry = SimpleMeterRegistry()
+        val reader = ScriptedRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        val lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RecordingRedisStreamMessageHandler(),
+            startPollersOnAssignment = false,
+            metrics = MicrometerCoordinatorConsumerMetrics(registry, "orders", "orders-consumer", "member-a"),
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+        lifecycle.pollOnce(shard)
+
+        assertEquals(1.0, registry.get("redis_stream_consumer_messages_total").tag("status", "SUCCESS").counter().count())
+        assertEquals(1.0, registry.get("redis_stream_consumer_ack_total").counter().count())
     }
 
     @Test

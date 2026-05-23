@@ -74,6 +74,33 @@ In built-in Redis polling mode, the starter owns:
 
 The built-in polling mode still does not own retries, DLQ, idempotency markers, or business transaction boundaries.
 
+## Metrics
+
+When a Micrometer `MeterRegistry` bean is available, the starter records runtime metrics with `stream`, `group`, and where applicable `member` tags.
+
+Consumer metrics:
+
+* `redis_stream_consumer_heartbeat_total`
+* `redis_stream_consumer_heartbeat_duration`
+* `redis_stream_consumer_leave_total`
+* `redis_stream_consumer_leave_duration`
+* `redis_stream_consumer_assigned_shards`
+* `redis_stream_consumer_pending_shards`
+* `redis_stream_consumer_revoking_shards`
+* `redis_stream_consumer_revoked_shards_total`
+* `redis_stream_consumer_fenced_total`
+* `redis_stream_consumer_messages_total`
+* `redis_stream_consumer_message_duration`
+* `redis_stream_consumer_ack_total`
+
+Producer metrics:
+
+* `redis_stream_producer_routing_cache_hit_total`
+* `redis_stream_producer_routing_refresh_total`
+* `redis_stream_producer_routing_refresh_duration`
+* `redis_stream_producer_publish_total`
+* `redis_stream_producer_publish_duration`
+
 ## Spring Boot Configuration
 
 ```yaml
@@ -167,8 +194,8 @@ Application producers can call `ProducerRoutingCache.route(partitionKey)` and wr
 * The starter provides a Redis Stream publisher that routes by partition key and appends to the active shard.
 * The starter provides convenience payload and ordered batch publish APIs.
 * The starter provides an opt-in Redis Stream consumer adapter that polls assigned shards and acknowledges successfully handled records.
+* The starter records Micrometer metrics when a `MeterRegistry` is available.
 
 ## Future Work
 
-* Micrometer metrics for heartbeat latency, assignment lag, pending shards, and revoke duration.
 * Backoff and circuit-breaker policy for coordinator unavailability.

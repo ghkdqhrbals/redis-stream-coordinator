@@ -3,6 +3,8 @@ package com.redisstream.producer
 import com.redisstream.consumer.CoordinatorClient
 import com.redisstream.consumer.RestClientCoordinatorClient
 import com.redisstream.consumer.coordinatorRestClient
+import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -21,7 +23,24 @@ import org.springframework.data.redis.connection.RedisConnectionFactory
 class ProducerRoutingAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun producerRoutingCache(properties: ProducerRoutingProperties): ProducerRoutingCache {
+    fun redisStreamProducerMetrics(
+        properties: ProducerRoutingProperties,
+        meterRegistry: ObjectProvider<MeterRegistry>,
+    ): RedisStreamProducerMetrics =
+        meterRegistry.ifAvailable?.let {
+            MicrometerRedisStreamProducerMetrics(
+                registry = it,
+                streamPrefix = properties.streamPrefix,
+                consumerGroup = properties.consumerGroup,
+            )
+        } ?: NoopRedisStreamProducerMetrics
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun producerRoutingCache(
+        properties: ProducerRoutingProperties,
+        metrics: RedisStreamProducerMetrics,
+    ): ProducerRoutingCache {
         val client: CoordinatorClient = RestClientCoordinatorClient(
             coordinatorRestClient(
                 coordinatorBaseUrl = properties.coordinatorBaseUrl,
@@ -34,6 +53,7 @@ class ProducerRoutingAutoConfiguration {
             consumerGroup = properties.consumerGroup,
             client = client,
             refreshInterval = properties.routingRefreshInterval,
+            metrics = metrics,
         )
     }
 
@@ -49,6 +69,7 @@ class ProducerRoutingAutoConfiguration {
     fun redisStreamPublisher(
         routingCache: ProducerRoutingCache,
         writer: RedisStreamWriter,
+        metrics: RedisStreamProducerMetrics,
     ): RedisStreamPublisher =
-        RoutingRedisStreamPublisher(routingCache, writer)
+        RoutingRedisStreamPublisher(routingCache, writer, metrics)
 }

@@ -1,10 +1,12 @@
 package com.redisstream.consumer
 
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.connection.RedisConnectionFactory
 
@@ -21,6 +23,21 @@ class CoordinatorConsumerAutoConfiguration {
     @ConditionalOnMissingBean
     fun coordinatorClient(properties: CoordinatorConsumerProperties): CoordinatorClient =
         RestClientCoordinatorClient(coordinatorRestClient(properties))
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun coordinatorConsumerMetrics(
+        properties: CoordinatorConsumerProperties,
+        meterRegistry: ObjectProvider<MeterRegistry>,
+    ): CoordinatorConsumerMetrics =
+        meterRegistry.ifAvailable?.let {
+            MicrometerCoordinatorConsumerMetrics(
+                registry = it,
+                streamPrefix = properties.streamPrefix,
+                consumerGroup = properties.consumerGroup,
+                memberName = properties.memberName,
+            )
+        } ?: NoopCoordinatorConsumerMetrics
 
     @Bean
     @ConditionalOnBean(RedisConnectionFactory::class)
@@ -40,8 +57,9 @@ class CoordinatorConsumerAutoConfiguration {
         properties: CoordinatorConsumerProperties,
         reader: RedisStreamReader,
         handler: RedisStreamMessageHandler,
+        metrics: CoordinatorConsumerMetrics,
     ): CoordinatorShardLifecycle =
-        RedisStreamConsumerLifecycle(properties, reader, handler)
+        RedisStreamConsumerLifecycle(properties, reader, handler, metrics = metrics)
 
     @Bean
     @ConditionalOnBean(CoordinatorShardLifecycle::class)
@@ -50,6 +68,7 @@ class CoordinatorConsumerAutoConfiguration {
         properties: CoordinatorConsumerProperties,
         client: CoordinatorClient,
         lifecycle: CoordinatorShardLifecycle,
+        metrics: CoordinatorConsumerMetrics,
     ): CoordinatorManagedConsumer =
-        CoordinatorManagedConsumer(properties, client, lifecycle)
+        CoordinatorManagedConsumer(properties, client, lifecycle, metrics)
 }

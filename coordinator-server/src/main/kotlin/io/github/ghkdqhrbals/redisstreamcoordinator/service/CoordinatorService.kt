@@ -18,6 +18,11 @@ import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.Instant
 
+data class CoordinatorTickResult(
+    val scannedGroups: Int,
+    val changedGroups: Int,
+)
+
 @Service
 class CoordinatorService(
     private val properties: CoordinatorProperties,
@@ -395,6 +400,19 @@ class CoordinatorService(
     }
 
     @Synchronized
+    fun tick(): CoordinatorTickResult {
+        val now = Instant.now(clock)
+        val groups = stateStore.list()
+        var changedGroups = 0
+        groups.forEach { group ->
+            if (withStateConflictRetry { refreshGroupOperationalState(group.key(), now) }) {
+                changedGroups += 1
+            }
+        }
+        return CoordinatorTickResult(scannedGroups = groups.size, changedGroups = changedGroups)
+    }
+
+    @Synchronized
     fun listGroups(): GroupsResponse {
         val now = Instant.now(clock)
         return GroupsResponse(stateStore.list().map {
@@ -441,6 +459,15 @@ class CoordinatorService(
     private fun requireGroup(streamPrefix: String, consumerGroup: String): GroupMetadata =
         stateStore.get(GroupKey(streamPrefix, consumerGroup))
             ?: throw CoordinatorException(CoordinatorError.GROUP_NOT_FOUND)
+
+    private fun refreshGroupOperationalState(key: GroupKey, now: Instant): Boolean {
+        val group = stateStore.get(key) ?: return false
+        if (!refreshOperationalState(group, now)) {
+            return false
+        }
+        stateStore.save(key, group)
+        return true
+    }
 
     private fun <T> withStateConflictRetry(block: () -> T): T {
         var attempts = 0

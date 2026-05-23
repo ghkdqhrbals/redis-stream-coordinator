@@ -7,6 +7,7 @@ import com.redisstream.consumer.HeartbeatResponse
 import com.redisstream.consumer.HeartbeatStatus
 import com.redisstream.consumer.ProducerRoutingResponse
 import com.redisstream.consumer.ProducerRoutingShard
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -90,6 +91,38 @@ class RedisStreamPublisherTest {
         assertEquals(2, published.size)
     }
 
+    @Test
+    fun `publisher records success and failure metrics`() {
+        val registry = SimpleMeterRegistry()
+        val metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer")
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                consumerGroup = "orders-consumer",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = RecordingRedisStreamWriter(),
+            metrics = metrics,
+        )
+        val failingPublisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                consumerGroup = "orders-consumer",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = FailingRedisStreamWriter(),
+            metrics = metrics,
+        )
+
+        publisher.publish("order-1", mapOf("payload" to "created"))
+        assertFailsWith<IllegalStateException> {
+            failingPublisher.publish("order-2", mapOf("payload" to "failed"))
+        }
+
+        assertEquals(1.0, registry.get("redis_stream_producer_publish_total").tag("status", "SUCCESS").counter().count())
+        assertEquals(1.0, registry.get("redis_stream_producer_publish_total").tag("status", "ERROR").counter().count())
+    }
+
     private fun routing(): ProducerRoutingResponse =
         ProducerRoutingResponse(
             streamPrefix = "orders",
@@ -123,6 +156,11 @@ private class RecordingRedisStreamWriter : RedisStreamWriter {
         val streamKey: String,
         val fields: Map<String, String>,
     )
+}
+
+private class FailingRedisStreamWriter : RedisStreamWriter {
+    override fun add(streamKey: String, fields: Map<String, String>): String =
+        error("write failed")
 }
 
 private class SingleRoutingClient(

@@ -8,6 +8,7 @@ data class CoordinatorProperties(
     val id: String = "local-coordinator",
     val heartbeatInterval: Duration = Duration.ofSeconds(5),
     val memberLeaseTtl: Duration = Duration.ofSeconds(15),
+    val loop: Loop = Loop(),
     val api: Api = Api(),
     val protocol: Protocol = Protocol(),
     val redisCluster: RedisCluster = RedisCluster(),
@@ -16,6 +17,11 @@ data class CoordinatorProperties(
     val audit: Audit = Audit(),
     val defaults: Defaults = Defaults(),
 ) {
+    data class Loop(
+        val enabled: Boolean = true,
+        val tickInterval: Duration = Duration.ofSeconds(1),
+    )
+
     data class Api(
         val adminUsername: String = "admin",
         val adminPassword: String = "password",

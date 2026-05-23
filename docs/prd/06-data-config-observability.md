@@ -75,13 +75,15 @@ coordinator:
     ssl: false
 
   # KIP-848 스타일 rebalance control plane의 동작 주기와 정책 경계이다.
-  coordinator:
-    # Coordinator event loop 실행 주기이다. heartbeat, metadata change, timeout, migration state를 이 주기마다 평가한다.
+  # member에게 HeartbeatResponse.heartbeatIntervalMs로 내려줄 권장 heartbeat 주기이다.
+  heartbeat-interval: 3s
+  # member heartbeat가 이 시간보다 오래 오지 않으면 EXPIRED/FENCED로 보고 target assignment를 다시 계산한다.
+  member-lease-ttl: 15s
+  loop:
+    # Coordinator event loop 활성화 여부이다.
+    enabled: true
+    # heartbeat timeout, rebalance timeout, migration drain state를 이 주기마다 평가한다.
     tick-interval: 1s
-    # member에게 HeartbeatResponse.heartbeatIntervalMs로 내려줄 권장 heartbeat 주기이다.
-    heartbeat-interval: 3s
-    # member heartbeat가 이 시간보다 오래 오지 않으면 EXPIRED/FENCED로 보고 target assignment를 다시 계산한다.
-    member-lease-ttl: 15s
 
   # Admin API 요청에서 값이 생략됐을 때 적용되는 기본값이다.
   defaults:

@@ -6,13 +6,13 @@ Last updated: 2026-05-23
 
 The repository now has Spring Boot 4 / Kotlin / Java 24 Gradle modules named `coordinator-server` and `redisstream-spring-boot-starter`.
 
-The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, producer routing metadata, and basic monitoring responses.
+The current implementation is an MVP control-plane server for the Redis Stream Coordinator PRD. It exposes the planned HTTP API surface, manages group metadata, member heartbeat state, target/current assignment, migration state, producer routing metadata, coordinator event loop ticks, and basic monitoring responses.
 
 The coordinator state defaults to memory, and group-level metadata can also be stored in Redis by setting `coordinator.store.type=redis`.
 The module is connected to a local three-node Redis Cluster for connectivity, metadata-store work, and Redis Stream shard provisioning tests.
 Stream shard key formatting, Redis Cluster hash-slot planning, and opt-in Redis Stream shard provisioning are now implemented.
 The RedisStream starter provides Spring Boot auto-configuration, a coordinator HTTP client, a shard lifecycle callback contract that application code can implement, a producer routing metadata cache, a Redis Stream publisher, and an opt-in Redis Stream consumer adapter.
-The starter also supports graceful consumer leave on shutdown and convenience producer publish APIs.
+The starter also supports graceful consumer leave on shutdown, convenience producer publish APIs, and Micrometer metrics when a `MeterRegistry` is available.
 
 ## Build and Tooling
 
@@ -107,9 +107,13 @@ Consumer starter files:
   * package: `com.redisstream.consumer`
 * `RedisStreamConsumerAdapter.kt`
   * package: `com.redisstream.consumer`
+* `CoordinatorConsumerMetrics.kt`
+  * package: `com.redisstream.consumer`
 * `ProducerRoutingCache.kt`, `ProducerRoutingAutoConfiguration.kt`
   * package: `com.redisstream.producer`
 * `RedisStreamPublisher.kt`
+  * package: `com.redisstream.producer`
+* `RedisStreamProducerMetrics.kt`
   * package: `com.redisstream.producer`
 
 ## Implemented API Surface
@@ -152,6 +156,7 @@ Implemented:
 * Member join/rejoin through heartbeat with `memberEpoch=0`.
 * Graceful leave through heartbeat with `memberEpoch=-1`.
 * Member lease expiration based on `member-lease-ttl`.
+* Scheduled coordinator event loop for member lease expiry, rebalance timeout, and migration drain progress.
 * Group epoch, metadata version, and assignment epoch tracking.
 * Configurable heartbeat protocol compatibility range.
 * Coordinator-issued member epoch validation that rejects active epoch reset, client-advanced epochs, and unsupported negative epochs.
@@ -380,6 +385,7 @@ Expected response:
 * [x] Add validation error responses.
 * [x] Add Basic Auth for admin and monitoring APIs.
 * [x] Make member heartbeat authentication configurable.
+* [x] Add scheduled coordinator event loop.
 
 ### Phase 3: In-Memory Coordination Semantics
 
@@ -471,7 +477,8 @@ Expected response:
 * [x] Add Redis Stream publisher.
 * [x] Add convenience payload and ordered batch publish APIs.
 * [x] Add built-in Redis Stream polling adapter.
-* [ ] Add consumer-side Micrometer metrics.
+* [x] Add consumer-side Micrometer metrics.
+* [x] Add producer-side Micrometer metrics.
 
 ### Phase 9: Docker Distribution
 
@@ -497,6 +504,7 @@ Implemented tests:
 * Missing group heartbeat is rejected as `UNKNOWN_MEMBER_ID`.
 * Unknown member cannot leave by sending `memberEpoch=-1`.
 * Expired member is removed from target assignment and shards are reassigned after lease expiry.
+* Coordinator event loop tick expires silent members without requiring another heartbeat.
 * Consumer concurrency policy changes rebalance target assignments by member weight.
 * Consumer concurrency policy changes that move assignments advance `groupEpoch`, `assignmentEpoch`, and subsequent heartbeat `memberEpoch`.
 * Rebalance timeout fences an old owner that does not revoke a moved shard and keeps a timely revoker active.
@@ -528,6 +536,7 @@ Implemented tests:
 * Redis Stream publisher supports convenience payload and ordered batch publish APIs.
 * Built-in Redis Stream consumer lifecycle polls assigned shards, calls the application handler, and acknowledges successfully handled records.
 * Built-in Redis Stream consumer leaves failed handler messages unacked so the application's Redis retry policy can recover them.
+* RedisStream starter records Micrometer heartbeat, assignment, revoke, message, routing refresh, cache hit, and publish metrics.
 * Gated Redis integration verifies provisioned Redis Stream consumer groups for initial and next-version shards.
 * Gated Redis integration verifies direct stream provisioning is idempotent when Redis consumer groups already exist.
 * HTTP integration covers Basic Auth, request validation, group creation, member heartbeat, and monitoring assignments.
@@ -561,8 +570,7 @@ redisstream-spring-boot-starter/src/test/kotlin/com/redisstream/producer/RedisSt
 
 Remaining work:
 
-* Coordinator event loop as a scheduled worker.
-* Metrics listed in the PRD.
+* Coordinator metrics listed in the PRD.
 * Rate limiting.
 * Explicit Redis metadata `schemaVersion` and migration guard.
 * Coordinator server Docker image build and publish workflow.
@@ -586,4 +594,4 @@ Next implementation step should be to prepare public Docker distribution and kee
 1. Add coordinator server Docker image build and smoke test.
 2. Add retry/failure integration tests for stream provisioning.
 3. Complete stricter stale member fencing semantics.
-4. Add Micrometer metrics for coordinator and starter runtime behavior.
+4. Add Micrometer metrics for coordinator runtime behavior.

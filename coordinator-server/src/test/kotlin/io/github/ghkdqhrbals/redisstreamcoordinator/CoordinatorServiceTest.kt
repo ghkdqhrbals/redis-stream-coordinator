@@ -131,6 +131,28 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `coordinator tick expires silent members without waiting for another heartbeat`() {
+        service.createGroup("tick-orders", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val first = service.heartbeat("tick-orders", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "tick-orders",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+
+        clock.advance(Duration.ofSeconds(16))
+        val tick = service.tick()
+        val members = service.listMembers("tick-orders", "orders-consumer").members
+        val assignments = service.assignments("tick-orders", "orders-consumer")
+
+        assertEquals(1, tick.scannedGroups)
+        assertEquals(1, tick.changedGroups)
+        assertEquals(MemberState.EXPIRED, members.single().state)
+        assertTrue(assignments.targetAssignment.isEmpty())
+    }
+
+    @Test
     fun `capacity rebalances by member weight`() {
         service.createGroup("events", "events-consumer", createGroupRequest(initialShardCount = 8))
         val first = service.heartbeat("events", "events-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))

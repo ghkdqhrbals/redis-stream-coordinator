@@ -20,6 +20,7 @@ class ProducerRoutingCache(
     private val client: CoordinatorClient,
     private val refreshInterval: Duration = Duration.ofSeconds(30),
     private val clock: Clock = Clock.systemUTC(),
+    private val metrics: RedisStreamProducerMetrics = NoopRedisStreamProducerMetrics,
 ) {
     private var cached: CachedRouting? = null
 
@@ -70,10 +71,17 @@ class ProducerRoutingCache(
         val now = Instant.now(clock)
         val snapshot = cached
         if (!forceRefresh && snapshot != null && now.isBefore(snapshot.expiresAt)) {
+            metrics.recordRoutingCacheHit()
             return snapshot.metadata
         }
 
-        val fetched = client.producerRouting(streamPrefix, consumerGroup).also(::validate)
+        val fetched = try {
+            client.producerRouting(streamPrefix, consumerGroup).also(::validate)
+        } catch (error: RuntimeException) {
+            metrics.recordRoutingRefresh("ERROR", Duration.between(now, Instant.now(clock)))
+            throw error
+        }
+        metrics.recordRoutingRefresh("SUCCESS", Duration.between(now, Instant.now(clock)))
         cached = when {
             snapshot == null -> CachedRouting(fetched, now.plus(refreshInterval))
             snapshot.metadata.metadataVersion == fetched.metadataVersion ->

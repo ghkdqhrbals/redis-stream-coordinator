@@ -20,6 +20,9 @@ coordinator:
   id: local-coordinator
   heartbeat-interval: 5s
   member-lease-ttl: 15s
+  loop:
+    enabled: true
+    tick-interval: 1s
   api:
     admin-username: admin
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}

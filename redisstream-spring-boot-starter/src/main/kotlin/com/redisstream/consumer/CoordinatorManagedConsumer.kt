@@ -1,6 +1,7 @@
 package com.redisstream.consumer
 
 import org.springframework.context.SmartLifecycle
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -13,6 +14,7 @@ class CoordinatorManagedConsumer(
     private val properties: CoordinatorConsumerProperties,
     private val client: CoordinatorClient,
     private val lifecycle: CoordinatorShardLifecycle,
+    private val metrics: CoordinatorConsumerMetrics = NoopCoordinatorConsumerMetrics,
 ) : SmartLifecycle {
     private val running = AtomicBoolean(false)
     private var executor: ScheduledExecutorService? = null
@@ -69,27 +71,34 @@ class CoordinatorManagedConsumer(
         }
 
         refreshRevocationProgress()
-        val response = client.heartbeat(
-            streamPrefix = properties.streamPrefix,
-            consumerGroup = properties.consumerGroup,
-            memberId = properties.memberId,
-            request = HeartbeatRequest(
-                protocolVersion = properties.protocolVersion,
-                requestId = UUID.randomUUID().toString(),
+        val startedAt = Instant.now()
+        val response = try {
+            client.heartbeat(
+                streamPrefix = properties.streamPrefix,
+                consumerGroup = properties.consumerGroup,
                 memberId = properties.memberId,
-                memberName = properties.memberName,
-                memberEpoch = memberEpoch,
-                rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
-                metadataVersion = metadataVersion,
-                runtimeConsumerCapacity = RuntimeConsumerCapacity(
-                    runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
-                    availableConcurrency = properties.runtimeMaxConcurrency,
+                request = HeartbeatRequest(
+                    protocolVersion = properties.protocolVersion,
+                    requestId = UUID.randomUUID().toString(),
+                    memberId = properties.memberId,
+                    memberName = properties.memberName,
+                    memberEpoch = memberEpoch,
+                    rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
+                    metadataVersion = metadataVersion,
+                    runtimeConsumerCapacity = RuntimeConsumerCapacity(
+                        runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
+                        availableConcurrency = properties.runtimeMaxConcurrency,
+                    ),
+                    ownedShards = ownedShards,
+                    revokingShards = revokingShards.values.toList(),
                 ),
-                ownedShards = ownedShards,
-                revokingShards = revokingShards.values.toList(),
-            ),
-        )
+            )
+        } catch (error: RuntimeException) {
+            metrics.recordHeartbeat(HeartbeatStatus.RETRY, Duration.between(startedAt, Instant.now()))
+            throw error
+        }
 
+        metrics.recordHeartbeat(response.status, Duration.between(startedAt, Instant.now()))
         apply(response)
         return response
     }
@@ -102,7 +111,9 @@ class CoordinatorManagedConsumer(
             "Unsupported heartbeat protocol version ${properties.protocolVersion}; supported range is " +
                 "${CoordinatorConsumerProtocol.MIN_HEARTBEAT_VERSION}..${CoordinatorConsumerProtocol.MAX_HEARTBEAT_VERSION}"
         }
+        val startedAt = Instant.now()
         if (memberEpoch == 0L && ownedShards.isEmpty() && revokingShards.isEmpty()) {
+            metrics.recordLeave(null, Duration.between(startedAt, Instant.now()))
             return null
         }
 
@@ -118,27 +129,33 @@ class CoordinatorManagedConsumer(
             }
         }
 
-        val response = client.heartbeat(
-            streamPrefix = properties.streamPrefix,
-            consumerGroup = properties.consumerGroup,
-            memberId = properties.memberId,
-            request = HeartbeatRequest(
-                protocolVersion = properties.protocolVersion,
-                requestId = UUID.randomUUID().toString(),
+        val response = try {
+            client.heartbeat(
+                streamPrefix = properties.streamPrefix,
+                consumerGroup = properties.consumerGroup,
                 memberId = properties.memberId,
-                memberName = properties.memberName,
-                memberEpoch = -1,
-                rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
-                metadataVersion = metadataVersion,
-                runtimeConsumerCapacity = RuntimeConsumerCapacity(
-                    runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
-                    availableConcurrency = 0,
+                request = HeartbeatRequest(
+                    protocolVersion = properties.protocolVersion,
+                    requestId = UUID.randomUUID().toString(),
+                    memberId = properties.memberId,
+                    memberName = properties.memberName,
+                    memberEpoch = -1,
+                    rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
+                    metadataVersion = metadataVersion,
+                    runtimeConsumerCapacity = RuntimeConsumerCapacity(
+                        runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
+                        availableConcurrency = 0,
+                    ),
+                    ownedShards = ownedShards,
+                    revokingShards = revokingShards.values.toList(),
                 ),
-                ownedShards = ownedShards,
-                revokingShards = revokingShards.values.toList(),
-            ),
-        )
+            )
+        } catch (error: RuntimeException) {
+            metrics.recordLeave(HeartbeatStatus.RETRY, Duration.between(startedAt, Instant.now()))
+            throw error
+        }
 
+        metrics.recordLeave(response.status, Duration.between(startedAt, Instant.now()))
         if (response.status == HeartbeatStatus.OK ||
             response.status == HeartbeatStatus.UNKNOWN_MEMBER_ID ||
             response.status == HeartbeatStatus.FENCED_MEMBER_EPOCH
@@ -159,10 +176,12 @@ class CoordinatorManagedConsumer(
             HeartbeatStatus.OK -> applyAssignment(response, context)
             HeartbeatStatus.FENCED_MEMBER_EPOCH, HeartbeatStatus.UNKNOWN_MEMBER_ID -> {
                 lifecycle.onFenced(context)
+                metrics.recordFenced()
                 memberEpoch = 0
                 metadataVersion = 0
                 ownedShards = emptySet()
                 revokingShards = emptyMap()
+                metrics.recordAssignment(0, 0, 0)
             }
             HeartbeatStatus.RETRY -> Unit
             HeartbeatStatus.UNSUPPORTED_PROTOCOL, HeartbeatStatus.INVALID_REQUEST -> {
@@ -198,11 +217,17 @@ class CoordinatorManagedConsumer(
                     nextRevokingShards[shard] = RevokingShardReport(shard, RevokingShardState.DRAINING, inFlight = 1)
                 }
             }
+            metrics.recordRevoked(completed.size)
             revokingShards = nextRevokingShards
         } else {
             revokingShards = nextRevokingShards.filterValues { it.state != RevokingShardState.REVOKED || it.inFlight != 0 }
         }
         ownedShards = nextAssigned
+        metrics.recordAssignment(
+            assignedShards = ownedShards.size,
+            pendingShards = response.assignment.pendingShards.size,
+            revokingShards = revokingShards.size,
+        )
     }
 
     private fun context(groupEpoch: Long, assignmentEpoch: Long): CoordinatorConsumerContext =
@@ -227,6 +252,7 @@ class CoordinatorManagedConsumer(
         if (completed.isEmpty()) {
             return
         }
+        metrics.recordRevoked(completed.size)
         revokingShards = revokingShards.mapValues { (shard, report) ->
             if (shard in completed) {
                 RevokingShardReport(shard, RevokingShardState.REVOKED, inFlight = 0, ackedAt = Instant.now())

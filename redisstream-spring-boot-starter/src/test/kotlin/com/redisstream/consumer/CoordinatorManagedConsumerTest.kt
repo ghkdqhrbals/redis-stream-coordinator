@@ -1,5 +1,6 @@
 package com.redisstream.consumer
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -188,6 +189,41 @@ class CoordinatorManagedConsumerTest {
 
         assertEquals(setOf(pendingShard), lifecycle.pending.single())
         assertEquals(emptySet(), client.requests.single().ownedShards)
+    }
+
+    @Test
+    fun `managed consumer records heartbeat assignment and fenced metrics`() {
+        val assigned = setOf(CoordinatorShard(1, 0))
+        val registry = SimpleMeterRegistry()
+        val metrics = MicrometerCoordinatorConsumerMetrics(
+            registry = registry,
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            memberName = "member-a",
+        )
+        val client = ScriptedCoordinatorClient(
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(assigned, emptySet(), 2),
+            ),
+            heartbeatResponse(
+                status = HeartbeatStatus.FENCED_MEMBER_EPOCH,
+                memberEpoch = 1,
+                assignment = AssignmentView(emptySet(), emptySet(), 2),
+            ),
+        )
+        val consumer = CoordinatorManagedConsumer(properties(), client, RecordingShardLifecycle(), metrics)
+
+        consumer.pollOnce()
+        consumer.pollOnce()
+
+        assertEquals(1.0, registry.get("redis_stream_consumer_heartbeat_total").tag("status", "OK").counter().count())
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_consumer_heartbeat_total").tag("status", "FENCED_MEMBER_EPOCH").counter().count(),
+        )
+        assertEquals(1.0, registry.get("redis_stream_consumer_fenced_total").counter().count())
+        assertEquals(0.0, registry.get("redis_stream_consumer_assigned_shards").gauge().value())
     }
 
     @Test

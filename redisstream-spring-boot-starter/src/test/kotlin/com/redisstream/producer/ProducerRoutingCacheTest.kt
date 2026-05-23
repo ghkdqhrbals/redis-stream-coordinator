@@ -6,6 +6,7 @@ import com.redisstream.consumer.HeartbeatRequest
 import com.redisstream.consumer.HeartbeatResponse
 import com.redisstream.consumer.ProducerRoutingResponse
 import com.redisstream.consumer.ProducerRoutingShard
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -82,6 +83,27 @@ class ProducerRoutingCacheTest {
         assertEquals(2, client.calls)
         assertEquals(2, refreshed.metadataVersion)
         assertEquals(2, cache.route("order-1").activeWriteVersion)
+    }
+
+    @Test
+    fun `routing cache records refresh and cache hit metrics`() {
+        val registry = SimpleMeterRegistry()
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            client = ScriptedRoutingClient(routing(version = 1, activeWriteVersion = 1, shardCount = 2)),
+            refreshInterval = Duration.ofMinutes(5),
+            metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer"),
+        )
+
+        cache.route("order-1")
+        cache.route("order-2")
+
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_producer_routing_refresh_total").tag("status", "SUCCESS").counter().count(),
+        )
+        assertEquals(1.0, registry.get("redis_stream_producer_routing_cache_hit_total").counter().count())
     }
 
     @Test

@@ -4,6 +4,9 @@ import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.data.redis.connection.RedisStreamCommands
 import org.springframework.data.redis.connection.stream.RecordId
 import org.springframework.data.redis.connection.stream.StreamRecords
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
 
 data class PublishedRedisStreamMessage(
     val streamKey: String,
@@ -29,18 +32,27 @@ interface RedisStreamPublisher {
 class RoutingRedisStreamPublisher(
     private val routingCache: ProducerRoutingCache,
     private val writer: RedisStreamWriter,
+    private val metrics: RedisStreamProducerMetrics = NoopRedisStreamProducerMetrics,
+    private val clock: Clock = Clock.systemUTC(),
 ) : RedisStreamPublisher {
     override fun publish(partitionKey: String, fields: Map<String, String>): PublishedRedisStreamMessage {
         require(partitionKey.isNotBlank()) { "partitionKey must not be blank" }
         require(fields.isNotEmpty()) { "Redis Stream message fields must not be empty" }
 
-        val route = routingCache.route(partitionKey)
-        val recordId = writer.add(route.streamKey, fields)
-        return PublishedRedisStreamMessage(
-            streamKey = route.streamKey,
-            recordId = recordId,
-            route = route,
-        )
+        val startedAt = Instant.now(clock)
+        try {
+            val route = routingCache.route(partitionKey)
+            val recordId = writer.add(route.streamKey, fields)
+            metrics.recordPublish("SUCCESS", Duration.between(startedAt, Instant.now(clock)))
+            return PublishedRedisStreamMessage(
+                streamKey = route.streamKey,
+                recordId = recordId,
+                route = route,
+            )
+        } catch (error: RuntimeException) {
+            metrics.recordPublish("ERROR", Duration.between(startedAt, Instant.now(clock)))
+            throw error
+        }
     }
 }
 
