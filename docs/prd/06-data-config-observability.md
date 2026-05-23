@@ -145,8 +145,12 @@ Coordinator metric은 rebalance server 상태만 다룬다.
 * `redis_stream_coord_scale_request_failed_total`
 * `redis_stream_coord_consumer_concurrency_update_total`
 * `redis_stream_coord_migration_active`
+* `redis_stream_coord_migration_active_age_seconds`
 * `redis_stream_coord_revoke_pending`
+* `redis_stream_coord_invariant_violations`
 * `redis_stream_coord_invariant_violation_total`
+* `redis_stream_coord_tick_total`
+* `redis_stream_coord_tick_duration`
 
 Message read/ack, handler duration, Redis Stream lag, pending recovery, duplicate processing metric은 member/data-plane metric이다.
 

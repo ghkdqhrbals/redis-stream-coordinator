@@ -16,6 +16,7 @@ import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.stereotype.Service
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 
 data class CoordinatorTickResult(
@@ -30,6 +31,7 @@ class CoordinatorService(
     private val redisConnectionFactory: ObjectProvider<RedisConnectionFactory>,
     private val streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
     private val clock: Clock = Clock.systemUTC(),
+    private val metrics: CoordinatorMetrics = NoopCoordinatorMetrics,
 ) {
     @Synchronized
     fun createGroup(streamPrefix: String, consumerGroup: String, request: CreateGroupRequest): GroupResponse {
@@ -71,6 +73,7 @@ class CoordinatorService(
                 ?.let(error::addSuppressed)
             throw error
         }
+        recordGroupState(group)
         return group.toResponse()
     }
 
@@ -80,6 +83,7 @@ class CoordinatorService(
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
             }
+            recordGroupState(group)
             group.toResponse()
         }
 
@@ -89,12 +93,25 @@ class CoordinatorService(
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
             }
+            recordGroupState(group)
             group.toProducerRoutingResponse()
         }
 
     @Synchronized
-    fun scaleGroup(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration =
-        withStateConflictRetry { scaleGroupOnce(streamPrefix, consumerGroup, request) }
+    fun scaleGroup(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
+        try {
+            val migration = withStateConflictRetry { scaleGroupOnce(streamPrefix, consumerGroup, request) }
+            metrics.recordScaleRequest(
+                streamPrefix,
+                consumerGroup,
+                if (migration.migrationId == "noop") "NOOP" else "SUCCESS",
+            )
+            return migration
+        } catch (error: RuntimeException) {
+            metrics.recordScaleRequest(streamPrefix, consumerGroup, "ERROR")
+            throw error
+        }
+    }
 
     private fun scaleGroupOnce(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
@@ -172,6 +189,7 @@ class CoordinatorService(
         reconcile(group, now)
         enforceRebalanceTimeouts(group, now)
         stateStore.save(group.key(), group)
+        recordGroupState(group)
         return migration
     }
 
@@ -180,8 +198,16 @@ class CoordinatorService(
         streamPrefix: String,
         consumerGroup: String,
         request: UpdateConsumerConcurrencyRequest,
-    ): ConsumerConcurrencyResponse =
-        withStateConflictRetry { updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request) }
+    ): ConsumerConcurrencyResponse {
+        try {
+            val response = withStateConflictRetry { updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request) }
+            metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "SUCCESS")
+            return response
+        } catch (error: RuntimeException) {
+            metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "ERROR")
+            throw error
+        }
+    }
 
     private fun updateConsumerConcurrencyOnce(
         streamPrefix: String,
@@ -205,6 +231,7 @@ class CoordinatorService(
             enforceRebalanceTimeouts(group, now)
             stateStore.save(group.key(), group)
         }
+        recordGroupState(group)
 
         return ConsumerConcurrencyResponse(
             streamPrefix = streamPrefix,
@@ -249,6 +276,7 @@ class CoordinatorService(
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
         stateStore.save(group.key(), group)
+        recordGroupState(group)
         return migration
     }
 
@@ -258,8 +286,11 @@ class CoordinatorService(
         consumerGroup: String,
         memberId: String,
         request: HeartbeatRequest,
-    ): HeartbeatResponse =
-        withStateConflictRetry { heartbeatOnce(streamPrefix, consumerGroup, memberId, request) }
+    ): HeartbeatResponse {
+        val response = withStateConflictRetry { heartbeatOnce(streamPrefix, consumerGroup, memberId, request) }
+        metrics.recordHeartbeat(streamPrefix, consumerGroup, response.status)
+        return response
+    }
 
     private fun heartbeatOnce(
         streamPrefix: String,
@@ -288,7 +319,7 @@ class CoordinatorService(
         val existing = group.members[memberId]
         val member = when {
             request.memberEpoch < -1L -> {
-                if (membersExpired) {
+                if (membersExpired > 0) {
                     stateStore.save(group.key(), group)
                 }
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
@@ -300,26 +331,26 @@ class CoordinatorService(
             request.memberEpoch == 0L && (existing.state == MemberState.EXPIRED || existing.state == MemberState.FENCED) ->
                 registerOrRejoinMember(group, memberId, request, now)
             request.memberEpoch == 0L -> {
-                if (membersExpired) {
+                if (membersExpired > 0) {
                     stateStore.save(group.key(), group)
                 }
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
             }
             request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
             existing.state == MemberState.FENCED || existing.state == MemberState.EXPIRED -> {
-                if (membersExpired) {
+                if (membersExpired > 0) {
                     stateStore.save(group.key(), group)
                 }
                 return fencedHeartbeat(group, request, memberId, existing)
             }
             request.memberEpoch > existing.memberEpoch -> {
-                if (membersExpired) {
+                if (membersExpired > 0) {
                     stateStore.save(group.key(), group)
                 }
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
             }
             request.memberEpoch < existing.memberEpoch -> {
-                if (membersExpired) {
+                if (membersExpired > 0) {
                     stateStore.save(group.key(), group)
                 }
                 return fencedHeartbeat(group, request, memberId, existing)
@@ -356,6 +387,7 @@ class CoordinatorService(
             member.memberEpoch = group.assignmentEpoch
         }
         stateStore.save(group.key(), group)
+        recordGroupState(group)
 
         val target = group.targetAssignments[memberId].orEmpty()
         val blocked = blockedShards(group, memberId)
@@ -391,16 +423,19 @@ class CoordinatorService(
             )
         } ?: "NOT_CONFIGURED"
 
-        return HealthResponse(
+        val health = HealthResponse(
             status = if (redisStatus == "DOWN") "DEGRADED" else "UP",
             coordinatorId = properties.id,
             redis = redisStatus,
             loop = "UP",
         )
+        metrics.recordHealth(health.status == "UP")
+        return health
     }
 
     @Synchronized
     fun tick(): CoordinatorTickResult {
+        val startedAt = Instant.now(clock)
         val now = Instant.now(clock)
         val groups = stateStore.list()
         var changedGroups = 0
@@ -409,7 +444,9 @@ class CoordinatorService(
                 changedGroups += 1
             }
         }
-        return CoordinatorTickResult(scannedGroups = groups.size, changedGroups = changedGroups)
+        val result = CoordinatorTickResult(scannedGroups = groups.size, changedGroups = changedGroups)
+        metrics.recordTick(result, Duration.between(startedAt, Instant.now(clock)))
+        return result
     }
 
     @Synchronized
@@ -419,6 +456,7 @@ class CoordinatorService(
             if (refreshOperationalState(it, now)) {
                 stateStore.save(it.key(), it)
             }
+            recordGroupState(it)
             it.toResponse()
         })
     }
@@ -429,6 +467,7 @@ class CoordinatorService(
         if (refreshOperationalState(group, Instant.now(clock))) {
             stateStore.save(group.key(), group)
         }
+        recordGroupState(group)
         return MembersResponse(group.members.values.sortedBy { it.memberId })
     }
 
@@ -438,12 +477,14 @@ class CoordinatorService(
         if (refreshOperationalState(group, Instant.now(clock))) {
             stateStore.save(group.key(), group)
         }
+        val violations = invariantViolations(group)
+        metrics.recordGroupState(group, violations.size)
         return AssignmentsResponse(
             targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
             currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
             revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }
                 .filterValues { it.isNotEmpty() },
-            invariantViolations = invariantViolations(group),
+            invariantViolations = violations,
         )
     }
 
@@ -518,7 +559,7 @@ class CoordinatorService(
     }
 
     private fun refreshOperationalState(group: GroupMetadata, now: Instant): Boolean {
-        val expired = expireMembers(group, now)
+        val expired = expireMembers(group, now) > 0
         val timedOut = enforceRebalanceTimeouts(group, now)
         val migrationAdvanced = advanceMigrationDrainState(group, now)
         return expired || timedOut || migrationAdvanced
@@ -576,20 +617,21 @@ class CoordinatorService(
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
-    private fun expireMembers(group: GroupMetadata, now: Instant): Boolean {
-        var changed = false
+    private fun expireMembers(group: GroupMetadata, now: Instant): Int {
+        var expiredCount = 0
         group.members.values.forEach { member ->
             if ((member.state == MemberState.ACTIVE || member.state == MemberState.STARTING) && now.isAfter(member.memberLeaseExpiresAt)) {
                 member.state = MemberState.EXPIRED
                 member.memberEpoch = member.memberEpoch + 1
-                changed = true
+                expiredCount += 1
             }
         }
-        if (changed) {
+        if (expiredCount > 0) {
             bumpMetadata(group, now, bumpGroupEpoch = true)
             reconcile(group, now)
+            metrics.recordMemberExpired(group, expiredCount)
         }
-        return changed
+        return expiredCount
     }
 
     private fun enforceRebalanceTimeouts(group: GroupMetadata, now: Instant): Boolean {
@@ -683,6 +725,9 @@ class CoordinatorService(
     }
 
     private fun reconcile(group: GroupMetadata, now: Instant) {
+        val startedAt = Instant.now(clock)
+        val previousAssignments = group.targetAssignmentSnapshot()
+        val previousState = group.state
         val liveMembers = group.liveMembers()
             .sortedBy { it.memberId }
 
@@ -691,6 +736,7 @@ class CoordinatorService(
             group.assignmentEpoch = group.groupEpoch
             group.state = GroupState.EMPTY
             group.updatedAt = now
+            recordRebalanceIfChanged(group, previousAssignments, previousState, startedAt)
             return
         }
 
@@ -699,6 +745,20 @@ class CoordinatorService(
         group.assignmentEpoch = group.groupEpoch
         group.state = if (hasPendingConvergence(group)) GroupState.RECONCILING else GroupState.STABLE
         group.updatedAt = now
+        recordRebalanceIfChanged(group, previousAssignments, previousState, startedAt)
+    }
+
+    private fun recordRebalanceIfChanged(
+        group: GroupMetadata,
+        previousAssignments: Map<String, Set<ShardId>>,
+        previousState: GroupState,
+        startedAt: Instant,
+    ) {
+        val changed = previousAssignments != group.targetAssignmentSnapshot() || previousState != group.state
+        if (changed) {
+            metrics.recordRebalance(group, "reconcile", Duration.between(startedAt, Instant.now(clock)))
+        }
+        recordGroupState(group)
     }
 
     private fun computeStickyAssignment(
@@ -796,6 +856,10 @@ class CoordinatorService(
         }
         group.metadataVersion += 1
         group.updatedAt = now
+    }
+
+    private fun recordGroupState(group: GroupMetadata) {
+        metrics.recordGroupState(group, invariantViolations(group).size)
     }
 
     private fun GroupMetadata.targetAssignmentSnapshot(): Map<String, Set<ShardId>> =
