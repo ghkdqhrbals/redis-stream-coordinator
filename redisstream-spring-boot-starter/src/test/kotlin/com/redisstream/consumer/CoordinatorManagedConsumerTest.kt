@@ -224,6 +224,9 @@ class CoordinatorManagedConsumerTest {
         )
         assertEquals(1.0, registry.get("redis_stream_consumer_fenced_total").counter().count())
         assertEquals(0.0, registry.get("redis_stream_consumer_assigned_shards").gauge().value())
+        assertEquals(4.0, registry.get("redis_stream_consumer_runtime_max_concurrency").gauge().value())
+        assertEquals(4.0, registry.get("redis_stream_consumer_available_concurrency").gauge().value())
+        assertEquals(0.0, registry.get("redis_stream_consumer_in_flight_messages").gauge().value())
     }
 
     @Test

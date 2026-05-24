@@ -57,6 +57,15 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `basic auth scheme is parsed case insensitively`() {
+        mockMvc.perform(
+            get("/coord/v1/monitoring/groups")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth().replaceFirst("Basic ", "basic ")),
+        )
+            .andExpect(status().isOk)
+    }
+
+    @Test
     fun `admin api validates create group body`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-validation/groups/orders-consumer")

@@ -26,6 +26,7 @@ interface CoordinatorMetrics {
     fun recordScaleRequest(streamPrefix: String, consumerGroup: String, status: String)
     fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String)
     fun recordTick(result: CoordinatorTickResult, duration: Duration)
+    fun recordStateConflict(operation: String, attempt: Int)
     fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int)
 }
 
@@ -37,6 +38,7 @@ object NoopCoordinatorMetrics : CoordinatorMetrics {
     override fun recordScaleRequest(streamPrefix: String, consumerGroup: String, status: String) = Unit
     override fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String) = Unit
     override fun recordTick(result: CoordinatorTickResult, duration: Duration) = Unit
+    override fun recordStateConflict(operation: String, attempt: Int) = Unit
     override fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int) = Unit
 }
 
@@ -68,6 +70,9 @@ class AutoConfiguredCoordinatorMetrics(
 
     override fun recordTick(result: CoordinatorTickResult, duration: Duration) =
         delegate.recordTick(result, duration)
+
+    override fun recordStateConflict(operation: String, attempt: Int) =
+        delegate.recordStateConflict(operation, attempt)
 
     override fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int) =
         delegate.recordGroupState(group, invariantViolationCount)
@@ -130,6 +135,13 @@ class MicrometerCoordinatorMetrics(
         val tags = coordinatorTags.and("changed", (result.changedGroups > 0).toString())
         registry.counter("redis_stream_coord_tick_total", tags).increment()
         registry.timer("redis_stream_coord_tick_duration", tags).record(duration)
+    }
+
+    override fun recordStateConflict(operation: String, attempt: Int) {
+        registry.counter(
+            "redis_stream_coord_state_conflict_total",
+            coordinatorTags.and("operation", operation, "attempt", attempt.coerceAtLeast(1).toString()),
+        ).increment()
     }
 
     override fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int) {

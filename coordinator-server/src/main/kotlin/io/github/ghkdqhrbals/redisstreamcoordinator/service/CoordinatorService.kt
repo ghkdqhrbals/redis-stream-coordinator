@@ -79,7 +79,7 @@ class CoordinatorService(
 
     @Synchronized
     fun getGroup(streamPrefix: String, consumerGroup: String): GroupResponse =
-        withStateConflictRetry {
+        withStateConflictRetry("get-group") {
             val group = requireGroup(streamPrefix, consumerGroup)
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
@@ -90,7 +90,7 @@ class CoordinatorService(
 
     @Synchronized
     fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
-        withStateConflictRetry {
+        withStateConflictRetry("producer-routing") {
             val group = requireGroup(streamPrefix, consumerGroup)
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
@@ -102,7 +102,7 @@ class CoordinatorService(
     @Synchronized
     fun scaleGroup(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
         try {
-            val migration = withStateConflictRetry { scaleGroupOnce(streamPrefix, consumerGroup, request) }
+            val migration = withStateConflictRetry("scale-group") { scaleGroupOnce(streamPrefix, consumerGroup, request) }
             metrics.recordScaleRequest(
                 streamPrefix,
                 consumerGroup,
@@ -202,7 +202,9 @@ class CoordinatorService(
         request: UpdateConsumerConcurrencyRequest,
     ): ConsumerConcurrencyResponse {
         try {
-            val response = withStateConflictRetry { updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request) }
+            val response = withStateConflictRetry("update-consumer-concurrency") {
+                updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request)
+            }
             metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "SUCCESS")
             return response
         } catch (error: RuntimeException) {
@@ -254,7 +256,7 @@ class CoordinatorService(
 
     @Synchronized
     fun rollbackMigration(streamPrefix: String, consumerGroup: String, migrationId: String): Migration =
-        withStateConflictRetry { rollbackMigrationOnce(streamPrefix, consumerGroup, migrationId) }
+        withStateConflictRetry("rollback-migration") { rollbackMigrationOnce(streamPrefix, consumerGroup, migrationId) }
 
     private fun rollbackMigrationOnce(streamPrefix: String, consumerGroup: String, migrationId: String): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
@@ -289,7 +291,7 @@ class CoordinatorService(
         memberId: String,
         request: HeartbeatRequest,
     ): HeartbeatResponse {
-        val response = withStateConflictRetry { heartbeatOnce(streamPrefix, consumerGroup, memberId, request) }
+        val response = withStateConflictRetry("heartbeat") { heartbeatOnce(streamPrefix, consumerGroup, memberId, request) }
         metrics.recordHeartbeat(streamPrefix, consumerGroup, response.status)
         return response
     }
@@ -442,7 +444,7 @@ class CoordinatorService(
         val groups = stateStore.list()
         var changedGroups = 0
         groups.forEach { group ->
-            if (withStateConflictRetry { refreshGroupOperationalState(group.key(), now) }) {
+            if (withStateConflictRetry("tick-refresh") { refreshGroupOperationalState(group.key(), now) }) {
                 changedGroups += 1
             }
         }
@@ -454,7 +456,7 @@ class CoordinatorService(
     @Synchronized
     fun listGroups(): GroupsResponse {
         val now = Instant.now(clock)
-        return withStateConflictRetry {
+        return withStateConflictRetry("list-groups") {
             GroupsResponse(stateStore.list().map {
                 if (refreshOperationalState(it, now)) {
                     stateStore.save(it.key(), it)
@@ -467,7 +469,7 @@ class CoordinatorService(
 
     @Synchronized
     fun listMembers(streamPrefix: String, consumerGroup: String): MembersResponse =
-        withStateConflictRetry {
+        withStateConflictRetry("list-members") {
             val group = requireGroup(streamPrefix, consumerGroup)
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
@@ -478,7 +480,7 @@ class CoordinatorService(
 
     @Synchronized
     fun assignments(streamPrefix: String, consumerGroup: String): AssignmentsResponse =
-        withStateConflictRetry {
+        withStateConflictRetry("assignments") {
             val group = requireGroup(streamPrefix, consumerGroup)
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
@@ -516,13 +518,14 @@ class CoordinatorService(
         return true
     }
 
-    private fun <T> withStateConflictRetry(block: () -> T): T {
+    private fun <T> withStateConflictRetry(operation: String, block: () -> T): T {
         var attempts = 0
         while (true) {
             try {
                 return block()
             } catch (error: CoordinatorStateConflictException) {
                 attempts += 1
+                metrics.recordStateConflict(operation, attempts)
                 if (attempts >= 3) {
                     throw CoordinatorException(CoordinatorError.STATE_VERSION_CONFLICT)
                 }

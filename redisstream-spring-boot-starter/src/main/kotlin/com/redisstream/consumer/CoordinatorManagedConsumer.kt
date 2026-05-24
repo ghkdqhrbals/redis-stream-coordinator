@@ -249,6 +249,11 @@ class CoordinatorManagedConsumer(
         require(reported.availableConcurrency <= reported.runtimeMaxConcurrency) {
             "availableConcurrency must be less than or equal to runtimeMaxConcurrency"
         }
+        metrics.recordRuntimeCapacity(
+            runtimeMaxConcurrency = reported.runtimeMaxConcurrency,
+            availableConcurrency = reported.availableConcurrency,
+            inFlight = reported.runtimeMaxConcurrency - reported.availableConcurrency,
+        )
         return reported
     }
 

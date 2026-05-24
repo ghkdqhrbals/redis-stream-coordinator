@@ -104,13 +104,22 @@ class RedisStreamConsumerLifecycle(
             state.inFlight.incrementAndGet()
             val startedAt = Instant.now()
             try {
-                handler.handle(message)
-                metrics.recordMessageHandled("SUCCESS", Duration.between(startedAt, Instant.now()))
-                reader.ack(message.streamKey, properties.consumerGroup, message.recordId)
-                metrics.recordMessageAck()
-            } catch (error: RuntimeException) {
-                metrics.recordMessageHandled("ERROR", Duration.between(startedAt, Instant.now()))
-                throw error
+                try {
+                    handler.handle(message)
+                } catch (error: RuntimeException) {
+                    metrics.recordMessageHandled("ERROR", Duration.between(startedAt, Instant.now()))
+                    throw error
+                }
+
+                try {
+                    reader.ack(message.streamKey, properties.consumerGroup, message.recordId)
+                    metrics.recordMessageAck("SUCCESS")
+                    metrics.recordMessageHandled("SUCCESS", Duration.between(startedAt, Instant.now()))
+                } catch (error: RuntimeException) {
+                    metrics.recordMessageAck("ERROR")
+                    metrics.recordMessageHandled("ERROR", Duration.between(startedAt, Instant.now()))
+                    throw error
+                }
             } finally {
                 state.inFlight.decrementAndGet()
             }

@@ -51,6 +51,9 @@ Alert on:
 * `redis_stream_coord_member_expired_total` spike
 * `redis_stream_coord_revoke_pending` remaining non-zero longer than the application rebalance timeout
 * `redis_stream_coord_invariant_violation_total` increasing
+* `redis_stream_coord_state_conflict_total` increasing rapidly
+* `redis_stream_consumer_ack_status_total{status="ERROR"}` increasing
+* `redis_stream_producer_publish_attempt_total{status="ERROR"}` increasing
 * active migration age exceeding the expected drain window
 * repeated `429` responses from admin automation
 

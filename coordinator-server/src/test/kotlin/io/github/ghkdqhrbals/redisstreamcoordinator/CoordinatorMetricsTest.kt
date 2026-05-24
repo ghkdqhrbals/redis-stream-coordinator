@@ -121,6 +121,23 @@ class CoordinatorMetricsTest {
         assertTrue(registry.get("redis_stream_coord_rebalance_total").counter().count() >= 1.0)
     }
 
+    @Test
+    fun `coordinator records state conflict retry metrics`() {
+        val registry = SimpleMeterRegistry()
+        val metrics = MicrometerCoordinatorMetrics(registry, properties, clock)
+
+        metrics.recordStateConflict("heartbeat", attempt = 1)
+
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_coord_state_conflict_total")
+                .tag("operation", "heartbeat")
+                .tag("attempt", "1")
+                .counter()
+                .count(),
+        )
+    }
+
     private fun service(metrics: CoordinatorMetrics): CoordinatorService =
         CoordinatorService(
             properties = properties,

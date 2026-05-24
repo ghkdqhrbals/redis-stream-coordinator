@@ -118,6 +118,8 @@ class RedisStreamPublisherTest {
 
     @Test
     fun `publisher can opt into stale routing write retry after refreshing metadata`() {
+        val registry = SimpleMeterRegistry()
+        val metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer")
         val client = ScriptedPublisherRoutingClient(
             routing(version = 1, activeWriteVersion = 1),
             routing(version = 2, activeWriteVersion = 2),
@@ -128,8 +130,10 @@ class RedisStreamPublisherTest {
                 streamPrefix = "orders",
                 consumerGroup = "orders-consumer",
                 client = client,
+                metrics = metrics,
             ),
             writer = writer,
+            metrics = metrics,
             maxAttempts = 2,
         )
 
@@ -138,6 +142,29 @@ class RedisStreamPublisherTest {
         assertEquals(2, client.calls)
         assertEquals(2, published.route.activeWriteVersion)
         assertEquals(listOf("orders:v1", "orders:v2"), writer.attemptedVersions)
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_producer_publish_attempt_total")
+                .tag("status", "ERROR")
+                .tag("attempt", "1")
+                .counter()
+                .count(),
+        )
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_producer_publish_attempt_total")
+                .tag("status", "SUCCESS")
+                .tag("attempt", "2")
+                .counter()
+                .count(),
+        )
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_producer_routing_cache_invalidated_total")
+                .tag("reason", "write_failure")
+                .counter()
+                .count(),
+        )
     }
 
     @Test

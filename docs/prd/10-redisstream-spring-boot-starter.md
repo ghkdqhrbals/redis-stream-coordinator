@@ -98,17 +98,24 @@ Consumer metrics:
 * `redis_stream_consumer_assigned_shards`
 * `redis_stream_consumer_pending_shards`
 * `redis_stream_consumer_revoking_shards`
+* `redis_stream_consumer_runtime_max_concurrency`
+* `redis_stream_consumer_available_concurrency`
+* `redis_stream_consumer_in_flight_messages`
 * `redis_stream_consumer_revoked_shards_total`
 * `redis_stream_consumer_fenced_total`
 * `redis_stream_consumer_messages_total`
 * `redis_stream_consumer_message_duration`
 * `redis_stream_consumer_ack_total`
+* `redis_stream_consumer_ack_status_total`
 
 Producer metrics:
 
 * `redis_stream_producer_routing_cache_hit_total`
+* `redis_stream_producer_routing_cache_invalidated_total`
 * `redis_stream_producer_routing_refresh_total`
 * `redis_stream_producer_routing_refresh_duration`
+* `redis_stream_producer_publish_attempt_total`
+* `redis_stream_producer_publish_attempt_duration`
 * `redis_stream_producer_publish_total`
 * `redis_stream_producer_publish_duration`
 

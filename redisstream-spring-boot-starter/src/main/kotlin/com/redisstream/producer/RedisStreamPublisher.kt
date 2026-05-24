@@ -45,12 +45,11 @@ class RoutingRedisStreamPublisher(
         try {
             var lastError: RuntimeException? = null
             repeat(maxAttempts) { attempt ->
-                if (attempt > 0) {
-                    routingCache.invalidate()
-                }
+                val attemptStartedAt = Instant.now(clock)
                 val route = routingCache.route(partitionKey)
                 try {
                     val recordId = writer.add(route.streamKey, fields)
+                    metrics.recordPublishAttempt("SUCCESS", attempt + 1, Duration.between(attemptStartedAt, Instant.now(clock)))
                     metrics.recordPublish("SUCCESS", Duration.between(startedAt, Instant.now(clock)))
                     return PublishedRedisStreamMessage(
                         streamKey = route.streamKey,
@@ -59,7 +58,8 @@ class RoutingRedisStreamPublisher(
                     )
                 } catch (error: RuntimeException) {
                     lastError = error
-                    routingCache.invalidate()
+                    metrics.recordPublishAttempt("ERROR", attempt + 1, Duration.between(attemptStartedAt, Instant.now(clock)))
+                    routingCache.invalidate("write_failure")
                 }
             }
             throw lastError ?: IllegalStateException("Redis Stream publish failed")

@@ -124,6 +124,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * `redis_stream_coord_invariant_violation_total`
   * `redis_stream_coord_tick_total`
   * `redis_stream_coord_tick_duration`
+  * `redis_stream_coord_state_conflict_total`
 
 ### RedisStream Spring Boot Starter
 

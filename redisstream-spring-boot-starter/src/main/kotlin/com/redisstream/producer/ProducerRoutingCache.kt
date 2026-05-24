@@ -57,7 +57,13 @@ class ProducerRoutingCache(
 
     @Synchronized
     fun invalidate() {
+        invalidate("manual")
+    }
+
+    @Synchronized
+    internal fun invalidate(reason: String) {
         cached = null
+        metrics.recordRoutingCacheInvalidated(reason)
     }
 
     @Synchronized

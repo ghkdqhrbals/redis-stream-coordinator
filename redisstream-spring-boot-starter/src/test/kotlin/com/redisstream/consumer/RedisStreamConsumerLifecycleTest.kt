@@ -61,6 +61,45 @@ class RedisStreamConsumerLifecycleTest {
 
         assertEquals(1.0, registry.get("redis_stream_consumer_messages_total").tag("status", "SUCCESS").counter().count())
         assertEquals(1.0, registry.get("redis_stream_consumer_ack_total").counter().count())
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_consumer_ack_status_total").tag("status", "SUCCESS").counter().count(),
+        )
+    }
+
+    @Test
+    fun `ack failure records error without message success metric`() {
+        val shard = CoordinatorShard(1, 0)
+        val registry = SimpleMeterRegistry()
+        val reader = FailingAckRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        val lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RecordingRedisStreamMessageHandler(),
+            startPollersOnAssignment = false,
+            metrics = MicrometerCoordinatorConsumerMetrics(registry, "orders", "orders-consumer", "member-a"),
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+
+        assertFailsWith<IllegalStateException> {
+            lifecycle.pollOnce(shard)
+        }
+
+        assertEquals(
+            0.0,
+            registry.find("redis_stream_consumer_messages_total").tag("status", "SUCCESS").counter()?.count() ?: 0.0,
+        )
+        assertEquals(1.0, registry.get("redis_stream_consumer_messages_total").tag("status", "ERROR").counter().count())
+        assertEquals(1.0, registry.get("redis_stream_consumer_ack_status_total").tag("status", "ERROR").counter().count())
+        assertEquals(0.0, registry.find("redis_stream_consumer_ack_total").counter()?.count() ?: 0.0)
     }
 
     @Test
@@ -200,6 +239,24 @@ private class ScriptedRedisStreamReader(
         val consumerGroup: String,
         val recordId: String,
     )
+}
+
+private class FailingAckRedisStreamReader(
+    private vararg val messages: ConsumedRedisStreamMessage,
+) : RedisStreamReader {
+    override fun read(
+        streamKey: String,
+        shard: CoordinatorShard,
+        consumerGroup: String,
+        consumerName: String,
+        count: Long,
+        block: Duration,
+    ): List<ConsumedRedisStreamMessage> =
+        messages.toList()
+
+    override fun ack(streamKey: String, consumerGroup: String, recordId: String) {
+        error("ack failed")
+    }
 }
 
 private class RecordingRedisStreamMessageHandler : RedisStreamMessageHandler {

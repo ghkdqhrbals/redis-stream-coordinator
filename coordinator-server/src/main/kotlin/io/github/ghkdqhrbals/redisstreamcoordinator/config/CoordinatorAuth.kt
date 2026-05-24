@@ -128,7 +128,7 @@ private fun HttpServletRequest.authenticate(properties: CoordinatorProperties): 
     if (!header.startsWith("Basic ", ignoreCase = true)) return null
 
     val decoded = runCatching {
-        String(Base64.getDecoder().decode(header.removePrefix("Basic ").trim()), StandardCharsets.UTF_8)
+        String(Base64.getDecoder().decode(header.substring("Basic ".length).trim()), StandardCharsets.UTF_8)
     }.getOrNull() ?: return null
 
     val separator = decoded.indexOf(':')
