@@ -56,6 +56,7 @@ def test_workflow_permissions_and_smoke_test() -> None:
         "workflow_dispatch:",
         "packages: write",
         "docker build -t redis-stream-coordinator/coordinator-server:ci .",
+        "--tmpfs /tmp:rw,size=128m",
         "COORDINATOR_STORE_TYPE=memory",
         "/coord/v1/monitoring/health",
         "docker/build-push-action@v6",

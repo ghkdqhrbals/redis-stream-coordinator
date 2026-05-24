@@ -418,14 +418,18 @@ class CoordinatorService(
 
     @Synchronized
     fun health(): HealthResponse {
-        val redisStatus = redisConnectionFactory.ifAvailable?.let { factory ->
-            runCatching {
-                factory.connection.use { connection -> connection.ping() }
-            }.fold(
-                onSuccess = { "UP" },
-                onFailure = { "DOWN" },
-            )
-        } ?: "NOT_CONFIGURED"
+        val redisStatus = if (requiresRedis()) {
+            redisConnectionFactory.ifAvailable?.let { factory ->
+                runCatching {
+                    factory.connection.use { connection -> connection.ping() }
+                }.fold(
+                    onSuccess = { "UP" },
+                    onFailure = { "DOWN" },
+                )
+            } ?: "NOT_CONFIGURED"
+        } else {
+            "NOT_CONFIGURED"
+        }
 
         val health = HealthResponse(
             status = if (redisStatus == "DOWN") "DEGRADED" else "UP",
@@ -436,6 +440,11 @@ class CoordinatorService(
         metrics.recordHealth(health.status == "UP")
         return health
     }
+
+    private fun requiresRedis(): Boolean =
+        properties.store.type == CoordinatorProperties.StoreType.REDIS ||
+            properties.streams.provisioningEnabled ||
+            properties.audit.sink == CoordinatorProperties.AuditSink.REDIS
 
     @Synchronized
     fun tick(): CoordinatorTickResult {

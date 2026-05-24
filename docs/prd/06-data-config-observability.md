@@ -122,6 +122,7 @@ Rate limit 초과 시 coordinator는 `429 Too Many Requests`와 `Retry-After` he
 ## Monitoring API
 
 Monitoring API는 coordinator state를 조회만 한다. 상태 변경은 Admin API로만 수행한다.
+Health response는 active configuration 기준으로 dependency를 판단한다. Redis-backed store, Redis audit, stream provisioning 중 하나가 활성화된 경우에만 Redis health를 필수 dependency로 검사한다.
 
 ```http
 GET /coord/v1/monitoring/health

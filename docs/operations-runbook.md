@@ -17,7 +17,7 @@ Interpretation:
 | --- | --- |
 | `status=UP` | Coordinator HTTP API and configured dependencies are healthy. |
 | `status=DEGRADED` | Coordinator is up but Redis health is down. |
-| `redis=NOT_CONFIGURED` | Memory store or no Redis connection factory is configured. |
+| `redis=NOT_CONFIGURED` | Redis is not required by the active coordinator configuration, or no Redis connection factory is configured. |
 
 ## Common Operator Checks
 

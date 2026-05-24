@@ -7,6 +7,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
 
+import org.mockito.Mockito
 import org.springframework.beans.factory.support.StaticListableBeanFactory
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import kotlin.test.Test
@@ -93,6 +94,41 @@ class CoordinatorServiceTest {
         assertEquals(HeartbeatStatus.OK, accepted.status)
         assertEquals(HeartbeatStatus.UNSUPPORTED_PROTOCOL, rejectedBelowMinimum.status)
         assertEquals(HeartbeatStatus.UNSUPPORTED_PROTOCOL, rejectedAboveMaximum.status)
+    }
+
+    @Test
+    fun `health skips redis ping when redis features are disabled`() {
+        val redisConnectionFactory = Mockito.mock(RedisConnectionFactory::class.java)
+        val service = CoordinatorService(
+            properties = CoordinatorProperties(),
+            stateStore = InMemoryCoordinatorStateStore(),
+            redisConnectionFactory = redisProvider(redisConnectionFactory),
+            clock = clock,
+        )
+
+        val health = service.health()
+
+        assertEquals("UP", health.status)
+        assertEquals("NOT_CONFIGURED", health.redis)
+        Mockito.verifyNoInteractions(redisConnectionFactory)
+    }
+
+    @Test
+    fun `health degrades when redis is required and unavailable`() {
+        val redisConnectionFactory = Mockito.mock(RedisConnectionFactory::class.java)
+        Mockito.`when`(redisConnectionFactory.connection).thenThrow(IllegalStateException("redis down"))
+        val service = CoordinatorService(
+            properties = CoordinatorProperties(store = CoordinatorProperties.Store(type = CoordinatorProperties.StoreType.REDIS)),
+            stateStore = InMemoryCoordinatorStateStore(),
+            redisConnectionFactory = redisProvider(redisConnectionFactory),
+            clock = clock,
+        )
+
+        val health = service.health()
+
+        assertEquals("DEGRADED", health.status)
+        assertEquals("DOWN", health.redis)
+        Mockito.verify(redisConnectionFactory).connection
     }
 
     @Test
@@ -924,6 +960,11 @@ class CoordinatorServiceTest {
             streamProvisioner = streamProvisioner,
             clock = clock,
         )
+
+    private fun redisProvider(redisConnectionFactory: RedisConnectionFactory) =
+        StaticListableBeanFactory()
+            .apply { addBean("redisConnectionFactory", redisConnectionFactory) }
+            .getBeanProvider(RedisConnectionFactory::class.java)
 
     private fun createGroupRequest(initialShardCount: Int? = null): CreateGroupRequest =
         CreateGroupRequest(

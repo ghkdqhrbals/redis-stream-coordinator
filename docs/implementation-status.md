@@ -85,7 +85,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 
 * [x] Three-node local Redis Cluster Docker Compose.
 * [x] Lettuce node address mapping for host-to-Docker cluster redirects.
-* [x] Redis health check in coordinator health response.
+* [x] Redis health check in coordinator health response when Redis is required by active configuration.
 * [x] `CoordinatorStateStore` abstraction.
 * [x] In-memory state store.
 * [x] Redis state store for aggregate group metadata.

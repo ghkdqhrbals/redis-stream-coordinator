@@ -373,7 +373,7 @@ Response summary:
 | --- | --- |
 | `status` | `UP`, `DEGRADED`, or `DOWN`. |
 | `coordinatorId` | Coordinator server identity. |
-| `redis` | Redis metadata store health. |
+| `redis` | Redis dependency health. Redis is checked only when Redis-backed store, Redis audit, or stream provisioning is enabled. |
 | `loop` | Coordinator loop health and last tick time. |
 
 ### List Groups
