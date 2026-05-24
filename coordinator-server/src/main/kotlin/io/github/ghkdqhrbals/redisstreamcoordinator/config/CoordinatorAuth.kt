@@ -24,6 +24,10 @@ class CoordinatorWebConfig(
             .addPathPatterns("/coord/v1/**")
         registry.addInterceptor(BasicAuthInterceptor(properties))
             .addPathPatterns("/coord/v1/**")
+        if (properties.api.rateLimit.enabled) {
+            registry.addInterceptor(AdminMutationRateLimitInterceptor(properties.api.rateLimit))
+                .addPathPatterns("/coord/v1/**")
+        }
     }
 }
 
@@ -100,7 +104,7 @@ class AuditLogInterceptor(
     }
 }
 
-private const val AUTH_PRINCIPAL_ATTRIBUTE = "redisStreamCoordinator.auth.principal"
+internal const val AUTH_PRINCIPAL_ATTRIBUTE = "redisStreamCoordinator.auth.principal"
 private const val AUTH_FAILURE_ATTRIBUTE = "redisStreamCoordinator.auth.failure"
 
 private data class AuthenticatedPrincipal(

@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-05-23
+Last updated: 2026-05-24
 
 ## Snapshot
 
@@ -18,9 +18,9 @@ Overall status:
 | Project foundation | Done | Gradle Kotlin DSL, Gradle Wrapper `8.14.5`, Spring Boot `4.0.6`, Kotlin `2.2.21`, Java toolchain `24`, Foojay resolver. |
 | Coordinator API | Done | Admin, member heartbeat, producer routing, migration, rollback, and monitoring endpoints are implemented. |
 | Rebalance semantics | Mostly done | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, rebalance timeout, and migration drain are implemented. Stricter stale member fencing remains. |
-| Redis state store | Done | Memory and Redis stores are available. Redis writes use store revision compare-and-set and Lua aggregate/projection updates. |
+| Redis state store | Done | Memory and Redis stores are available. Redis writes use store revision compare-and-set, schema version guard, and Lua aggregate/projection updates. |
 | Redis Stream shard provisioning | Done | Optional initial and next-version stream/consumer-group provisioning is implemented and gated by config. |
-| Security and audit | Mostly done | Basic Auth, role ACL, structured audit logs, and optional Redis audit sink are implemented. Rate limiting remains. |
+| Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
 | Observability | Done for MVP | Coordinator and starter Micrometer metrics are implemented. Monitoring APIs are implemented. |
 | Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
 | Producer starter | Done for MVP | Producer routing cache, routing validation, Redis Stream publisher, payload helper, batch publish, and metrics are implemented. |
@@ -88,6 +88,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Redis state store for aggregate group metadata.
 * [x] Redis projection keys for members, target assignment, current assignment, migrations, active migration, and revision.
 * [x] Redis store revision compare-and-set for stale write detection.
+* [x] Redis metadata `schemaVersion` guard for persisted group aggregate reads and writes.
 * [x] Lua aggregate/projection updates to avoid reader-visible partial writes.
 * [x] Redis Cluster hash-slot-safe coordinator keys.
 * [x] Redis Stream shard key helper and hash-slot distribution helper.
@@ -98,6 +99,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Basic Auth for admin and monitoring APIs.
 * [x] Optional member heartbeat authentication.
 * [x] Role ACL with `ADMIN`, `MONITOR`, and `MEMBER`.
+* [x] Optional per-caller/group admin mutation rate limiting with `Retry-After` response.
 * [x] Structured admin audit logs for create, scale, consumer concurrency update, and rollback.
 * [x] Optional Redis-backed group-scoped admin audit log.
 * [x] Coordinator Micrometer metrics:
@@ -156,6 +158,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Stream shard key validation and Redis Cluster slot distribution.
 * Stream provisioning success and failure ordering.
 * ACL enforcement and admin audit events.
+* Admin mutation rate limiting.
 * Coordinator Micrometer metrics.
 
 ### Starter
@@ -191,16 +194,14 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 
 Priority order:
 
-1. [ ] Add coordinator API rate limiting.
-2. [ ] Add explicit Redis metadata `schemaVersion` and migration guard.
-3. [ ] Prepare public Docker distribution:
+1. [ ] Prepare public Docker distribution:
    * coordinator server image build
    * container smoke test for `/coord/v1/monitoring/health`
    * versioned Docker tag publish workflow
    * Docker usage guide
-4. [ ] Tighten stale member fencing semantics beyond the current coordinator-issued epoch checks.
-5. [ ] Add broader Redis integration tests for idempotent provisioning retry and failure handling.
-6. [ ] Add operational runbook.
+2. [ ] Tighten stale member fencing semantics beyond the current coordinator-issued epoch checks.
+3. [ ] Add broader Redis integration tests for idempotent provisioning retry and failure handling.
+4. [ ] Add operational runbook.
 
 Still intentionally out of coordinator scope:
 

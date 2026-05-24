@@ -27,6 +27,12 @@ data class CoordinatorProperties(
         val adminPassword: String = "password",
         val authenticateMemberApi: Boolean = false,
         val users: List<ApiUser> = emptyList(),
+        val rateLimit: RateLimit = RateLimit(),
+    )
+
+    data class RateLimit(
+        val enabled: Boolean = false,
+        val adminMutationsPerMinute: Int = 60,
     )
 
     data class ApiUser(

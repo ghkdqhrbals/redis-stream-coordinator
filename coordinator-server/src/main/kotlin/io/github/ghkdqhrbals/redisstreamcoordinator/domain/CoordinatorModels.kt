@@ -12,6 +12,8 @@ enum class MigrationState { PREPARING, ACTIVE, DRAINING, DEPRECATED, ROLLING_BAC
 enum class HeartbeatStatus { OK, RETRY, UNKNOWN_MEMBER_ID, FENCED_MEMBER_EPOCH, UNSUPPORTED_PROTOCOL, INVALID_REQUEST }
 enum class RevokingShardState { REVOKING, DRAINING, REVOKED }
 
+const val COORDINATOR_METADATA_SCHEMA_VERSION = 1
+
 data class GroupKey(
     val streamPrefix: String,
     val consumerGroup: String,
@@ -155,6 +157,7 @@ data class MemberMetadata(
 data class GroupMetadata(
     val streamPrefix: String,
     val consumerGroup: String,
+    var schemaVersion: Int = COORDINATOR_METADATA_SCHEMA_VERSION,
     var storeRevision: Long = 0,
     var groupEpoch: Long,
     var metadataVersion: Long,

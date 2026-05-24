@@ -28,6 +28,8 @@ redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
 
 Data-plane key는 coordinator 문서의 config에 넣지 않는다. 예를 들어 processing marker, stream read cursor, handler retry state는 member/consumer 구현 소관이다.
 
+The group aggregate JSON stored at `...:group` includes `schemaVersion`. The current schema version is `1`. Redis-backed reads and writes reject unsupported future schema versions instead of silently downgrading or overwriting metadata from a newer coordinator. Metadata written before `schemaVersion` existed is treated as schema version `1`.
+
 ## Minimal Configuration
 
 ```yaml
@@ -53,6 +55,10 @@ coordinator:
         roles: [MEMBER]
     # true이면 member heartbeat API에도 MEMBER role 인증을 요구한다.
     authenticate-member-api: false
+    # Admin mutation API에 per-caller/group fixed-window rate limit을 적용한다.
+    rate-limit:
+      enabled: false
+      admin-mutations-per-minute: 60
 
   audit:
     # log 또는 redis. redis는 group-scoped admin audit list에 이벤트를 저장한다.
@@ -106,6 +112,12 @@ MVP는 Basic Auth를 사용한다. `api.users`가 비어 있으면 `admin-userna
 * `MEMBER`: member heartbeat API. `authenticate-member-api=true`일 때만 요구한다.
 
 인증 실패는 `401 Unauthorized`를 반환한다. 권한이 없는 mutation 요청은 `403 Forbidden`을 반환한다.
+
+## API Rate Limiting
+
+`coordinator.api.rate-limit.enabled=true`이면 create, scale, consumer concurrency update, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 `{streamPrefix, consumerGroup}` 조합이다.
+
+Rate limit 초과 시 coordinator는 `429 Too Many Requests`와 `Retry-After` header를 반환한다. Monitoring read API와 member heartbeat API는 이 limit에 포함하지 않는다. 현재 구현은 coordinator instance local limiter이므로, 여러 coordinator instance를 active-active로 운영할 경우 global limit은 외부 gateway나 load balancer에서 보강한다.
 
 ## Monitoring API
 

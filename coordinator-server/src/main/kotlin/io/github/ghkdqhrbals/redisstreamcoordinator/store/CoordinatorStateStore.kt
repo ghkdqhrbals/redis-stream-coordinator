@@ -1,6 +1,7 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.store
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.COORDINATOR_METADATA_SCHEMA_VERSION
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupKey
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MemberMetadata
@@ -24,6 +25,7 @@ interface CoordinatorStateStore {
 }
 
 class CoordinatorStateConflictException(message: String) : RuntimeException(message)
+class CoordinatorStateSchemaException(message: String) : RuntimeException(message)
 
 @Component
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "memory", matchIfMissing = true)
@@ -78,7 +80,7 @@ class RedisCoordinatorStateStore(
         redisTemplate.hasKey(keys.forGroup(key).group)
 
     override fun get(key: GroupKey): GroupMetadata? =
-        redisTemplate.opsForValue().get(keys.forGroup(key).group)?.let { objectMapper.readValue<GroupMetadata>(it) }
+        redisTemplate.opsForValue().get(keys.forGroup(key).group)?.let { objectMapper.readRedisGroupMetadata(it) }
 
     override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean {
         val groupKeys = keys.forGroup(key)
@@ -120,13 +122,14 @@ class RedisCoordinatorStateStore(
         redisTemplate.opsForSet().members(keys.groupsIndex)
             .orEmpty()
             .mapNotNull { redisTemplate.opsForValue().get(it) }
-            .map { objectMapper.readValue<GroupMetadata>(it) }
+            .map { objectMapper.readRedisGroupMetadata(it) }
 
     private fun writeGroupScopedState(
         keys: RedisCoordinatorGroupKeys,
         group: GroupMetadata,
         onlyIfAbsent: Boolean,
     ): Boolean {
+        group.requireSupportedRedisMetadataSchema()
         val previousRevision = group.storeRevision
         val nextRevision = if (onlyIfAbsent) 1 else previousRevision + 1
         group.storeRevision = nextRevision
@@ -238,6 +241,17 @@ class RedisCoordinatorStateStore(
             return 1
             """.trimIndent(),
             Long::class.java,
+        )
+    }
+}
+
+internal fun ObjectMapper.readRedisGroupMetadata(raw: String): GroupMetadata =
+    readValue<GroupMetadata>(raw).also { it.requireSupportedRedisMetadataSchema() }
+
+internal fun GroupMetadata.requireSupportedRedisMetadataSchema() {
+    if (schemaVersion != COORDINATOR_METADATA_SCHEMA_VERSION) {
+        throw CoordinatorStateSchemaException(
+            "Unsupported Redis coordinator metadata schemaVersion $schemaVersion; supported schemaVersion is $COORDINATOR_METADATA_SCHEMA_VERSION",
         )
     }
 }

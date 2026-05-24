@@ -28,6 +28,9 @@ coordinator:
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
     authenticate-member-api: false
     users: []
+    rate-limit:
+      enabled: false
+      admin-mutations-per-minute: 60
   protocol:
     min-heartbeat-version: 1
     max-heartbeat-version: 1

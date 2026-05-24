@@ -56,20 +56,18 @@ Coordinator API control plane이 Redis Stream shard ownership을 중앙에서 �
 
 ## Current Implementation Snapshot
 
-Last reviewed: 2026-05-23.
+Last reviewed: 2026-05-24.
 
 Implemented:
 
 * Spring Boot 4 / Kotlin / Java 24 Gradle multi-module project.
-* `coordinator-server` control plane with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, scale migration, rollback, monitoring APIs, scheduled coordinator event loop, ACL, audit logging, and Micrometer metrics.
-* Memory and Redis-backed coordinator state stores, including Redis Cluster-safe key layout, Lua-backed aggregate/projection writes, optimistic store revision checks, and optional Redis Stream shard provisioning.
+* `coordinator-server` control plane with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, scale migration, rollback, monitoring APIs, scheduled coordinator event loop, ACL, audit logging, admin mutation rate limiting, and Micrometer metrics.
+* Memory and Redis-backed coordinator state stores, including Redis Cluster-safe key layout, Redis metadata schemaVersion guard, Lua-backed aggregate/projection writes, optimistic store revision checks, and optional Redis Stream shard provisioning.
 * `com.redisstream:redisstream-spring-boot-starter` with consumer heartbeat lifecycle, shard lifecycle callbacks, opt-in Redis Stream polling adapter, producer routing cache, Redis Stream publisher, graceful leave, and consumer/producer Micrometer metrics.
 * Local three-node Redis Cluster Docker Compose and gated Redis integration tests.
 
 Not yet complete:
 
-* Coordinator API rate limiting.
-* Explicit Redis metadata `schemaVersion` and migration guard.
 * Public Docker image build, smoke test, versioned publish workflow, and user-facing Docker guide.
 * More complete stale member fencing semantics and broader Redis provisioning retry/failure integration coverage.
 

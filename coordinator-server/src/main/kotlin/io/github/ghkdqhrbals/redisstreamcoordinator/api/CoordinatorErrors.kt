@@ -31,6 +31,7 @@ enum class CoordinatorError(
         "REDIS_STREAM_PROVISIONING_FAILED",
         "Failed to provision Redis Stream consumer group",
     ),
+    RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", "Coordinator API rate limit exceeded"),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Invalid request"),
 }
 
