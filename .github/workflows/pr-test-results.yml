@@ -210,11 +210,11 @@ jobs:
               `| Reports | [Workflow run](${runUrl}) / [Coordinator test report](${htmlReportUrl}) |`,
               `| Raw Gradle test report | [Open Gradle report](${gradleReportUrl}) |`,
               '',
-              '### Improvements to address before Docker distribution',
+              '### Improvements to address before public release',
               '',
-              '- Add a Docker image build check for `coordinator-server`.',
-              '- Add a container smoke test that starts the coordinator image and verifies `/coord/v1/monitoring/health`.',
-              '- Add a publish workflow for versioned Docker tags before the first public release.',
+              '- Cut the first versioned coordinator Docker image through the manual `Docker image` workflow.',
+              '- Add broader Redis integration coverage for idempotent stream provisioning retry/failure handling.',
+              '- Continue tightening stale member fencing semantics beyond coordinator-issued epoch checks.',
             ];
 
             if (results.failedCases.length > 0) {

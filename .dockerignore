@@ -1,0 +1,12 @@
+.git
+.github
+.gradle
+.idea
+.kotlin
+**/build
+build
+docs/coordinator-implementation-plan.md
+*.iml
+*.swp
+*.swo
+__pycache__

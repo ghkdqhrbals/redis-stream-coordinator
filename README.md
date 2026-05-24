@@ -126,11 +126,24 @@ redis-stream-coordinator:
 ## Documentation
 
 * [Implementation Status](docs/implementation-status.md)
+* [Docker Guide](docs/docker.md)
+* [Testing Guide](docs/testing.md)
+* [Operations Runbook](docs/operations-runbook.md)
 * [IntelliJ Setup](docs/intellij-setup.md)
+* [Contributing](CONTRIBUTING.md)
+* [Security Policy](SECURITY.md)
+* [Changelog](CHANGELOG.md)
+
+## Docker Quick Start
+
+```bash
+docker compose --profile coordinator up --build
+curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
+```
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, consumer heartbeat integration, and a Codex review workflow.
+This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
 
 ## License
 

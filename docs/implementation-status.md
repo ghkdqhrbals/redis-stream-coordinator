@@ -25,7 +25,8 @@ Overall status:
 | Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
 | Producer starter | Done for MVP | Producer routing cache, routing validation, Redis Stream publisher, payload helper, batch publish, and metrics are implemented. |
 | Local Redis Cluster | Done | `compose.yaml` starts three Redis Cluster masters and supports host access through `localhost:7001..7003`. |
-| Docker distribution | Not started | Public coordinator image build, smoke test, versioned publishing, and user guide remain. |
+| Docker distribution | Ready for MVP | Dockerfile, local Compose coordinator profile, PR smoke test, manual GHCR publish workflow, and user guide are implemented. First public image release remains. |
+| Open source operations | Ready for MVP | Contributing guide, security policy, changelog, testing guide, Docker guide, and operations runbook are available. |
 
 ## Verified Commands
 
@@ -35,6 +36,7 @@ The current implementation has been verified with:
 ./gradlew :coordinator-server:test --tests '*CoordinatorMetricsTest' --tests '*CoordinatorServiceTest' --no-daemon
 ./gradlew :redisstream-spring-boot-starter:test --no-daemon
 ./gradlew test build --no-daemon
+python3 .github/scripts/test_docker_distribution.py
 ```
 
 Redis integration tests are gated and require the local Redis Cluster:
@@ -142,6 +144,19 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Ordered best-effort batch publish API.
 * [x] Consumer and producer Micrometer metrics.
 
+### Docker, CI, And Open Source Docs
+
+* [x] Coordinator server Dockerfile with Java 24 runtime and non-root user.
+* [x] Local `docker compose --profile coordinator` path for Redis Cluster plus coordinator.
+* [x] Docker smoke workflow that builds the image and checks `/coord/v1/monitoring/health`.
+* [x] Manual GHCR publish workflow for versioned coordinator image tags.
+* [x] Docker distribution metadata test script.
+* [x] Contributor guide.
+* [x] Security policy.
+* [x] Changelog.
+* [x] Testing guide.
+* [x] Operations runbook.
+
 ## Key Tests
 
 ### Coordinator
@@ -174,6 +189,10 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Producer routing cache refresh, invalidation, validation, and unsupported hash rejection.
 * Redis Stream publisher routing, payload helper, batch publish, and metrics.
 
+### Docker And Docs
+
+* Docker distribution metadata guard.
+
 ## File Map
 
 | Area | Primary files |
@@ -188,20 +207,17 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 | Consumer starter | `redisstream-spring-boot-starter/src/main/kotlin/com/redisstream/consumer/*` |
 | Producer starter | `redisstream-spring-boot-starter/src/main/kotlin/com/redisstream/producer/*` |
 | Redis Cluster | `compose.yaml` |
+| Docker distribution | `Dockerfile`, `.dockerignore`, `.github/workflows/docker-image.yml`, `docs/docker.md` |
+| Open source docs | `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `docs/testing.md`, `docs/operations-runbook.md` |
 | PRD | `docs/PRD.md`, `docs/prd/*` |
 
 ## Remaining Work
 
 Priority order:
 
-1. [ ] Prepare public Docker distribution:
-   * coordinator server image build
-   * container smoke test for `/coord/v1/monitoring/health`
-   * versioned Docker tag publish workflow
-   * Docker usage guide
+1. [ ] Cut the first public Docker image release through the manual GHCR workflow.
 2. [ ] Tighten stale member fencing semantics beyond the current coordinator-issued epoch checks.
 3. [ ] Add broader Redis integration tests for idempotent provisioning retry and failure handling.
-4. [ ] Add operational runbook.
 
 Still intentionally out of coordinator scope:
 
