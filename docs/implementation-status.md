@@ -17,13 +17,13 @@ Overall status:
 | --- | --- | --- |
 | Project foundation | Done | Gradle Kotlin DSL, Gradle Wrapper `8.14.5`, Spring Boot `4.0.6`, Kotlin `2.2.21`, Java toolchain `24`, Foojay resolver. |
 | Coordinator API | Done | Admin, member heartbeat, producer routing, migration, rollback, and monitoring endpoints are implemented. |
-| Rebalance semantics | Mostly done | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, rebalance timeout, and migration drain are implemented. Stricter stale member fencing remains. |
+| Rebalance semantics | Mostly done | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, rebalance timeout, migration drain, and monitoring refresh conflict retry are implemented. Stricter stale member fencing remains. |
 | Redis state store | Done | Memory and Redis stores are available. Redis writes use store revision compare-and-set, schema version guard, and Lua aggregate/projection updates. |
 | Redis Stream shard provisioning | Done | Optional initial and next-version stream/consumer-group provisioning is implemented and gated by config. |
 | Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
 | Observability | Done for MVP | Coordinator and starter Micrometer metrics are implemented. Monitoring APIs are implemented. |
-| Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
-| Producer starter | Done for MVP | Producer routing cache, routing validation, Redis Stream publisher, payload helper, batch publish, and metrics are implemented. |
+| Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity reporting, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
+| Producer starter | Done for MVP | Producer routing cache, routing validation, stale-cache invalidation after write failure, opt-in publish retry, Redis Stream publisher, payload helper, batch publish, and metrics are implemented. |
 | Local Redis Cluster | Done | `compose.yaml` starts three Redis Cluster masters and supports host access through `localhost:7001..7003`. |
 | Docker distribution | Ready for MVP | Dockerfile, local Compose coordinator profile, PR smoke test, manual GHCR publish workflow, and user guide are implemented. First public image release remains. |
 | Open source operations | Ready for MVP | Contributing guide, security policy, changelog, testing guide, Docker guide, and operations runbook are available. |
@@ -79,6 +79,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Old/new readable versions during active migration.
 * [x] Automatic migration drain and `DEPRECATED` transition.
 * [x] Active migration rollback.
+* [x] Monitoring/read API operational refresh retry on Redis store CAS conflict.
 
 ### Redis Integration
 
@@ -133,12 +134,16 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Assignment, pending, revoke, fencing, rejoin, and graceful leave handling.
 * [x] Repeated revoke callback support for long drain windows.
 * [x] Preservation of earlier draining revoke reports when additional revokes occur.
+* [x] Optional `CoordinatorRuntimeCapacityProvider` for application-reported runtime capacity.
+* [x] Built-in Redis Stream polling lifecycle reports in-flight handler capacity.
 * [x] Consumer-side heartbeat protocol validation.
 * [x] Spring Boot auto-configuration.
 * [x] Opt-in Redis Stream polling adapter.
 * [x] Handler-success-only `XACK` behavior.
 * [x] Producer routing metadata cache.
 * [x] Producer routing metadata validation.
+* [x] Producer routing cache invalidation after Redis write failure.
+* [x] Opt-in bounded publisher retry with refreshed routing metadata.
 * [x] Redis Stream publisher.
 * [x] Convenience payload publish API.
 * [x] Ordered best-effort batch publish API.
@@ -174,6 +179,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Stream provisioning success and failure ordering.
 * ACL enforcement and admin audit events.
 * Admin mutation rate limiting.
+* Monitoring refresh conflict retry.
 * Coordinator Micrometer metrics.
 
 ### Starter
@@ -186,8 +192,9 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Fencing resets local ownership and rejoins with `memberEpoch=0`.
 * Graceful leave heartbeat on shutdown.
 * Redis polling adapter reads, invokes handler, and acknowledges only successful messages.
+* Runtime capacity reports available concurrency while handlers are in flight.
 * Producer routing cache refresh, invalidation, validation, and unsupported hash rejection.
-* Redis Stream publisher routing, payload helper, batch publish, and metrics.
+* Redis Stream publisher routing, stale-cache invalidation, opt-in retry, payload helper, batch publish, and metrics.
 
 ### Docker And Docs
 

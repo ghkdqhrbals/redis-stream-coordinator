@@ -110,12 +110,45 @@ class RedisStreamConsumerLifecycleTest {
         assertEquals(setOf(shard), lifecycle.onRevoked(setOf(shard), context()))
     }
 
+    @Test
+    fun `runtime capacity reflects messages currently handled by redis poller`() {
+        val shard = CoordinatorShard(1, 0)
+        lateinit var lifecycle: RedisStreamConsumerLifecycle
+        val observedCapacity = mutableListOf<RuntimeConsumerCapacity>()
+        val reader = ScriptedRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RedisStreamMessageHandler {
+                observedCapacity += lifecycle.runtimeCapacity(context())
+            },
+            startPollersOnAssignment = false,
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+        lifecycle.pollOnce(shard)
+
+        assertEquals(
+            listOf(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 3)),
+            observedCapacity,
+        )
+        assertEquals(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 4), lifecycle.runtimeCapacity(context()))
+    }
+
     private fun properties(): CoordinatorConsumerProperties =
         CoordinatorConsumerProperties().apply {
             streamPrefix = "orders"
             consumerGroup = "orders-consumer"
             memberId = "member-a"
             memberName = "member-a"
+            runtimeMaxConcurrency = 4
             redis.pollBatchSize = 2
             redis.pollTimeout = Duration.ofMillis(10)
         }

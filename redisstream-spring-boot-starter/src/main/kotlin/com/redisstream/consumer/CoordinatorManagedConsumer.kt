@@ -72,6 +72,7 @@ class CoordinatorManagedConsumer(
 
         refreshRevocationProgress()
         val startedAt = Instant.now()
+        val runtimeCapacity = runtimeCapacity()
         val response = try {
             client.heartbeat(
                 streamPrefix = properties.streamPrefix,
@@ -85,10 +86,7 @@ class CoordinatorManagedConsumer(
                     memberEpoch = memberEpoch,
                     rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
                     metadataVersion = metadataVersion,
-                    runtimeConsumerCapacity = RuntimeConsumerCapacity(
-                        runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
-                        availableConcurrency = properties.runtimeMaxConcurrency,
-                    ),
+                    runtimeConsumerCapacity = runtimeCapacity,
                     ownedShards = ownedShards,
                     revokingShards = revokingShards.values.toList(),
                 ),
@@ -239,6 +237,20 @@ class CoordinatorManagedConsumer(
             groupEpoch = groupEpoch,
             assignmentEpoch = assignmentEpoch,
         )
+
+    private fun runtimeCapacity(): RuntimeConsumerCapacity {
+        val reported = (lifecycle as? CoordinatorRuntimeCapacityProvider)?.runtimeCapacity(lastContext)
+            ?: RuntimeConsumerCapacity(
+                runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
+                availableConcurrency = properties.runtimeMaxConcurrency,
+            )
+        require(reported.runtimeMaxConcurrency > 0) { "runtimeMaxConcurrency must be positive" }
+        require(reported.availableConcurrency >= 0) { "availableConcurrency must not be negative" }
+        require(reported.availableConcurrency <= reported.runtimeMaxConcurrency) {
+            "availableConcurrency must be less than or equal to runtimeMaxConcurrency"
+        }
+        return reported
+    }
 
     private fun refreshRevocationProgress() {
         val draining = revokingShards

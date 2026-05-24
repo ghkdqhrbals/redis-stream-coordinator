@@ -11,3 +11,7 @@ interface CoordinatorShardLifecycle {
     fun onFenced(context: CoordinatorConsumerContext) {
     }
 }
+
+interface CoordinatorRuntimeCapacityProvider {
+    fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity
+}

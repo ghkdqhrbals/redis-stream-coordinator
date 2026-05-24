@@ -22,7 +22,7 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 ## Modules
 
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
-* `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, receive assignment changes, and implement shard lifecycle callbacks.
+* `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
 
 ## Versioning
 

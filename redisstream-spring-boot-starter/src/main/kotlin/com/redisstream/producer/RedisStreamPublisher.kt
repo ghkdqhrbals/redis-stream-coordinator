@@ -34,21 +34,35 @@ class RoutingRedisStreamPublisher(
     private val writer: RedisStreamWriter,
     private val metrics: RedisStreamProducerMetrics = NoopRedisStreamProducerMetrics,
     private val clock: Clock = Clock.systemUTC(),
+    private val maxAttempts: Int = 1,
 ) : RedisStreamPublisher {
     override fun publish(partitionKey: String, fields: Map<String, String>): PublishedRedisStreamMessage {
         require(partitionKey.isNotBlank()) { "partitionKey must not be blank" }
         require(fields.isNotEmpty()) { "Redis Stream message fields must not be empty" }
+        require(maxAttempts > 0) { "maxAttempts must be positive" }
 
         val startedAt = Instant.now(clock)
         try {
-            val route = routingCache.route(partitionKey)
-            val recordId = writer.add(route.streamKey, fields)
-            metrics.recordPublish("SUCCESS", Duration.between(startedAt, Instant.now(clock)))
-            return PublishedRedisStreamMessage(
-                streamKey = route.streamKey,
-                recordId = recordId,
-                route = route,
-            )
+            var lastError: RuntimeException? = null
+            repeat(maxAttempts) { attempt ->
+                if (attempt > 0) {
+                    routingCache.invalidate()
+                }
+                val route = routingCache.route(partitionKey)
+                try {
+                    val recordId = writer.add(route.streamKey, fields)
+                    metrics.recordPublish("SUCCESS", Duration.between(startedAt, Instant.now(clock)))
+                    return PublishedRedisStreamMessage(
+                        streamKey = route.streamKey,
+                        recordId = recordId,
+                        route = route,
+                    )
+                } catch (error: RuntimeException) {
+                    lastError = error
+                    routingCache.invalidate()
+                }
+            }
+            throw lastError ?: IllegalStateException("Redis Stream publish failed")
         } catch (error: RuntimeException) {
             metrics.recordPublish("ERROR", Duration.between(startedAt, Instant.now(clock)))
             throw error

@@ -9,7 +9,8 @@ This project follows Semantic Versioning after `1.0.0`. Before `1.0.0`, compatib
 ### Added
 
 * Spring Boot coordinator server for Redis Stream shard metadata, member heartbeat, assignment, migration, monitoring, ACL, audit, metrics, Redis-backed state, and stream provisioning.
-* `com.redisstream:redisstream-spring-boot-starter` for consumer heartbeat lifecycle, shard callbacks, Redis Stream polling, producer routing, and publishing.
+* `com.redisstream:redisstream-spring-boot-starter` for consumer heartbeat lifecycle, shard callbacks, runtime capacity reporting, Redis Stream polling, producer routing, and publishing.
+* Producer routing cache invalidation after Redis Stream write failure, plus opt-in bounded publish retry for idempotent producers.
 * Dockerfile, local Compose coordinator profile, Docker smoke workflow, and manual GHCR publish workflow.
 * PR test report rendering and Codex review workflow.
 

@@ -153,6 +153,28 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `monitoring read retries operational refresh when state save races with another writer`() {
+        val store = CopyingConflictOnceStateStore()
+        val service = service(clock, store)
+        service.createGroup("monitor-race", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val first = service.heartbeat("monitor-race", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "monitor-race",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+
+        clock.advance(Duration.ofSeconds(16))
+        store.conflictsBeforeSave = 1
+        val group = service.getGroup("monitor-race", "orders-consumer")
+
+        assertEquals(GroupState.EMPTY, group.state)
+        assertEquals(1, store.conflictedSaves)
+        assertEquals(MemberState.EXPIRED, service.listMembers("monitor-race", "orders-consumer").members.single().state)
+    }
+
+    @Test
     fun `capacity rebalances by member weight`() {
         service.createGroup("events", "events-consumer", createGroupRequest(initialShardCount = 8))
         val first = service.heartbeat("events", "events-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
@@ -953,6 +975,74 @@ private class RecordingStreamShardProvisioner : StreamShardProvisioner {
             shardCount = plan.shardCount,
         )
     }
+}
+
+private class CopyingConflictOnceStateStore : CoordinatorStateStore {
+    private val groups = linkedMapOf<GroupKey, GroupMetadata>()
+    var conflictsBeforeSave: Int = 0
+    var conflictedSaves: Int = 0
+        private set
+
+    override fun contains(key: GroupKey): Boolean =
+        key in groups
+
+    override fun get(key: GroupKey): GroupMetadata? =
+        groups[key]?.deepCopy()
+
+    override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean {
+        if (key in groups) {
+            return false
+        }
+        val stored = group.deepCopy()
+        stored.storeRevision = 1
+        group.storeRevision = stored.storeRevision
+        groups[key] = stored
+        return true
+    }
+
+    override fun deleteIfRevision(key: GroupKey, expectedRevision: Long): Boolean {
+        if (groups[key]?.storeRevision != expectedRevision) {
+            return false
+        }
+        groups.remove(key)
+        return true
+    }
+
+    override fun save(key: GroupKey, group: GroupMetadata) {
+        if (conflictsBeforeSave > 0) {
+            conflictsBeforeSave -= 1
+            conflictedSaves += 1
+            throw CoordinatorStateConflictException("injected monitoring save conflict")
+        }
+        val stored = group.deepCopy()
+        stored.storeRevision = group.storeRevision + 1
+        group.storeRevision = stored.storeRevision
+        groups[key] = stored
+    }
+
+    override fun list(): List<GroupMetadata> =
+        groups.values.map { it.deepCopy() }
+
+    private fun GroupMetadata.deepCopy(): GroupMetadata =
+        copy(
+            readableVersions = readableVersions.toSet(),
+            shardCountsByVersion = shardCountsByVersion.toMutableMap(),
+            consumerConcurrencyPolicy = consumerConcurrencyPolicy.copy(
+                memberOverrides = consumerConcurrencyPolicy.memberOverrides.toMap(),
+            ),
+            members = members
+                .mapValues { (_, member) ->
+                    member.copy(
+                        currentAssignment = member.currentAssignment.toSet(),
+                        revoking = member.revoking.toSet(),
+                    )
+                }
+                .toMutableMap(),
+            targetAssignments = targetAssignments
+                .mapValues { (_, shards) -> shards.toMutableSet() }
+                .toMutableMap(),
+            migrations = migrations.mapValues { (_, migration) -> migration.copy() }.toMutableMap(),
+        )
 }
 
 private class MutableClock(

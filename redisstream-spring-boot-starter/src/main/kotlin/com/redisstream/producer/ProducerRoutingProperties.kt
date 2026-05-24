@@ -10,6 +10,7 @@ class ProducerRoutingProperties {
     var streamPrefix: String = ""
     var consumerGroup: String = ""
     var routingRefreshInterval: Duration = Duration.ofSeconds(30)
+    var publishMaxAttempts: Int = 1
     var username: String? = null
     var password: String? = null
 }

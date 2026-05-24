@@ -79,7 +79,8 @@ class CoordinatorService(
 
     @Synchronized
     fun getGroup(streamPrefix: String, consumerGroup: String): GroupResponse =
-        requireGroup(streamPrefix, consumerGroup).let { group ->
+        withStateConflictRetry {
+            val group = requireGroup(streamPrefix, consumerGroup)
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
             }
@@ -89,7 +90,8 @@ class CoordinatorService(
 
     @Synchronized
     fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
-        requireGroup(streamPrefix, consumerGroup).let { group ->
+        withStateConflictRetry {
+            val group = requireGroup(streamPrefix, consumerGroup)
             if (refreshOperationalState(group, Instant.now(clock))) {
                 stateStore.save(group.key(), group)
             }
@@ -452,41 +454,45 @@ class CoordinatorService(
     @Synchronized
     fun listGroups(): GroupsResponse {
         val now = Instant.now(clock)
-        return GroupsResponse(stateStore.list().map {
-            if (refreshOperationalState(it, now)) {
-                stateStore.save(it.key(), it)
+        return withStateConflictRetry {
+            GroupsResponse(stateStore.list().map {
+                if (refreshOperationalState(it, now)) {
+                    stateStore.save(it.key(), it)
+                }
+                recordGroupState(it)
+                it.toResponse()
+            })
+        }
+    }
+
+    @Synchronized
+    fun listMembers(streamPrefix: String, consumerGroup: String): MembersResponse =
+        withStateConflictRetry {
+            val group = requireGroup(streamPrefix, consumerGroup)
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
             }
-            recordGroupState(it)
-            it.toResponse()
-        })
-    }
+            recordGroupState(group)
+            MembersResponse(group.members.values.sortedBy { it.memberId })
+        }
 
     @Synchronized
-    fun listMembers(streamPrefix: String, consumerGroup: String): MembersResponse {
-        val group = requireGroup(streamPrefix, consumerGroup)
-        if (refreshOperationalState(group, Instant.now(clock))) {
-            stateStore.save(group.key(), group)
+    fun assignments(streamPrefix: String, consumerGroup: String): AssignmentsResponse =
+        withStateConflictRetry {
+            val group = requireGroup(streamPrefix, consumerGroup)
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
+            }
+            val violations = invariantViolations(group)
+            metrics.recordGroupState(group, violations.size)
+            AssignmentsResponse(
+                targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
+                currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
+                revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }
+                    .filterValues { it.isNotEmpty() },
+                invariantViolations = violations,
+            )
         }
-        recordGroupState(group)
-        return MembersResponse(group.members.values.sortedBy { it.memberId })
-    }
-
-    @Synchronized
-    fun assignments(streamPrefix: String, consumerGroup: String): AssignmentsResponse {
-        val group = requireGroup(streamPrefix, consumerGroup)
-        if (refreshOperationalState(group, Instant.now(clock))) {
-            stateStore.save(group.key(), group)
-        }
-        val violations = invariantViolations(group)
-        metrics.recordGroupState(group, violations.size)
-        return AssignmentsResponse(
-            targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
-            currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
-            revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }
-                .filterValues { it.isNotEmpty() },
-            invariantViolations = violations,
-        )
-    }
 
     @Synchronized
     fun migrations(streamPrefix: String, consumerGroup: String): MigrationsResponse {

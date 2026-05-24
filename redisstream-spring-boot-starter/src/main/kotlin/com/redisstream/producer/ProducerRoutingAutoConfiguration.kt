@@ -67,9 +67,15 @@ class ProducerRoutingAutoConfiguration {
     @ConditionalOnBean(RedisStreamWriter::class)
     @ConditionalOnMissingBean
     fun redisStreamPublisher(
+        properties: ProducerRoutingProperties,
         routingCache: ProducerRoutingCache,
         writer: RedisStreamWriter,
         metrics: RedisStreamProducerMetrics,
     ): RedisStreamPublisher =
-        RoutingRedisStreamPublisher(routingCache, writer, metrics)
+        RoutingRedisStreamPublisher(
+            routingCache = routingCache,
+            writer = writer,
+            metrics = metrics,
+            maxAttempts = properties.publishMaxAttempts,
+        )
 }

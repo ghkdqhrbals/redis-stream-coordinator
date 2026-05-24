@@ -32,6 +32,16 @@ interface CoordinatorShardLifecycle {
 }
 ```
 
+Applications with custom worker pools may also implement `CoordinatorRuntimeCapacityProvider` on the same lifecycle bean:
+
+```kotlin
+interface CoordinatorRuntimeCapacityProvider {
+    fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity
+}
+```
+
+If provided, the managed consumer reports this runtime capacity in heartbeat requests. If not provided, it reports `runtime-max-concurrency` as fully available. The built-in Redis Stream polling lifecycle implements this provider and subtracts current in-flight handler calls from available capacity.
+
 Rules:
 
 * `onAssigned` starts or resumes local workers for assigned shards.
@@ -53,6 +63,7 @@ The starter owns:
 * `revokingShards` reporting
 * assignment diffing
 * listener callbacks for assign, pending, revoke, and fenced states
+* optional runtime capacity reporting through `CoordinatorRuntimeCapacityProvider`
 
 In direct lifecycle mode, the starter does not own:
 
@@ -172,11 +183,13 @@ redis-stream-coordinator:
     stream-prefix: orders
     consumer-group: orders-consumer
     routing-refresh-interval: 30s
+    # Default 1 avoids duplicate risk after uncertain XADD failures. Increase only with an idempotent publish strategy.
+    publish-max-attempts: 1
 ```
 
 Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher currently supports `murmur3`, `murmur3_32`, and `murmur3-32` names.
 
-`RedisStreamPublisher` supports single-message field maps, a convenience payload method that writes the `payload` field, and ordered best-effort batch publishing through `publishAll`.
+`RedisStreamPublisher` supports single-message field maps, a convenience payload method that writes the `payload` field, and ordered best-effort batch publishing through `publishAll`. A failed write invalidates the routing cache so the next publish refreshes metadata. `publish-max-attempts` can opt into same-call retry after refreshing metadata, but the default is `1` because retrying after an uncertain Redis write can duplicate messages unless the application has an idempotent publish key or duplicate-tolerant consumer.
 
 ## MVP Acceptance Criteria
 
@@ -186,6 +199,7 @@ Application producers can call `ProducerRoutingCache.route(partitionKey)` and wr
 * The starter notifies newly assigned shards.
 * The starter notifies revoked shards and reports revoke completion to the coordinator.
 * The starter retries incomplete revoke callbacks across heartbeat cycles for long drain windows.
+* The starter can report runtime capacity from a lifecycle provider or from the built-in Redis polling adapter.
 * The starter resets local assignment state on fencing and rejoins.
 * The starter can send a graceful leave heartbeat on shutdown.
 * The starter exposes an overridable `CoordinatorClient`.
@@ -193,6 +207,7 @@ Application producers can call `ProducerRoutingCache.route(partitionKey)` and wr
 * The starter rejects producer routing metadata that belongs to a different stream/group or omits active shard indexes.
 * The starter provides a Redis Stream publisher that routes by partition key and appends to the active shard.
 * The starter provides convenience payload and ordered batch publish APIs.
+* The publisher invalidates stale routing after write failures and supports opt-in bounded retry.
 * The starter provides an opt-in Redis Stream consumer adapter that polls assigned shards and acknowledges successfully handled records.
 * The starter records Micrometer metrics when a `MeterRegistry` is available.
 

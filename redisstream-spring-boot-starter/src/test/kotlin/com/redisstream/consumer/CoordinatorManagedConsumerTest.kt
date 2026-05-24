@@ -250,6 +250,32 @@ class CoordinatorManagedConsumerTest {
     }
 
     @Test
+    fun `managed consumer reports runtime capacity from lifecycle provider`() {
+        val lifecycle = CapacityReportingShardLifecycle(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 2))
+        val client = ScriptedCoordinatorClient(
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(setOf(CoordinatorShard(1, 0)), emptySet(), 2),
+            ),
+        )
+        val consumer = CoordinatorManagedConsumer(properties(), client, lifecycle)
+
+        consumer.pollOnce()
+
+        assertEquals(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 2), client.requests.single().runtimeConsumerCapacity)
+    }
+
+    @Test
+    fun `managed consumer rejects invalid runtime capacity reports`() {
+        val lifecycle = CapacityReportingShardLifecycle(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 5))
+        val consumer = CoordinatorManagedConsumer(properties(), ScriptedCoordinatorClient(), lifecycle)
+
+        assertFailsWith<IllegalArgumentException> {
+            consumer.pollOnce()
+        }
+    }
+
+    @Test
     fun `fenced response stops local ownership and next heartbeat rejoins`() {
         val assigned = setOf(CoordinatorShard(1, 0))
         val client = ScriptedCoordinatorClient(
@@ -396,6 +422,16 @@ private class RecordingShardLifecycle : CoordinatorShardLifecycle {
     override fun onFenced(context: CoordinatorConsumerContext) {
         fencedCount += 1
     }
+}
+
+private class CapacityReportingShardLifecycle(
+    private val capacity: RuntimeConsumerCapacity,
+) : CoordinatorShardLifecycle, CoordinatorRuntimeCapacityProvider {
+    override fun onAssigned(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext) {
+    }
+
+    override fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity =
+        capacity
 }
 
 private class ScriptedCoordinatorClient(

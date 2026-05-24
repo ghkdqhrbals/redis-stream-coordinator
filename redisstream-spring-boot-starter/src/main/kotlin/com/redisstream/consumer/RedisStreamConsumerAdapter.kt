@@ -31,7 +31,7 @@ class RedisStreamConsumerLifecycle(
     private val handler: RedisStreamMessageHandler,
     private val startPollersOnAssignment: Boolean = true,
     private val metrics: CoordinatorConsumerMetrics = NoopCoordinatorConsumerMetrics,
-) : CoordinatorShardLifecycle, AutoCloseable {
+) : CoordinatorShardLifecycle, CoordinatorRuntimeCapacityProvider, AutoCloseable {
     private val shardStates = ConcurrentHashMap<CoordinatorShard, ShardState>()
     private val executor: ExecutorService = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "redis-stream-consumer-${properties.memberId}").apply {
@@ -73,6 +73,15 @@ class RedisStreamConsumerLifecycle(
     override fun onFenced(context: CoordinatorConsumerContext) {
         shardStates.values.forEach { it.stopping.set(true) }
         shardStates.clear()
+    }
+
+    override fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity {
+        val inFlight = shardStates.values.sumOf { it.inFlight.get() }
+        val runtimeMaxConcurrency = properties.runtimeMaxConcurrency.coerceAtLeast(1)
+        return RuntimeConsumerCapacity(
+            runtimeMaxConcurrency = runtimeMaxConcurrency,
+            availableConcurrency = (runtimeMaxConcurrency - inFlight).coerceAtLeast(0),
+        )
     }
 
     fun pollOnce(shard: CoordinatorShard): Int {

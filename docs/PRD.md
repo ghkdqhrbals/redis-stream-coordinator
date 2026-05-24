@@ -61,9 +61,9 @@ Last reviewed: 2026-05-24.
 Implemented:
 
 * Spring Boot 4 / Kotlin / Java 24 Gradle multi-module project.
-* `coordinator-server` control plane with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, scale migration, rollback, monitoring APIs, scheduled coordinator event loop, ACL, audit logging, admin mutation rate limiting, and Micrometer metrics.
+* `coordinator-server` control plane with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, scale migration, rollback, monitoring APIs with conflict retry, scheduled coordinator event loop, ACL, audit logging, admin mutation rate limiting, and Micrometer metrics.
 * Memory and Redis-backed coordinator state stores, including Redis Cluster-safe key layout, Redis metadata schemaVersion guard, Lua-backed aggregate/projection writes, optimistic store revision checks, and optional Redis Stream shard provisioning.
-* `com.redisstream:redisstream-spring-boot-starter` with consumer heartbeat lifecycle, shard lifecycle callbacks, opt-in Redis Stream polling adapter, producer routing cache, Redis Stream publisher, graceful leave, and consumer/producer Micrometer metrics.
+* `com.redisstream:redisstream-spring-boot-starter` with consumer heartbeat lifecycle, shard lifecycle callbacks, runtime capacity reporting, opt-in Redis Stream polling adapter, producer routing cache, Redis Stream publisher stale-cache handling, graceful leave, and consumer/producer Micrometer metrics.
 * Local three-node Redis Cluster Docker Compose, coordinator Dockerfile, Compose coordinator profile, Docker smoke workflow, manual GHCR publish workflow, and gated Redis integration tests.
 * Open source contributor, testing, Docker, security, changelog, and operations documentation.
 
