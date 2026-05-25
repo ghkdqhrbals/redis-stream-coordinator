@@ -189,6 +189,19 @@ jobs:
               return { totals, suites, failedCases };
             }
 
+            function readRemainingWork() {
+              const statusDoc = 'docs/implementation-status.md';
+              if (!fs.existsSync(statusDoc)) {
+                return ['Cut the first versioned coordinator Docker image through the manual `Docker image` workflow.'];
+              }
+
+              const markdown = fs.readFileSync(statusDoc, 'utf8');
+              const section = markdown.match(/## Remaining Work([\s\S]*?)(?:\n## |\nStill intentionally out of coordinator scope:|$)/)?.[1] || '';
+              return [...section.matchAll(/^\s*\d+\.\s+\[\s\]\s+(.+)$/gm)]
+                .map(([, item]) => item.trim())
+                .filter(Boolean);
+            }
+
             const results = readSuites();
             const passCount = Math.max(
               results.totals.tests - results.totals.failures - results.totals.errors - results.totals.skipped,
@@ -197,6 +210,7 @@ jobs:
             const runAttempt = process.env.GITHUB_RUN_ATTEMPT || '1';
             const statusIcon = passed ? '✅' : '❌';
             const resultSummary = `${passCount} passed, ${results.totals.failures} failed, ${results.totals.errors} errored, ${results.totals.skipped} skipped`;
+            const remainingWork = readRemainingWork();
             const body = [
               marker,
               `### ${statusIcon} Coordinator tests ${passed ? 'passed' : 'failed'}`,
@@ -210,11 +224,11 @@ jobs:
               `| Reports | [Workflow run](${runUrl}) / [Coordinator test report](${htmlReportUrl}) |`,
               `| Raw Gradle test report | [Open Gradle report](${gradleReportUrl}) |`,
               '',
-              '### Improvements to address before public release',
+              '### Remaining work before public release',
               '',
-              '- Cut the first versioned coordinator Docker image through the manual `Docker image` workflow.',
-              '- Add broader Redis integration coverage for idempotent stream provisioning retry/failure handling.',
-              '- Continue tightening stale member fencing semantics beyond coordinator-issued epoch checks.',
+              ...(remainingWork.length > 0
+                ? remainingWork.map((item) => `- [ ] ${item}`)
+                : ['- ✅ No open MVP release improvement items tracked in `docs/implementation-status.md`.']),
             ];
 
             if (results.failedCases.length > 0) {
