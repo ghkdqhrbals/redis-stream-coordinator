@@ -726,6 +726,37 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `expired member leave heartbeat stays fenced`() {
+        service.createGroup("expired-leave", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "expired-leave",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "expired-leave",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        clock.advance(Duration.ofSeconds(16))
+        service.tick()
+
+        val leave = service.heartbeat(
+            "expired-leave",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = -1, ownedShards = memberA.assignment.assignedShards),
+        )
+        val member = service.listMembers("expired-leave", "orders-consumer").members.single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, leave.status)
+        assertEquals(MemberState.EXPIRED, member.state)
+        assertEquals(memberA.assignment.assignedShards, member.currentAssignment)
+    }
+
+    @Test
     fun `membership ignores stale ownership on rejoin`() {
         service.createGroup("expired-rejoin", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
@@ -767,6 +798,94 @@ class CoordinatorServiceTest {
         assertEquals(emptySet(), assignments.currentAssignments.getValue("member-a"))
         assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-b"))
         assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `heartbeat fences member that reports pending shard ownership before revoke completes`() {
+        service.createGroup("premature-ownership", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        val memberB = service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        val pendingShard = memberB.assignment.pendingShards.single()
+
+        val fenced = service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch, ownedShards = setOf(pendingShard)),
+        )
+        val members = service.listMembers("premature-ownership", "orders-consumer").members
+        val assignments = service.assignments("premature-ownership", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, fenced.status)
+        assertTrue(fenced.assignment.assignedShards.isEmpty())
+        assertEquals(MemberState.FENCED, members.single { it.memberId == "member-b" }.state)
+        assertEquals(emptySet(), assignments.currentAssignments.getValue("member-b"))
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-a"))
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `heartbeat fences member that reports shard owned by another active member`() {
+        val converged = convergeTwoMemberGroup("foreign-ownership")
+        val foreignShard = converged.memberATarget.single()
+
+        val fenced = service.heartbeat(
+            "foreign-ownership",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = converged.memberB.memberEpoch,
+                ownedShards = converged.memberBTarget + foreignShard,
+            ),
+        )
+        val members = service.listMembers("foreign-ownership", "orders-consumer").members
+        val assignments = service.assignments("foreign-ownership", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, fenced.status)
+        assertEquals(MemberState.FENCED, members.single { it.memberId == "member-b" }.state)
+        assertEquals(emptySet(), assignments.currentAssignments.getValue("member-b"))
+        assertEquals(emptySet(), assignments.revokeProgress["member-b"].orEmpty())
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `duplicate terminal revoke report after release does not fence member`() {
+        val converged = convergeTwoMemberGroup("duplicate-revoke")
+        val releasedByA = converged.memberBTarget.single()
+
+        val response = service.heartbeat(
+            "duplicate-revoke",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = converged.memberA.memberEpoch,
+                ownedShards = converged.memberATarget,
+                revokingShards = listOf(RevokingShardReport(releasedByA, RevokingShardState.REVOKED, inFlight = 0)),
+            ),
+        )
+        val memberA = service.listMembers("duplicate-revoke", "orders-consumer").members.single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.OK, response.status)
+        assertEquals(MemberState.ACTIVE, memberA.state)
+        assertEquals(converged.memberATarget, memberA.currentAssignment)
     }
 
     @Test
@@ -960,6 +1079,79 @@ class CoordinatorServiceTest {
             streamProvisioner = streamProvisioner,
             clock = clock,
         )
+
+    private data class ConvergedTwoMemberGroup(
+        val memberA: HeartbeatResponse,
+        val memberB: HeartbeatResponse,
+        val memberATarget: Set<ShardId>,
+        val memberBTarget: Set<ShardId>,
+    )
+
+    private fun convergeTwoMemberGroup(streamPrefix: String): ConvergedTwoMemberGroup {
+        service.createGroup(streamPrefix, "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberAJoined = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val memberAOwnedAll = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberAJoined.memberEpoch,
+                ownedShards = memberAJoined.assignment.assignedShards,
+            ),
+        )
+        val memberBJoined = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        val targetAssignments = service.assignments(streamPrefix, "orders-consumer").targetAssignment
+        val memberATarget = targetAssignments.getValue("member-a")
+        val memberBTarget = targetAssignments.getValue("member-b")
+        val releasedByA = memberAOwnedAll.assignment.assignedShards - memberATarget
+        val memberAReleased = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberAOwnedAll.memberEpoch,
+                ownedShards = memberATarget,
+                revokingShards = releasedByA.map {
+                    RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
+                },
+            ),
+        )
+        val memberBAssigned = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberBJoined.memberEpoch),
+        )
+        val memberBOwnedTarget = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = memberBAssigned.memberEpoch,
+                ownedShards = memberBAssigned.assignment.assignedShards,
+            ),
+        )
+
+        return ConvergedTwoMemberGroup(
+            memberA = memberAReleased,
+            memberB = memberBOwnedTarget,
+            memberATarget = memberATarget,
+            memberBTarget = memberBTarget,
+        )
+    }
 
     private fun redisProvider(redisConnectionFactory: RedisConnectionFactory) =
         StaticListableBeanFactory()

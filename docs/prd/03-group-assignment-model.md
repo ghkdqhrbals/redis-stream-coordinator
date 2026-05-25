@@ -156,7 +156,13 @@ Current assignment는 member가 실제로 적용 중이라고 보고한 state이
 }
 ```
 
-Coordinator는 current assignment를 보고 revoke ack가 들어온 shard만 새 owner에게 assign한다.
+Coordinator는 current assignment를 보고 revoke ack가 들어온 shard만 새 owner에게 assign한다. 단, heartbeat report는 그대로 신뢰하지 않는다. Coordinator가 수락하는 ownership report는 다음 범위로 제한된다.
+
+* member에게 이미 coordinator가 수락했던 `currentAssignment` 또는 `revoking` shard
+* target assignment에 포함되어 있고 다른 live member의 current/revoking state에 의해 block되지 않은 shard
+* terminal `REVOKED` duplicate report는 이미 release된 shard여도 무해하게 무시
+
+member가 아직 `pendingShards` 상태인 shard나 다른 active member가 소유한 shard를 `ownedShards`로 보고하면 coordinator는 해당 member를 fenced 처리하고 `FENCED_MEMBER_EPOCH`을 반환한다.
 
 ## Member Removal State
 

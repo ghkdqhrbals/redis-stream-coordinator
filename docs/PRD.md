@@ -56,7 +56,7 @@ Coordinator API control plane이 Redis Stream shard ownership을 중앙에서 �
 
 ## Current Implementation Snapshot
 
-Last reviewed: 2026-05-24.
+Last reviewed: 2026-05-25.
 
 Implemented:
 
@@ -70,6 +70,5 @@ Implemented:
 Not yet complete:
 
 * First public Docker image release.
-* More complete stale member fencing semantics and broader Redis provisioning retry/failure integration coverage.
 
 Detailed progress is tracked in [`implementation-status.md`](implementation-status.md).

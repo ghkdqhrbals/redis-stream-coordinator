@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 ## Snapshot
 
@@ -17,9 +17,9 @@ Overall status:
 | --- | --- | --- |
 | Project foundation | Done | Gradle Kotlin DSL, Gradle Wrapper `8.14.5`, Spring Boot `4.0.6`, Kotlin `2.2.21`, Java toolchain `24`, Foojay resolver. |
 | Coordinator API | Done | Admin, member heartbeat, producer routing, migration, rollback, and monitoring endpoints are implemented. |
-| Rebalance semantics | Mostly done | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, rebalance timeout, migration drain, and monitoring refresh conflict retry are implemented. Stricter stale member fencing remains. |
+| Rebalance semantics | Done for MVP | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, stale ownership fencing, rebalance timeout, migration drain, and monitoring refresh conflict retry are implemented. |
 | Redis state store | Done | Memory and Redis stores are available. Redis writes use store revision compare-and-set, schema version guard, and Lua aggregate/projection updates. |
-| Redis Stream shard provisioning | Done | Optional initial and next-version stream/consumer-group provisioning is implemented and gated by config. |
+| Redis Stream shard provisioning | Done | Optional initial and next-version stream/consumer-group provisioning is implemented and gated by config. Idempotent retry and partial failure behavior are covered. |
 | Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
 | Observability | Done for MVP | Coordinator and starter Micrometer metrics are implemented. Monitoring APIs are implemented. |
 | Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity reporting, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
@@ -71,6 +71,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Join/rejoin with `memberEpoch=0`.
 * [x] Graceful leave with `memberEpoch=-1`.
 * [x] Member lease expiry and fencing state.
+* [x] Stale ownership report validation and fencing for unauthorized `ownedShards` or non-terminal `revokingShards`.
 * [x] Sticky assignment with balancing by server-side consumer concurrency policy.
 * [x] `assignedShards` and `pendingShards` split.
 * [x] Revoke-before-assign handoff.
@@ -96,6 +97,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Redis Cluster hash-slot-safe coordinator keys.
 * [x] Redis Stream shard key helper and hash-slot distribution helper.
 * [x] Optional Redis Stream shard and consumer-group provisioning.
+* [x] Redis Stream provisioning idempotent retry coverage after partial Redis failure.
 
 ### Security, Audit, And Observability
 
@@ -174,10 +176,11 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Revoke-before-assign handoff with `pendingShards`.
 * Member expiration through heartbeat and event loop tick.
 * Rebalance timeout fencing.
+* Stale ownership fencing for premature pending ownership and foreign active-owner shard reports.
 * Scale migration, producer routing refresh, rollback, and migration drain completion.
 * Redis state projection and stale snapshot rejection.
 * Stream shard key validation and Redis Cluster slot distribution.
-* Stream provisioning success and failure ordering.
+* Stream provisioning success, idempotent retry, and failure ordering.
 * ACL enforcement and admin audit events.
 * Admin mutation rate limiting.
 * Monitoring refresh conflict retry.
@@ -224,8 +227,6 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 Priority order:
 
 1. [ ] Cut the first public Docker image release through the manual GHCR workflow.
-2. [ ] Tighten stale member fencing semantics beyond the current coordinator-issued epoch checks.
-3. [ ] Add broader Redis integration tests for idempotent provisioning retry and failure handling.
 
 Still intentionally out of coordinator scope:
 

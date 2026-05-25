@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.data.redis.core.StringRedisTemplate
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -55,6 +56,33 @@ class RedisStreamProvisioningIntegrationTest {
         touch(plan)
 
         streamProvisioner.provision(plan)
+        streamProvisioner.provision(plan)
+
+        plan.shardKeys.forEach { shardKey ->
+            assertEquals(listOf(plan.consumerGroup), consumerGroupNames(shardKey))
+        }
+    }
+
+    @Test
+    fun `stream provisioner retry succeeds after partial Redis failure leaves existing groups`() {
+        val plan = RedisStreamShardProvisioningPlan.forVersion(
+            streamPrefix = uniqueStreamPrefix("retry"),
+            consumerGroup = "orders-consumer",
+            streamVersion = 1,
+            shardCount = 3,
+        )
+        val poisonedShardKey = plan.shardKeys[1]
+        touch(plan)
+        redisTemplate.opsForValue().set(poisonedShardKey.value, "not-a-stream")
+
+        val error = assertFailsWith<CoordinatorException> {
+            streamProvisioner.provision(plan)
+        }
+
+        assertEquals(CoordinatorError.REDIS_STREAM_PROVISIONING_FAILED, error.error)
+        assertEquals(listOf(plan.consumerGroup), consumerGroupNames(plan.shardKeys.first()))
+
+        redisTemplate.delete(poisonedShardKey.value)
         streamProvisioner.provision(plan)
 
         plan.shardKeys.forEach { shardKey ->

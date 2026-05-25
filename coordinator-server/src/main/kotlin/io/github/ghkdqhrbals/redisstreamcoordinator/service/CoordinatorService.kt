@@ -340,13 +340,13 @@ class CoordinatorService(
                 }
                 return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
             }
-            request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
             existing.state == MemberState.FENCED || existing.state == MemberState.EXPIRED -> {
                 if (membersExpired > 0) {
                     stateStore.save(group.key(), group)
                 }
                 return fencedHeartbeat(group, request, memberId, existing)
             }
+            request.memberEpoch == -1L -> markLeaving(group, memberId, request, now)
             request.memberEpoch > existing.memberEpoch -> {
                 if (membersExpired > 0) {
                     stateStore.save(group.key(), group)
@@ -362,6 +362,9 @@ class CoordinatorService(
             else -> existing
         }
 
+        val ownershipReport = validateOwnershipReport(group, member, request)
+            ?: return fenceInvalidOwnershipReport(group, member, request, now)
+
         member.memberName = request.memberName ?: member.memberName
         member.metadataVersion = request.metadataVersion
         member.runtimeMaxConcurrency = request.runtimeConsumerCapacity.runtimeMaxConcurrency
@@ -370,10 +373,8 @@ class CoordinatorService(
                 .coerceAtLeast(0)
         member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
         member.rebalanceTimeoutMs = request.rebalanceTimeoutMs ?: member.rebalanceTimeoutMs
-        val reportedOwnedShards = if (request.memberEpoch == 0L) emptySet() else request.ownedShards
-        val reportedRevokingShards = if (request.memberEpoch == 0L) emptyList() else request.revokingShards
-        member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else reportedOwnedShards
-        member.revoking = reportedRevokingShards
+        member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else ownershipReport.ownedShards
+        member.revoking = ownershipReport.revokingShards
             .filterNot { it.state == RevokingShardState.REVOKED && it.inFlight == 0 }
             .map { it.shard }
             .toSet()
@@ -574,6 +575,64 @@ class CoordinatorService(
         member.memberEpoch = group.groupEpoch.coerceAtLeast(1)
         bumpMetadata(group, now, bumpGroupEpoch = true)
         return member
+    }
+
+    private data class ValidatedOwnershipReport(
+        val ownedShards: Set<ShardId>,
+        val revokingShards: List<RevokingShardReport>,
+    )
+
+    private fun validateOwnershipReport(
+        group: GroupMetadata,
+        member: MemberMetadata,
+        request: HeartbeatRequest,
+    ): ValidatedOwnershipReport? {
+        if (request.memberEpoch == 0L) {
+            return ValidatedOwnershipReport(emptySet(), emptyList())
+        }
+
+        val readableShards = group.readableShards().toSet()
+        val previouslyAcceptedShards = member.currentAssignment + member.revoking
+        val assignableTargetShards = group.targetAssignments[member.memberId].orEmpty() -
+            blockedShards(group, member.memberId)
+        val allowedOwnedShards = (previouslyAcceptedShards + assignableTargetShards)
+            .filter { it in readableShards }
+            .toSet()
+        val allowedRevokingShards = previouslyAcceptedShards +
+            assignableTargetShards.filter { it in readableShards }
+        val reportedOwnedShards = if (member.state == MemberState.LEAVING) emptySet() else request.ownedShards
+        val unauthorizedOwnedShards = reportedOwnedShards - allowedOwnedShards
+        val unauthorizedRevokingShards = request.revokingShards
+            .filterNot { it.state == RevokingShardState.REVOKED && it.inFlight == 0 }
+            .map { it.shard }
+            .filter { it !in allowedRevokingShards }
+
+        if (unauthorizedOwnedShards.isNotEmpty() || unauthorizedRevokingShards.isNotEmpty()) {
+            return null
+        }
+
+        return ValidatedOwnershipReport(
+            ownedShards = reportedOwnedShards.filter { it in allowedOwnedShards }.toSet(),
+            revokingShards = request.revokingShards.filter { it.shard in allowedRevokingShards },
+        )
+    }
+
+    private fun fenceInvalidOwnershipReport(
+        group: GroupMetadata,
+        member: MemberMetadata,
+        request: HeartbeatRequest,
+        now: Instant,
+    ): HeartbeatResponse {
+        member.state = MemberState.FENCED
+        member.memberEpoch = (group.groupEpoch + 1).coerceAtLeast(member.memberEpoch + 1)
+        member.currentAssignment = emptySet()
+        member.revoking = emptySet()
+        member.rebalanceDeadlineAt = null
+        bumpMetadata(group, now, bumpGroupEpoch = true)
+        reconcile(group, now)
+        stateStore.save(group.key(), group)
+        recordGroupState(group)
+        return fencedHeartbeat(group, request, member.memberId, member)
     }
 
     private fun refreshOperationalState(group: GroupMetadata, now: Instant): Boolean {
