@@ -156,6 +156,7 @@ GET /coord/v1/monitoring/groups
 GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}
 GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members
 GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments
+GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption
 GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations
 ```
 
@@ -166,16 +167,25 @@ Monitoring response에는 다음 요약만 포함한다.
 * active/expired member count
 * target/current assignment summary
 * revoke progress
+* consumer-reported shard consumption progress, including stream key, shard, last delivered id, last acked id, pending count, and update time
 * active migration progress
 
 ## Metrics
 
-Coordinator metric은 rebalance server 상태만 다룬다.
+Coordinator metric is the public observability surface. Consumer and producer modules may keep local diagnostics internally, but open-source users should rely on Coordinator metrics and monitoring APIs for group-level operation.
 
 * `redis_stream_coord_up`
 * `redis_stream_coord_group_epoch`
 * `redis_stream_coord_assignment_epoch`
 * `redis_stream_coord_members`
+* `redis_stream_coord_member_active`
+* `redis_stream_coord_member_heartbeat_age_seconds`
+* `redis_stream_coord_member_lease_remaining_seconds`
+* `redis_stream_coord_member_assigned_max_concurrency`
+* `redis_stream_coord_member_runtime_max_concurrency`
+* `redis_stream_coord_member_active_workers`
+* `redis_stream_coord_member_current_shards`
+* `redis_stream_coord_member_revoking_shards`
 * `redis_stream_coord_heartbeat_total`
 * `redis_stream_coord_member_expired_total`
 * `redis_stream_coord_rebalance_total`
@@ -183,6 +193,7 @@ Coordinator metric은 rebalance server 상태만 다룬다.
 * `redis_stream_coord_scale_request_total`
 * `redis_stream_coord_scale_request_failed_total`
 * `redis_stream_coord_consumer_concurrency_update_total`
+* `redis_stream_coord_producer_routing_request_total`
 * `redis_stream_coord_migration_active`
 * `redis_stream_coord_migration_active_age_seconds`
 * `redis_stream_coord_revoke_pending`
@@ -191,8 +202,19 @@ Coordinator metric은 rebalance server 상태만 다룬다.
 * `redis_stream_coord_tick_total`
 * `redis_stream_coord_tick_duration`
 * `redis_stream_coord_state_conflict_total`
+* `redis_stream_coord_consumer_shard_last_delivered_ms`
+* `redis_stream_coord_consumer_shard_last_delivered_seq`
+* `redis_stream_coord_consumer_shard_last_acked_ms`
+* `redis_stream_coord_consumer_shard_last_acked_seq`
+* `redis_stream_coord_consumer_shard_pending`
+* `redis_stream_coord_consumer_shard_progress_updated_at_seconds`
+* `redis_stream_coord_consumer_shard_progress_age_seconds`
 
-Message read/ack, handler duration, Redis Stream lag, pending recovery, duplicate processing metric은 member/data-plane metric이다.
+Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.
+
+## Redis Command Template Boundary
+
+Coordinator Redis calls are centralized behind a command template instead of being scattered across state store, mutex, audit, and stream provisioning code. This keeps Lua scripts, lock operations, list/set access, health ping, and stream provisioning commands discoverable in one place and makes Redis command compatibility easier to review.
 
 ## Logs
 

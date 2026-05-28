@@ -19,6 +19,14 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 * Rebalance only the shards that need to move when members join, leave, expire, or when shard counts change.
 * Handle shard count changes through next-version stream migration instead of in-place resharding.
 
+## Guarantee Boundaries
+
+Routing is deterministic only for a fixed producer-routing metadata snapshot. If shard count or active stream version changes, the same partition key can route to a different Redis Stream shard.
+
+The project uses at-least-once processing as its baseline. Producer retries, consumer crashes, pending recovery, and shard scaling can all produce duplicate delivery or duplicate business-event attempts.
+
+The project does not provide a single-processing guarantee. Real applications often combine DB writes, Redis writes, HTTP calls, and other side effects that cannot be committed atomically with Redis Stream ACKs. Applications that cannot tolerate duplicate effects must implement domain-level idempotency, deduplication, or compensation.
+
 ## Modules
 
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.

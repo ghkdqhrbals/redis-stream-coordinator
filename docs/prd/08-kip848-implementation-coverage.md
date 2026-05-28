@@ -61,7 +61,7 @@
 | Member metadata | instance id, rack id, client id, client host, subscribed topics, assignor metadata를 group assignment input으로 다룬다. | member lifecycle, heartbeat time, assignment epoch, runtime/assigned concurrency만 coordinator state로 둔다. |
 | Partition scaling | Kafka topic partition metadata 변경이 group epoch 증가 trigger가 된다. | shard count 변경은 Coordinator Admin API만 가능하고 next stream version migration으로 처리한다. |
 | Static membership | instance id 기반 static membership과 temporary leave를 지원한다. | MVP에서는 static membership을 구현하지 않는다. restart는 새 runtime incarnation으로 본다. |
-| Offset APIs | offset commit/fetch가 member epoch으로 fencing된다. | Redis Stream `XREADGROUP`/`XACK`, pending recovery, idempotency는 member data-plane 책임이다. |
+| Offset APIs | offset commit/fetch가 member epoch으로 fencing된다. | Redis Stream `XREADGROUP`/`XACK`는 at-least-once이다. Coordinator는 stale owner fencing과 assignment visibility를 제공하지만 단일 처리 보장은 제공하지 않는다. |
 | Error model | Kafka protocol error code(`UNKNOWN_MEMBER_ID`, `FENCED_MEMBER_EPOCH`, `UNSUPPORTED_ASSIGNOR` 등)를 사용한다. | Redis coordinator는 sticky assignment 전제라 assignor error를 제외하고 `HeartbeatStatus` enum을 custom API contract로 정의한다. |
 | Admin/describe APIs | Kafka group/offset describe APIs와 Kafka ACL을 사용한다. | custom Admin API, Monitoring API, Basic Auth를 사용한다. |
 | Config model | Kafka broker/group config에 consumer assignors, heartbeat/session, group size 등을 둔다. | coordinator YAML은 Redis 접속, Basic Auth, loop timing, request default만 가진다. stream/group별 shard count와 consumer `maxConcurrency`는 Admin API metadata에 저장한다. |

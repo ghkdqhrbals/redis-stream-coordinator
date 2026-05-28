@@ -49,11 +49,14 @@ Alert on:
 * coordinator health `DEGRADED`
 * Redis connection failures
 * `redis_stream_coord_member_expired_total` spike
+* `redis_stream_coord_member_heartbeat_age_seconds` approaching the member lease TTL
+* `redis_stream_coord_member_lease_remaining_seconds` repeatedly reaching zero for active members
 * `redis_stream_coord_revoke_pending` remaining non-zero longer than the application rebalance timeout
 * `redis_stream_coord_invariant_violation_total` increasing
 * `redis_stream_coord_state_conflict_total` increasing rapidly
-* `redis_stream_consumer_ack_status_total{status="ERROR"}` increasing
-* `redis_stream_producer_publish_attempt_total{status="ERROR"}` increasing
+* `redis_stream_coord_consumer_shard_pending` remaining high for a member/shard
+* `redis_stream_coord_consumer_shard_progress_age_seconds` becoming stale while the member is active
+* `redis_stream_coord_producer_routing_request_total{status="ERROR"}` increasing
 * active migration age exceeding the expected drain window
 * repeated `429` responses from admin automation
 
@@ -71,6 +74,21 @@ Alert on:
 2. Confirm live consumers have converged to target assignments.
 3. Check whether old-version shards are still reported in `currentAssignments` or `revokeProgress`.
 4. If the active migration is unsafe, use the rollback API before the old version is deprecated.
+
+## Shard Scale Procedure
+
+For at-least-once producer workloads that tolerate duplicates, shard scale-out/in can be performed online through the coordinator scale API.
+
+For duplicate-sensitive workloads:
+
+1. Pause producers for the target `streamPrefix` and `consumerGroup`.
+2. Wait until in-flight `XADD` calls and publish retry windows are drained.
+3. Call the coordinator scale API.
+4. Wait for producer routing metadata to expose the new `activeWriteVersion`.
+5. Refresh producer routing caches.
+6. Resume producers.
+
+This is required because the same event id can be published to old and new stream versions if scaling occurs while produce retries are still active. The project does not provide global deduplication or a single-processing guarantee.
 
 ## Upgrade Procedure
 

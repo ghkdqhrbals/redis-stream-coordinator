@@ -86,6 +86,7 @@ Common status codes:
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}` | group 요약 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members` | member 상태 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments` | target/current assignment 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption` | consumer shard별 Redis Stream progress 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations` | migration 목록/진행률 조회 | no | not required |
 
 ## Admin API
@@ -165,6 +166,8 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 
 `routeV1` is a fixed protocol contract, not group metadata. The starter computes a 32-bit Murmur3 hash and maps it into `[0, shardCount)` using deterministic rejection sampling so `2^32 % shardCount` tail values do not create modulo bias. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.
 
+Routing is deterministic only for the returned `activeWriteVersion` and `shardCount`. After shard scale-out/in, the same partition key may route to a different stream key. The coordinator does not provide global event id deduplication across every shard and stream version.
+
 Response summary:
 
 | Field | Meaning |
@@ -181,7 +184,7 @@ Response summary:
 POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
 ```
 
-Starts shard scale-out or scale-in by creating a next stream version migration. This is the only supported shard count mutation path.
+Starts shard scale-out or scale-in by creating a next stream version migration. This is the only supported shard count mutation path. For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.
 
 Request body:
 
@@ -320,6 +323,7 @@ Request body:
 | `runtimeConsumerCapacity.availableConcurrency` | yes | Currently available worker capacity. |
 | `ownedShards` | yes | Shards the member currently owns and may read. |
 | `revokingShards` | no | Revoke/drain progress and `REVOKED` ack candidates. |
+| `shardProgress` | no | Consumer-reported Redis Stream progress for assigned or revoking shards. |
 
 Epoch validation:
 
@@ -429,6 +433,25 @@ Response summary:
 | `currentAssignments` | Member-reported owned/revoking/revoked state. |
 | `revokeProgress` | Shards blocked by revoke-before-assign dependency. |
 | `invariantViolations` | Duplicate owner, missing owner, stale epoch, or unknown member references. |
+
+### Get Consumption Progress
+
+```http
+GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption
+```
+
+Response summary:
+
+| Field | Meaning |
+| --- | --- |
+| `progress` | Flattened member/shard progress rows. |
+| `progress[].memberId` | Consumer member reporting the progress. |
+| `progress[].shard` | Stream version and shard index. |
+| `progress[].streamKey` | Concrete Redis Stream key. |
+| `progress[].lastDeliveredId` | Last Redis Stream id delivered to the consumer poller. |
+| `progress[].lastAckedId` | Last Redis Stream id successfully acknowledged by the consumer poller. |
+| `progress[].pendingCount` | Consumer-reported in-flight or pending count for the shard. |
+| `progress[].updatedAt` | Time the member last updated the progress row. |
 
 ### List Migrations
 

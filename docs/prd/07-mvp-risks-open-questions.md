@@ -33,7 +33,8 @@ Excluded:
 * admin UI
 * hot shard auto split
 * Redis Cluster resharding automation
-* exactly-once external side effects
+* single-processing guarantees
+* producer global deduplication and cross-shard/cross-version event id deduplication
 
 ## Tradeoffs
 
@@ -72,7 +73,28 @@ Costs:
 * Redis outage 시 coordinator와 data plane이 함께 영향받는다.
 * assignment state가 손상되면 수동 복구 runbook이 필요하다.
 * shard count migration 중 old/new key ordering이 깨질 수 있다.
+* shard scale-out/in 중 producer가 같은 event id를 old routing metadata와 new routing metadata로 각각 publish하면 duplicate message가 발생할 수 있다. 중복에 민감한 workload는 scale 전 producer quiescence가 필요하다.
+* 여러 비즈니스 side effect를 Redis Stream ACK와 하나의 원자적 transaction으로 묶을 수 없으므로 단일 처리 보장은 프로젝트 보장으로 제공하지 않는다.
 * public Docker image release에는 version tag, compatibility note, and smoke result가 함께 공개되어야 한다.
+
+## Processing Guarantee Boundary
+
+기본 처리 보장은 at-least-once이다.
+
+Included scope:
+
+* coordinator `memberEpoch` / `assignmentEpoch` 기반 stale owner fencing
+* revoke-before-assign handoff
+* pending recovery가 가능한 Redis Stream consumer group 사용
+* duplicate-tolerant application 설계를 위한 shard/progress visibility
+
+Excluded scope:
+
+* single delivery
+* single handler invocation
+* single business side effects
+* producer global deduplication
+* shard scale 중 old/new routing metadata를 가로지르는 global event id deduplication
 
 ## Maintainability Improvements
 

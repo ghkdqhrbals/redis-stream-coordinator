@@ -16,8 +16,9 @@ Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을
 * coordinator는 `tick-interval`마다 heartbeat가 `member-lease-ttl`을 넘긴 member를 `EXPIRED`로 표시하고 shard를 재할당한다.
 * revoke 완료 전 같은 shard를 다른 member에게 assign하지 않는다.
 * 영향 없는 member는 rebalance 중에도 기존 shard를 계속 consume한다.
-* shard count 변경은 next stream version migration으로 처리하고 producer write를 중단하지 않는다.
+* shard count 변경은 next stream version migration으로 처리한다. at-least-once producer는 online 전환할 수 있지만, 중복에 민감한 workload는 scale 전 producer quiescence를 운영 제약으로 둔다.
 * actual read authority는 coordinator가 내려준 assignment epoch과 member epoch으로 fence한다.
+* 기본 처리 보장은 at-least-once이다. application은 중복 전달과 중복 처리 시도를 허용하도록 설계해야 한다.
 * operator가 group epoch, assignment epoch, member epoch, target/current assignment, revoke progress를 볼 수 있게 한다.
 
 ## Non-Goals
@@ -26,10 +27,12 @@ Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을
 * Redis Cluster resharding 자동 대응
 * hot shard 자동 split
 * shard 전체 serial ordering
-* 외부 side effect까지 포함한 절대적 exactly-once
+* 단일 delivery, 단일 handler invocation, 단일 side effect 보장
+* producer global deduplication 또는 전체 shard/version을 가로지르는 동일 `eventId` deduplication
+* 여러 비즈니스 side effect와 Redis Stream ACK를 원자적으로 묶는 transaction protocol
 * 같은 stream version 안에서 shard count만 바꾸는 in-place resharding
 * member startup, local YAML, producer, consumer가 직접 shard count나 server-side consumer `maxConcurrency`를 변경하는 방식
-* Redis Stream message read, handler execution, `XACK`, retry, DLQ, idempotency marker storage 구현
+* 기본 consumer mode의 retry와 DLQ 구현
 * coordinator server HA/election protocol 설계
 
 ## Assumptions
@@ -38,6 +41,8 @@ Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을
 * coordinator metadata key는 Redis persistence 또는 운영 백업 정책으로 보호한다.
 * 각 member는 runtime 시작 시 UUID `memberId`를 직접 생성한다.
 * producer와 consumer는 metadata store의 active stream version을 source of truth로 사용한다.
+* producer retry, network failure, consumer pending recovery, shard migration은 중복 message 또는 중복 처리 시도를 만들 수 있다.
+* 동일 partition key는 같은 routing metadata 안에서만 같은 shard로 route된다. shard count나 active stream version이 바뀌면 다른 shard로 route될 수 있다.
 * 한 `streamPrefix + consumerGroup`에는 동시에 하나의 active migration만 허용한다.
 * `streamPrefix`와 `consumerGroup`은 coordinator API 호출의 group identifier이며, coordinator/member local YAML에 고정된 shard control 설정으로 두지 않는다.
 * member startup은 shard count 변경을 시작하지 않는다. startup은 coordinator API heartbeat join과 metadata 조회만 수행한다.

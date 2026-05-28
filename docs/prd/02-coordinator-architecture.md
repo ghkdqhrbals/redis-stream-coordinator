@@ -183,6 +183,7 @@ Heartbeat response 예시:
 | `runtimeConsumerCapacity` | yes | member runtime이 보고하는 처리 가능 상태. `runtimeMaxConcurrency`는 process local consumer worker limit이고, coordinator의 server-side `maxConcurrency`를 올릴 수 없다. |
 | `ownedShards` | yes | KIP-848의 `TopicPartitions`에 해당한다. member가 지금 read 가능하다고 보고하는 shard 목록이다. |
 | `revokingShards` | no | Redis-specific drain progress이다. `REVOKED` 상태와 `inFlight=0`이면 revoke ack로 처리한다. |
+| `shardProgress` | no | consumer가 coordinator metrics용으로 보고하는 Redis Stream progress이다. coordinator가 허용한 owned/revoking shard만 저장하며, 임의 shard progress는 fencing 대상이다. |
 
 ### Heartbeat Response Fields
 

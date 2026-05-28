@@ -24,9 +24,39 @@ streamKey = format(metadata.streamKeyPattern, metadata.activeWriteVersion, shard
 
 Routing is a v1 protocol contract, not group metadata. The producer computes a 32-bit Murmur3 hash, rejects values in the incomplete modulo tail, and rehashes deterministically until the value maps uniformly into `[0, shardCount)`. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.
 
+## Routing and Duplicate Delivery Constraints
+
+Routing determinism is scoped to one routing metadata snapshot:
+
+```text
+{producerRoutingProtocolVersion, activeWriteVersion, shardCount, partitionKey}
+```
+
+동일 partition key라도 shard scale-out/in으로 `activeWriteVersion` 또는 `shardCount`가 바뀌면 다른 Redis Stream shard로 route될 수 있다. 예를 들어 `order-123`이 version `1`, shard count `4`에서는 shard `2`로 route되더라도, scale-out 후 version `2`, shard count `8`에서는 shard `6`으로 route될 수 있다.
+
+Producer retry와 shard scale-out/in은 중복 publish 시도를 만들 수 있다. 이 프로젝트는 전체 `streamPrefix`, 전체 shard, 전체 stream version의 동일 `eventId`를 전역으로 deduplicate하지 않는다.
+
+중요 시나리오:
+
+```text
+1. producer A가 eventId=E, partitionKey=order-123을 old routing metadata로 version 1 shard 2에 XADD한다.
+2. Redis 응답이 producer에게 도달하기 전에 네트워크 오류가 발생한다.
+3. 운영자가 shard scale-out을 실행해 activeWriteVersion=2, shardCount=8로 전환한다.
+4. producer A 또는 다른 producer가 같은 eventId=E를 retry하면서 새 routing metadata를 사용한다.
+5. 같은 partitionKey가 version 2 shard 6으로 route된다.
+6. 결과적으로 동일 eventId=E가 서로 다른 stream version/shard에 존재할 수 있다.
+```
+
+따라서 다음 운영 제약을 둔다.
+
+* 중복에 민감한 workload에서는 shard scale-out/in 중 produce를 수행하지 않는다.
+* scale 요청 전 producer를 quiesce하고, in-flight XADD와 publish retry window가 drain된 뒤 scale을 실행한다.
+* scale 완료 후 producer routing cache를 refresh하고 새 metadata로 produce를 재개한다.
+* producer traffic을 멈출 수 없는 workload는 producer semantics를 at-least-once로 보고, application domain의 idempotency, deduplication, unique constraint, compensation으로 중복 side effect를 방지한다.
+
 ## Coordinator Admin Scale Request
 
-Shard count 변경은 member startup이나 `application.yaml` desired spec sync로 시작하지 않는다. 운영자 또는 배포 자동화가 Coordinator Admin API에 scale-out/in을 요청하고, coordinator가 metadata를 검증한 뒤 migration을 시작한다. producer, consumer, direct Redis key write는 shard count를 변경할 수 없다.
+Shard count 변경은 member startup이나 `application.yaml` desired spec sync로 시작하지 않는다. 운영자 또는 배포 자동화가 Coordinator Admin API에 scale-out/in을 요청하고, coordinator가 metadata를 검증한 뒤 migration을 시작한다. producer, consumer, direct Redis key write는 shard count를 변경할 수 없다. 중복에 민감한 group에서는 이 API가 producer quiescence 이후에만 호출되어야 한다.
 
 ```mermaid
 sequenceDiagram
