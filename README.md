@@ -136,9 +136,7 @@ redis-stream-coordinator:
 ## Documentation
 
 * [Published Design Docs](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html)
-* [Published Design PRD (English)](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/docs/en/PRD.html)
 * [Design PRD](docs/PRD.md)
-* [Design PRD (English)](docs/en/PRD.md)
 * [Implementation Status](docs/implementation-status.md)
 * [Docker Guide](docs/docker.md)
 * [Testing Guide](docs/testing.md)

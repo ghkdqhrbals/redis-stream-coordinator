@@ -1,132 +1,121 @@
 # Versioning and Compatibility Policy
 
-## Goals
+## Why Versioning Matters
 
-This project is intended to be used as open source infrastructure. Versioning is part of the product contract, not an implementation detail.
+This project is intended for open source use. Users can run different versions of the coordinator server, consumer starter, producer starter, Docker image, and Redis server. Compatibility must be explicit so upgrades can be planned safely.
 
-The project must support safe rolling upgrades where old and new coordinator/consumer artifacts coexist temporarily.
+## Artifact Versioning
 
-## Version Axes
+Artifacts follow Semantic Versioning:
 
-The project has four separately tracked compatibility axes:
+* `MAJOR`: incompatible API, protocol, or metadata changes,
+* `MINOR`: backward-compatible features,
+* `PATCH`: bug fixes and documentation updates.
 
-| Axis | Scope | Compatibility rule |
-| --- | --- | --- |
-| Artifact version | Gradle/Maven modules such as `coordinator-server` and `redisstream-spring-boot-starter` | Semantic Versioning. |
-| Heartbeat protocol version | Member heartbeat request/response schema | Coordinator accepts a configured version range. |
-| HTTP API version | REST path prefix such as `/coord/v1` | Breaking API changes require a new path prefix. |
-| Redis metadata schema version | Persisted coordinator aggregate and projection format | Breaking schema changes require migration code and a documented upgrade path. |
+Artifacts:
 
-## Semantic Versioning
+* `coordinator-server`,
+* `redisstream-spring-boot-starter`,
+* sample Docker images,
+* published coordinator Docker image.
 
-Artifact versions follow `MAJOR.MINOR.PATCH`.
+## HTTP API Versioning
 
-Rules:
-
-* `PATCH`: bug fixes only. No public API, protocol, or schema breaks.
-* `MINOR`: backward-compatible features. A minor release must support the previous minor line for rolling upgrades.
-* `MAJOR`: allowed to remove deprecated API, drop old protocol versions, or require schema migration.
-
-Before `1.0.0`, the public API may still evolve, but every compatibility-affecting change must still be documented in this PRD and release notes.
-
-## Compatibility Support Window
-
-Default support target:
-
-* Current minor version: `N`
-* Previous minor version: `N-1`
-
-For example, `1.4.x` coordinator should accept `1.3.x` RedisStream starter protocol when the heartbeat protocol remains within the configured supported range.
-
-Security fixes may be backported to the latest patch of the current minor line. Broader backports are best-effort until the project publishes a formal support matrix.
-
-## Heartbeat Protocol Version
-
-Heartbeat schema compatibility is controlled by `protocolVersion`.
-
-Coordinator config:
-
-```yaml
-coordinator:
-  protocol:
-    min-heartbeat-version: 1
-    max-heartbeat-version: 1
-```
-
-Rules:
-
-* Coordinator rejects unsupported versions with `UNSUPPORTED_PROTOCOL`.
-* Optional fields may be added without increasing the protocol version when old clients can omit them and old servers can ignore them.
-* Required request fields, removed response fields, changed enum semantics, or changed fencing behavior require a new heartbeat protocol version.
-* During a rolling upgrade, deploy the coordinator with a supported range that covers both old and new clients.
-
-## HTTP API Version
-
-The current REST API prefix is:
+The base path includes a version:
 
 ```text
 /coord/v1
 ```
 
-Rules:
+Breaking HTTP API changes require a new path prefix such as `/coord/v2`.
 
-* Backward-compatible fields may be added to `v1` responses.
-* Removing fields, changing meaning, changing status codes, or changing endpoint semantics requires `/coord/v2`.
-* Old endpoint versions should remain available for at least one minor release after a new endpoint version is introduced.
+Backward-compatible additions are allowed in the same API version:
+
+* optional request fields,
+* additive response fields,
+* new enum values only when old clients ignore unknown values safely,
+* new monitoring endpoints.
+
+## Heartbeat Protocol Version
+
+Heartbeat requests include `protocolVersion`.
+
+The coordinator configuration defines an accepted range, for example:
+
+```yaml
+coordinator:
+  protocol:
+    min-supported-version: "1.0"
+    max-supported-version: "1.1"
+```
+
+Policy:
+
+* A coordinator must reject unsupported protocol versions with a clear error.
+* Minor protocol additions must be optional.
+* Required field changes require a major version.
+* Rolling upgrades should support N/N-1 client and server coexistence.
 
 ## Redis Metadata Schema Version
 
-Redis-backed state includes explicit schema version metadata.
+Redis aggregate state includes `schemaVersion`.
 
-Rules:
+Policy:
 
-* Additive projection keys are minor-version compatible.
-* Removing or renaming keys requires migration code.
-* A coordinator must not silently overwrite a newer unknown schema.
-* Schema migration should be idempotent and observable.
+* The coordinator validates schema version before reading or writing.
+* Incompatible schema changes require migration notes.
+* Compatible additive fields require default handling for older state.
+* Tests must cover reading old schema fixtures where support is promised.
 
-Current MVP status:
+## Docker Image Tags
 
-* Redis store uses aggregate/projection keys and `storeRevision` CAS.
-* Redis-backed coordinator state access is serialized through a Redis state mutex so open source deployments do not depend on user-managed single-active rollout rules.
-* Group aggregate metadata includes `schemaVersion=1`.
-* Coordinator rejects unsupported future schema versions instead of overwriting them.
-* Legacy group aggregate metadata without `schemaVersion` is treated as version `1`.
+Recommended tags:
+
+* immutable version tag, for example `v0.1.0`,
+* commit SHA tag,
+* optional moving tag such as `unstable` for pre-release builds.
+
+`latest` should be avoided until the first public release policy is stable.
+
+## Redis Version Compatibility
+
+The modules should check Redis server version before using version-specific commands.
+
+Documentation must state:
+
+* minimum supported Redis version,
+* tested Redis versions,
+* command compatibility notes,
+* fallback behavior for unsupported commands.
+
+## Upgrade Policy
+
+Recommended rolling upgrade order:
+
+1. Upgrade coordinator server to a version that supports both old and new heartbeat protocols.
+2. Upgrade consumer applications.
+3. Upgrade producer applications.
+4. Remove old protocol support only in a later major release.
+
+Rollback should be possible while Redis metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.
+
+## Compatibility Test Matrix
+
+Required tests:
+
+* old client heartbeat against new coordinator,
+* new client heartbeat against old supported coordinator where applicable,
+* old producer routing response parsing,
+* schema fixture read tests,
+* Docker smoke test for published image,
+* Redis command compatibility tests for configured ACK and publish modes.
 
 ## Deprecation Policy
 
 Deprecations must include:
 
-* first deprecated version
-* replacement API or behavior
-* earliest removal version
-* migration note
-
-Minimum removal window after `1.0.0`:
-
-* public Kotlin API: one minor release
-* HTTP endpoint version: one minor release
-* heartbeat protocol version: one minor release after coordinator supports the replacement
-* Redis schema: one major release unless a security or correctness issue requires faster removal
-
-## Release Checklist
-
-Every release should update:
-
-* `gradle.properties` `projectVersion`
-* compatibility matrix in release notes
-* supported heartbeat protocol range
-* migration notes for Redis schema changes
-* deprecation list
-* test result summary for coordinator and RedisStream starter modules
-* Docker image smoke result and published GHCR image tag, when releasing the coordinator image
-
-## Required Tests
-
-Versioning changes must include tests for:
-
-* coordinator accepts the oldest supported heartbeat protocol version
-* coordinator accepts the newest supported heartbeat protocol version
-* coordinator rejects below-minimum and above-maximum heartbeat versions
-* RedisStream starter fails fast when configured with a locally unsupported protocol version
-* rolling-upgrade behavior when old and new members heartbeat against the same group
+* replacement behavior,
+* first version where deprecation appears,
+* earliest removal version,
+* migration notes,
+* warning logs or metrics where practical.

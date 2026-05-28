@@ -186,11 +186,7 @@ def discover_markdown_files(source: Path) -> list[Path]:
     primary = source / "docs" / "PRD.md"
     if primary.exists():
         ordered = [primary]
-        english_primary = source / "docs" / "en" / "PRD.md"
-        if english_primary.exists():
-            ordered.append(english_primary)
         ordered.extend(sorted((source / "docs" / "prd").glob("*.md")))
-        ordered.extend(sorted((source / "docs" / "en" / "prd").glob("*.md")))
         ordered.extend(source / extra for extra in DESIGN_DOC_EXTRAS)
         seen: set[Path] = set()
         return [
@@ -206,11 +202,6 @@ def discover_markdown_files(source: Path) -> list[Path]:
 
 
 def language_for(markdown_path: Path) -> str:
-    parts = markdown_path.parts
-    if "docs" in parts and "en" in parts:
-        return "en"
-    if "docs" in parts:
-        return "ko"
     return "en"
 
 
