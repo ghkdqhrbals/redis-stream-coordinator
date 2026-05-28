@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Coordinator Architecture</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .wrap {
+        width: min(100%, 980px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin-top: 6px;
+      }
+      nav a {
+        color: var(--accent);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .responsive-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <div class="index-title">Index</div>
+        <nav aria-label="Design document navigation">
+        <a href="../../CHANGELOG.html">Changelog</a>
+        <a href="../../CONTRIBUTING.html">Contributing</a>
+        <a href="../../README.html">Redis Stream Coordinator</a>
+        <a href="../../SECURITY.html">Security Policy</a>
+        <a href="../AGENTS.html">Redis Stream Coordinator 문서 작업 지침</a>
+        <a href="../PRD.html">Redis Stream Coordinator PRD</a>
+        <a href="../docker.html">Docker Guide</a>
+        <a href="../implementation-status.html">Implementation Status</a>
+        <a href="../intellij-setup.html">IntelliJ Setup</a>
+        <a href="../operations-runbook.html">Operations Runbook</a>
+        <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+        <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+        <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+        <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+        <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+        <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+        <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+        <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+        <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+        <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+        <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+        <a href="../testing.html">Testing Guide</a>
+        <a href="../../infra/aws/README.html">AWS ElastiCache Redis Cluster</a>
+        <a href="../../prompts/review.html">Codex PR Review</a>
+        <a href="../../samples/consumer-pod/README.html">Redis Stream Consumer Pod Sample</a>
+        <a href="../../samples/publisher-pod/README.html">Redis Stream Publisher Pod Sample</a>
+        </nav>
+      </div>
+    </header>
+    <div class="wrap">
+      <main>
+<h1 id="coordinator-architecture">Coordinator Architecture</h1>
+<h2 id="architecture-summary">Architecture Summary</h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant M as Member
+    participant Coord as Coordinator
+    participant Store as Redis Coordinator Store
+    participant Stream as Redis Stream Shards
+
+    M-&gt;&gt;M: memberId UUID 생성
+    M-&gt;&gt;Coord: HeartbeatRequest ownedShards와 revoke ack 보고
+    Coord-&gt;&gt;Store: member heartbeat와 current assignment 저장
+    Coord-&gt;&gt;Store: group metadata와 member heartbeat 읽기
+    Coord-&gt;&gt;Coord: group epoch 변경 여부 판단
+    Coord-&gt;&gt;Coord: target assignment 계산
+    Coord-&gt;&gt;Store: target assignment와 assignment epoch 저장
+    Coord--&gt;&gt;M: HeartbeatResponse assignment assigned/pending 전달
+    M-&gt;&gt;Stream: revoke 대상 shard 신규 read 중단
+    M-&gt;&gt;Coord: 다음 heartbeat로 revoke 완료와 ownedShards 보고
+    Coord-&gt;&gt;Store: revoke ack 확인 후 assign 허용
+    Coord--&gt;&gt;M: 다음 HeartbeatResponse로 assignedShards 전달
+    M-&gt;&gt;Stream: assignment 적용 후 member data-plane read 시작
+</code></pre>
+<h2 id="components">Components</h2>
+<h3 id="coordinator-worker">Coordinator Worker</h3>
+<ul>
+<li>Coordinator API로 들어온 <code>{streamPrefix, consumerGroup}</code>을 group identifier로 사용한다.</li>
+<li>group metadata 변경을 event loop에서 처리한다.</li>
+<li>member heartbeat와 <code>member-lease-ttl</code>을 보고 join/leave/fence를 판단한다.</li>
+<li>target assignment를 계산하고 Redis에 저장한다.</li>
+<li>member current assignment를 보고 revoke 완료 여부를 확인한다.</li>
+<li>revoke 완료 전 해당 shard를 새 member에게 assign하지 않는다.</li>
+</ul>
+<h3 id="coordinator-api">Coordinator API</h3>
+<ul>
+<li>create, scale, consumer concurrency update, rollback, heartbeat request를 직접 받는다.</li>
+<li>API path의 <code>{streamPrefix, consumerGroup}</code>으로 대상 group을 결정한다.</li>
+<li>member나 producer local YAML에서 stream/group/shard count desired state를 수집하지 않는다.</li>
+</ul>
+<h3 id="coordinator-store">Coordinator Store</h3>
+<ul>
+<li>Redis keyspace에 group metadata, member metadata, target assignment, current assignment를 저장한다.</li>
+<li>group metadata와 assignment는 durable key이다.</li>
+<li>heartbeat와 ephemeral liveness는 TTL key이다.</li>
+<li>Redis mailbox 구현을 선택하면 heartbeat request와 response를 member별 key로 저장하되, 프로토콜 의미는 direct heartbeat request/response와 동일하게 유지한다.</li>
+</ul>
+<h3 id="member-runtime">Member Runtime</h3>
+<ul>
+<li>runtime 시작 시 <code>memberId</code> UUID를 만든다.</li>
+<li>coordinator heartbeat API로 현재 owned shard, revocation progress, revoke ack를 보고한다.</li>
+<li>같은 heartbeat response에서 member epoch, assigned/pending shard, fencing status를 받는다.</li>
+<li>revoke 대상 shard는 신규 read를 멈추고 in-flight를 비운다.</li>
+<li>assign 대상 shard는 member data-plane이 적용한다.</li>
+</ul>
+<h3 id="member-data-plane-boundary">Member Data-Plane Boundary</h3>
+<ul>
+<li>coordinator는 Redis Stream message를 읽거나 ack하지 않는다.</li>
+<li>coordinator는 handler, retry, pending recovery, idempotency marker를 설정하지 않는다.</li>
+<li>member data-plane은 coordinator가 내려준 assignment/member epoch을 기준으로 read 여부를 판단한다.</li>
+</ul>
+<h2 id="loop-timing">Loop Timing</h2>
+<p>Concrete config 값은 <code>prd/06-data-config-observability.md</code>에만 둔다. 이 문서에서는 loop가 어떤 신호로 실행되는지만 정의한다.</p>
+<h2 id="coordinator-event-loop">Coordinator Event Loop</h2>
+<p>Coordinator는 주기와 이벤트를 함께 사용한다.</p>
+<pre><code class="language-text">coordinator event loop
+  every coordinator.tick-interval
+  or when heartbeat or metadata event is observed
+
+steps:
+  1. group metadata load
+  2. member heartbeat scan
+  3. mark members EXPIRED when now - lastHeartbeatAt &gt; member-lease-ttl
+  4. group epoch bump if membership or metadata changed
+  5. target assignment recompute if group epoch changed
+  6. revoke/assign dependency resolution
+  7. metrics publish
+</code></pre>
+<p>Redis-backed deployment에서는 event loop와 state 접근 API가 먼저 Redis state mutex를 획득한다. 같은 Redis state store를 바라보는 coordinator pod가 여러 개 있어도 한 순간에 하나의 request 또는 tick만 state를 읽고 처리하고 저장한다. Mutex를 획득하지 못한 tick은 skip되고, request는 짧게 대기한 뒤 계속 실패하면 retry 가능한 <code>503</code>을 반환한다.</p>
+<h2 id="heartbeat-reconciliation-plane">Heartbeat Reconciliation Plane</h2>
+<p>Member와 coordinator 사이의 제어면은 heartbeat 하나로 통일한다. KIP-848의 <code>ConsumerGroupHeartbeat</code>처럼 heartbeat는 단순 liveness ping이 아니라 join/leave, owned shard 보고, revoke ack, assignment 전달을 모두 처리하는 reconciliation RPC이다.</p>
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat
+</code></pre>
+<p>KIP-848 mapping:</p>
+<ul>
+<li><code>GroupId</code>: HTTP path의 <code>{streamPrefix, consumerGroup}</code>이다.</li>
+<li><code>MemberId</code>: HTTP path의 <code>{memberId}</code>이며 member runtime이 생성한 UUID이다.</li>
+<li><code>MemberEpoch=0</code>: join 또는 rejoin heartbeat이다. member는 full state를 보내야 한다.</li>
+<li><code>MemberEpoch=-1</code>: leave heartbeat이다. member는 더 이상 shard를 소유하지 않겠다는 의사를 보낸다.</li>
+<li><code>TopicPartitions</code>: Redis Stream에서는 <code>ownedShards</code>이다. member가 지금 사용할 수 있다고 보고하는 shard set이다.</li>
+<li><code>Assignment.AssignedTopicPartitions</code>: Redis Stream에서는 <code>assignment.assignedShards</code>이다. 즉시 read 가능한 shard set이다.</li>
+<li>
+<p><code>Assignment.PendingTopicPartitions</code>: Redis Stream에서는 <code>assignment.pendingShards</code>이다. target에는 포함되지만 이전 owner revoke가 끝나지 않아 아직 read하면 안 되는 shard set이다.</p>
+</li>
+<li>
+<p>assignment는 별도 polling loop로 가져오지 않는다. 다음 heartbeat 응답이 최신 assignment이다.</p>
+</li>
+<li>coordinator API가 일시적으로 응답하지 못하면 member는 현재 assignment를 유지하고 다음 heartbeat에 재시도한다.</li>
+<li>member가 보고한 runtime consumer capacity는 관측값이고, 실제 consumer worker 수 상한은 coordinator metadata의 server-side consumer concurrency policy가 결정한다.</li>
+<li>첫 heartbeat, <code>memberEpoch=0</code> rejoin, error response 이후, request timeout 이후에는 full state를 보낸다. 정상 heartbeat에서는 변하지 않은 optional field를 생략할 수 있지만, MVP server는 full state request를 항상 받아야 한다.</li>
+</ul>
+<p>Heartbeat request 예시:</p>
+<pre><code class="language-json">{
+  &quot;protocolVersion&quot;: 1,
+  &quot;requestId&quot;: &quot;hb-member-a-000042&quot;,
+  &quot;memberId&quot;: &quot;member-a&quot;,
+  &quot;memberEpoch&quot;: 11,
+  &quot;rebalanceTimeoutMs&quot;: 60000,
+  &quot;metadataVersion&quot;: 8,
+  &quot;runtimeConsumerCapacity&quot;: {
+    &quot;runtimeMaxConcurrency&quot;: 12,
+    &quot;availableConcurrency&quot;: 8
+  },
+  &quot;ownedShards&quot;: [
+    {
+      &quot;streamVersion&quot;: 2,
+      &quot;shardIndex&quot;: 0,
+      &quot;state&quot;: &quot;OWNED&quot;
+    }
+  ],
+  &quot;revokingShards&quot;: [
+    {
+      &quot;streamVersion&quot;: 1,
+      &quot;shardIndex&quot;: 3,
+      &quot;state&quot;: &quot;DRAINING&quot;,
+      &quot;inFlight&quot;: 2,
+      &quot;ackedAt&quot;: null
+    }
+  ]
+}
+</code></pre>
+<p>Heartbeat response 예시:</p>
+<pre><code class="language-json">{
+  &quot;responseTo&quot;: &quot;hb-member-a-000042&quot;,
+  &quot;status&quot;: &quot;OK&quot;,
+  &quot;memberId&quot;: &quot;member-a&quot;,
+  &quot;memberEpoch&quot;: 12,
+  &quot;heartbeatIntervalMs&quot;: 3000,
+  &quot;groupEpoch&quot;: 12,
+  &quot;assignmentEpoch&quot;: 12,
+  &quot;metadataVersion&quot;: 9,
+  &quot;assignedMaxConcurrency&quot;: 12,
+  &quot;assignment&quot;: {
+    &quot;error&quot;: &quot;NONE&quot;,
+    &quot;assignedShards&quot;: [
+      {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 0}
+    ],
+    &quot;pendingShards&quot;: [
+      {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 2}
+    ],
+    &quot;metadataVersion&quot;: 9
+  }
+}
+</code></pre>
+<h3 id="heartbeat-request-fields">Heartbeat Request Fields</h3>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>protocolVersion</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">Heartbeat schema version. incompatible version은 <code>UNSUPPORTED_PROTOCOL</code>로 거절한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>requestId</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">중복 응답과 로그 추적용 id.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>memberId</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">path의 <code>{memberId}</code>와 같아야 한다. member runtime 시작 시 생성한 UUID이며 이 runtime incarnation을 식별한다. coordinator는 이 id에 member epoch을 부여하고 fencing한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>memberEpoch</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role"><code>0</code>이면 신규 join 또는 coordinator가 이미 <code>EXPIRED</code>/<code>FENCED</code>로 판단한 member의 rejoin, <code>-1</code>이면 leave, 양수이면 coordinator가 직전 response로 발급한 epoch이다. stale 값이면 <code>FENCED_MEMBER_EPOCH</code>, coordinator가 발급하지 않은 값이면 <code>INVALID_REQUEST</code> 대상이다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>rebalanceTimeoutMs</code></td>
+<td data-label="Required">first heartbeat required</td>
+<td data-label="Role">revoke를 완료할 수 있는 최대 시간이다. coordinator config가 아니라 member heartbeat contract이며, 값이 바뀌지 않으면 생략할 수 있다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>metadataVersion</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">member가 캐시한 group metadata version. 낮으면 response의 assignment metadata version 기준으로 갱신한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>runtimeConsumerCapacity</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">member runtime이 보고하는 처리 가능 상태. <code>runtimeMaxConcurrency</code>는 process local consumer worker limit이고, coordinator의 server-side <code>maxConcurrency</code>를 올릴 수 없다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>ownedShards</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">KIP-848의 <code>TopicPartitions</code>에 해당한다. member가 지금 read 가능하다고 보고하는 shard 목록이다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>revokingShards</code></td>
+<td data-label="Required">no</td>
+<td data-label="Role">Redis-specific drain progress이다. <code>REVOKED</code> 상태와 <code>inFlight=0</code>이면 revoke ack로 처리한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>shardProgress</code></td>
+<td data-label="Required">no</td>
+<td data-label="Role">consumer가 coordinator metrics용으로 보고하는 Redis Stream progress이다. coordinator가 허용한 owned/revoking shard만 저장하며, 임의 shard progress는 fencing 대상이다.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="heartbeat-response-fields">Heartbeat Response Fields</h3>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>responseTo</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">어떤 heartbeat request에 대한 응답인지 표시한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>status</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">heartbeat 처리 결과. <code>OK</code>가 아니면 member는 assignment 적용 전 status별 처리를 먼저 한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>memberId</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">path의 member id를 echo한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>memberEpoch</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">member가 다음 heartbeat부터 사용해야 하는 epoch.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>heartbeatIntervalMs</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">member가 다음 정상 heartbeat를 보내야 하는 server-side 권장 주기이다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>groupEpoch</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">coordinator가 본 최신 group metadata epoch.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>assignmentEpoch</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">target assignment가 계산된 epoch.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>metadataVersion</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">최신 metadata version. member cache가 낮으면 metadata를 갱신한다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>assignedMaxConcurrency</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">coordinator metadata가 이 member에게 허용한 consumer worker 수. partition/shard 개수가 아니며, member는 이 값보다 많은 consumer worker를 열 수 없다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>assignment</code></td>
+<td data-label="Required">no</td>
+<td data-label="Role">member가 수렴해야 할 assignment이다. 변경이 없고 이미 수렴했다면 <code>null</code>일 수 있다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>assignment.assignedShards</code></td>
+<td data-label="Required">when assignment present</td>
+<td data-label="Role">즉시 read 가능한 shard 목록이다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>assignment.pendingShards</code></td>
+<td data-label="Required">when assignment present</td>
+<td data-label="Role">target에는 있지만 이전 owner가 아직 release하지 않아 read하면 안 되는 shard 목록이다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>assignment.metadataVersion</code></td>
+<td data-label="Required">when assignment present</td>
+<td data-label="Role">assignment와 함께 적용할 metadata version이다.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="heartbeat-reconciliation-rules">Heartbeat Reconciliation Rules</h3>
+<p>KIP-848처럼 member는 response의 assignment와 자신의 local owned shard를 비교해서 수렴한다.</p>
+<ul>
+<li>response <code>memberEpoch</code>을 local member epoch으로 갱신한다.</li>
+<li>member는 <code>memberEpoch</code>을 직접 증가시키거나 <code>0</code>으로 reset하면 안 된다. coordinator가 response로 발급한 epoch만 다음 heartbeat에 사용한다.</li>
+<li>active member의 <code>memberEpoch=0</code> reset, 현재 epoch보다 큰 positive epoch, <code>-1</code> 외의 negative epoch은 <code>INVALID_REQUEST</code>로 거절한다.</li>
+<li>현재 epoch보다 낮은 positive epoch은 stale heartbeat로 보고 <code>FENCED_MEMBER_EPOCH</code>로 거절한다.</li>
+<li>local <code>ownedShards</code>에는 있지만 <code>assignment.assignedShards</code>에 없는 shard는 revoke 대상이다. member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 되면 다음 heartbeat에 <code>revokingShards.state=REVOKED</code>로 보고한다.</li>
+<li><code>assignment.assignedShards</code>에는 있지만 local <code>ownedShards</code>에 없는 shard는 새로 read 가능한 shard이다.</li>
+<li><code>assignment.pendingShards</code>는 target assignment에는 포함되지만 아직 이전 owner가 release하지 않은 shard이다. member는 pending shard를 read하면 안 된다.</li>
+<li>한 response에서 revoke와 신규 assign을 동시에 강제하지 않는다. pending shard는 이전 owner의 release가 확인된 뒤 다음 heartbeat에서 <code>assignedShards</code>로 이동한다.</li>
+<li>revoke가 발생한 member는 다음 heartbeat interval을 기다리지 않고 즉시 heartbeat를 보내 revoke ack를 보고한다.</li>
+<li>coordinator는 <code>assignment</code>을 member가 해당 <code>assignmentEpoch</code>으로 수렴했다고 보고할 때까지 heartbeat response에 반복해서 내려보낼 수 있다.</li>
+<li><code>rebalanceTimeoutMs</code> 안에 revoke ack가 오지 않으면 coordinator는 해당 member를 group에서 제거하고 <code>FENCED_MEMBER_EPOCH</code>로 fence한 뒤 target assignment를 다시 계산한다.</li>
+<li><code>UNKNOWN_MEMBER_ID</code> 또는 <code>FENCED_MEMBER_EPOCH</code>를 받으면 member는 모든 shard read/ack를 중단하고 같은 <code>memberId</code>, <code>memberEpoch=0</code>, full state heartbeat로 rejoin한다.</li>
+<li>request timeout이나 <code>RETRY</code> 이후 다음 heartbeat는 full state를 포함해야 한다.</li>
+</ul>
+<h3 id="heartbeat-enums">Heartbeat Enums</h3>
+<p><code>MemberLifecycleState</code>는 coordinator 내부 상태이다. heartbeat request의 source of truth는 <code>memberEpoch</code>이다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Value</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Value"><code>STARTING</code></td>
+<td data-label="Role"><code>memberEpoch=0</code> join을 처리 중인 상태.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>ACTIVE</code></td>
+<td data-label="Role">heartbeat가 정상이고 assigned shard를 처리 중인 상태.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>DRAINING</code></td>
+<td data-label="Role">graceful shutdown 또는 revoke 처리 중이라 신규 assign을 받지 않는 상태.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>LEAVING</code></td>
+<td data-label="Role"><code>memberEpoch=-1</code> leave를 받은 상태. coordinator는 소유 shard를 revoke 대상으로 만든다.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>EXPIRED</code></td>
+<td data-label="Role"><code>member-lease-ttl</code> 동안 heartbeat가 없어 coordinator가 제거 대상으로 판단한 상태.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>FENCED</code></td>
+<td data-label="Role">coordinator가 이 member epoch을 더 이상 유효하지 않게 만든 상태. member는 read/ack를 중단해야 한다.</td>
+</tr>
+</tbody>
+</table>
+<p><code>ShardAssignmentState</code>:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Value</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Value"><code>OWNED</code></td>
+<td data-label="Role">member가 현재 소유하고 신규 read 가능한 shard.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>REVOKING</code></td>
+<td data-label="Role">coordinator assignment에서 제외되어 member가 신규 read를 중단해야 하는 shard.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>DRAINING</code></td>
+<td data-label="Role">신규 read는 중단했고 local in-flight 처리를 비우는 중인 shard.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>REVOKED</code></td>
+<td data-label="Role">local in-flight가 0이고 member가 더 이상 소유하지 않는 shard. 다음 heartbeat에서 ack로 보고한다.</td>
+</tr>
+</tbody>
+</table>
+<p><code>HeartbeatStatus</code>:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Value</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Value"><code>OK</code></td>
+<td data-label="Role">request가 반영됐고 assignment를 적용할 수 있다.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>RETRY</code></td>
+<td data-label="Role">coordinator가 일시적으로 처리하지 못했다. member는 현재 assignment만 처리하고 다음 heartbeat에 full state로 재시도한다.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>UNKNOWN_MEMBER_ID</code></td>
+<td data-label="Role">coordinator가 member를 모른다. member는 같은 <code>memberId</code>, <code>memberEpoch=0</code>, full state heartbeat로 rejoin한다.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>FENCED_MEMBER_EPOCH</code></td>
+<td data-label="Role">member epoch이 coordinator state와 맞지 않는다. member는 모든 read/ack를 중단하고 rejoin한다.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>UNSUPPORTED_PROTOCOL</code></td>
+<td data-label="Role">heartbeat protocol version이 호환되지 않는다.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>INVALID_REQUEST</code></td>
+<td data-label="Role">필수 필드 누락, 잘못된 epoch, path/body 불일치 등 request validation 실패이다.</td>
+</tr>
+<tr>
+<td data-label="Value"><code>GROUP_AUTHORIZATION_FAILED</code></td>
+<td data-label="Role">group 접근 권한이 없다.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="member-scale-out-sequence">Member Scale-Out Sequence</h2>
+<p>새 member가 추가되면 coordinator는 sticky partition 기준으로 필요한 shard만 이동시킨다. 기존 owner가 revoke ack를 보내기 전까지 새 member는 해당 shard를 assign받지 않는다.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant C as Coordinator
+    participant A as Existing Member A
+    participant B as Existing Member B
+    participant N as New Member
+    participant Store as Redis Store
+
+    N-&gt;&gt;N: memberId UUID 생성
+    N-&gt;&gt;C: heartbeat memberEpoch=0 full state 보고
+    C-&gt;&gt;Store: member N 등록, memberEpoch 부여
+    C-&gt;&gt;Store: groupEpoch 증가
+    C-&gt;&gt;C: sticky partition target 재계산
+    C--&gt;&gt;A: assignment에서 moved shard 제외
+    C--&gt;&gt;B: assignment 유지 또는 일부 shard 제외
+    A-&gt;&gt;A: 신규 read 중단 후 in-flight drain
+    A-&gt;&gt;C: heartbeat로 REVOKED ack 보고
+    C-&gt;&gt;Store: revoke ack 저장
+    C--&gt;&gt;N: assignment.assignedShards로 released shard 전달
+    N-&gt;&gt;N: assigned shard를 ownedShards에 반영
+    N-&gt;&gt;C: heartbeat ownedShards 보고
+</code></pre>
+<h2 id="member-scale-in-sequence">Member Scale-In Sequence</h2>
+<p>정상 scale-in은 member가 <code>memberEpoch=-1</code> heartbeat를 보내는 graceful leave로 처리한다. coordinator는 leaving member에게 신규 assign을 주지 않고, 소유 shard를 revoke 대상으로 만든다.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant C as Coordinator
+    participant L as Leaving Member
+    participant A as Active Member A
+    participant B as Active Member B
+    participant Store as Redis Store
+
+    L-&gt;&gt;C: heartbeat memberEpoch=-1 ownedShards 보고
+    C-&gt;&gt;Store: member L state LEAVING 저장
+    C-&gt;&gt;Store: groupEpoch 증가
+    C-&gt;&gt;C: L 제외하고 sticky partition target 재계산
+    C--&gt;&gt;L: assignment.assignedShards empty 전달
+    L-&gt;&gt;L: 신규 read 중단 후 in-flight drain
+    L-&gt;&gt;C: heartbeat로 REVOKED ack 보고
+    C-&gt;&gt;Store: L ownedShards empty 저장
+    C--&gt;&gt;A: assignment.assignedShards 일부 shard 전달
+    C--&gt;&gt;B: assignment.assignedShards 일부 shard 전달
+    A-&gt;&gt;A: assigned shard를 ownedShards에 반영
+    B-&gt;&gt;B: assigned shard를 ownedShards에 반영
+    C-&gt;&gt;Store: L metadata를 EXPIRED/LEAVING 이력으로 유지
+</code></pre>
+<h2 id="idle-member-removal">Idle Member Removal</h2>
+<p>비정상 종료나 네트워크 단절처럼 member가 <code>LEAVING</code>을 보낼 수 없는 경우 coordinator가 tick마다 heartbeat 만료를 확인해 제거한다.</p>
+<p>판정 기준:</p>
+<ul>
+<li><code>now - lastHeartbeatAt &gt; member-lease-ttl</code>: member를 <code>EXPIRED</code>로 전환하고 member epoch을 fencing한다.</li>
+<li><code>EXPIRED</code> member의 shard는 revoke ack를 기다릴 수 없으므로 member epoch fencing 후 새 owner에게 assign한다.</li>
+<li><code>EXPIRED</code> member metadata는 삭제하지 않고 group 이력으로 유지한다.</li>
+</ul>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant C as Coordinator
+    participant D as Dead Member
+    participant A as Active Member A
+    participant Store as Redis Store
+
+    D--xC: heartbeat 중단
+    C-&gt;&gt;Store: tick마다 lastHeartbeatAt scan
+    C-&gt;&gt;Store: member-lease-ttl 초과 시 memberEpoch fence, state EXPIRED
+    C-&gt;&gt;Store: groupEpoch 증가
+    C-&gt;&gt;C: EXPIRED member 제외하고 target 재계산
+    C--&gt;&gt;A: assignment.assignedShards로 expired member shard 전달
+    A-&gt;&gt;A: assigned shard를 ownedShards에 반영
+    A-&gt;&gt;C: heartbeat ownedShards 보고
+</code></pre>
+<p>Revoke/assign 규칙:</p>
+<ul>
+<li>assignment에서 빠진 shard를 가진 member는 해당 shard의 신규 read를 즉시 중단한다.</li>
+<li>이미 data-plane에 전달한 message는 완료 후 revoke ack로 보고한다.</li>
+<li>in-flight가 0이 되면 <code>revokingShards.state=REVOKED</code>를 다음 heartbeat에 포함한다.</li>
+<li>coordinator는 revoke ack 또는 member fencing을 확인하기 전 새 owner의 <code>assignment.assignedShards</code>에 해당 shard를 넣지 않는다.</li>
+<li><code>assignment.assignedShards</code>를 받은 member는 해당 shard를 local <code>ownedShards</code>에 반영한다.</li>
+<li>revoking member의 heartbeat가 <code>member-lease-ttl</code> 동안 끊기거나 <code>rebalanceTimeoutMs</code>를 초과하면 coordinator는 member를 fencing하고 해당 shard를 재할당한다.</li>
+</ul>
+      </main>
+    </div>
+  </body>
+</html>

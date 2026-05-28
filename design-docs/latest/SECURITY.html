@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Redis Stream Coordinator Design Docs</title>
+    <title>Security Policy</title>
     <style>
       * {
         box-sizing: border-box;
@@ -244,7 +244,44 @@
     </header>
     <div class="wrap">
       <main>
-<h1>Redis Stream Coordinator Design Docs</h1><p><a href="CHANGELOG.html">Open the design document</a>.</p>
+<h1 id="security-policy">Security Policy</h1>
+<h2 id="supported-versions">Supported Versions</h2>
+<p>The project is currently pre-1.0. Security fixes target the latest development line until the first stable release is published.</p>
+<p>After <code>1.0.0</code>, the intended support window is:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Version line</th>
+<th>Support</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Version line">Current minor <code>N</code></td>
+<td data-label="Support">Security fixes</td>
+</tr>
+<tr>
+<td data-label="Version line">Previous minor <code>N-1</code></td>
+<td data-label="Support">Best-effort security fixes</td>
+</tr>
+<tr>
+<td data-label="Version line">Older versions</td>
+<td data-label="Support">Unsupported unless documented otherwise</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reporting-a-vulnerability">Reporting A Vulnerability</h2>
+<p>Do not open a public issue for vulnerabilities.</p>
+<p>Report privately through GitHub Security Advisories for this repository. Include:</p>
+<ul>
+<li>affected version or commit</li>
+<li>reproduction steps</li>
+<li>impact</li>
+<li>suggested mitigation, if known</li>
+</ul>
+<h2 id="security-boundaries">Security Boundaries</h2>
+<p>The coordinator is a control-plane service. It provides Basic Auth, role ACL, audit logs, and optional admin mutation rate limiting. Production deployments should still place it behind trusted network boundaries, TLS termination, and secret management.</p>
+<p>The RedisStream starter runs inside application processes. Message payload validation, handler authorization, retry, DLQ, and idempotency are application responsibilities.</p>
       </main>
     </div>
   </body>

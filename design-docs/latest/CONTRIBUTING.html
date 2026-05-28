@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Redis Stream Coordinator Design Docs</title>
+    <title>Contributing</title>
     <style>
       * {
         box-sizing: border-box;
@@ -244,7 +244,66 @@
     </header>
     <div class="wrap">
       <main>
-<h1>Redis Stream Coordinator Design Docs</h1><p><a href="CHANGELOG.html">Open the design document</a>.</p>
+<h1 id="contributing">Contributing</h1>
+<p>Thanks for contributing to Redis Stream Coordinator. This project is infrastructure code, so compatibility and tests matter as much as feature code.</p>
+<h2 id="development-setup">Development Setup</h2>
+<p>Requirements:</p>
+<ul>
+<li>Java 24</li>
+<li>Docker, for Redis Cluster and image smoke tests</li>
+<li>Gradle Wrapper from this repository</li>
+</ul>
+<p>Run the standard verification:</p>
+<pre><code class="language-bash">./gradlew test build --no-daemon
+python3 .github/scripts/test_docker_distribution.py
+</code></pre>
+<p>Redis integration tests:</p>
+<pre><code class="language-bash">docker compose up -d
+REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
+  --tests '*RedisCoordinatorStateStoreIntegrationTest' \
+  --tests '*RedisStreamProvisioningIntegrationTest'
+</code></pre>
+<h2 id="pull-request-expectations">Pull Request Expectations</h2>
+<p>Include tests for behavior changes. Use the smallest effective test level:</p>
+<ul>
+<li>Unit tests for assignment, validation, routing, and state transitions.</li>
+<li>HTTP integration tests for API status codes, auth, ACL, audit, and rate limits.</li>
+<li>Redis integration tests for persistence, Lua updates, provisioning, and cluster key behavior.</li>
+<li>Starter tests for consumer lifecycle, producer routing, and Redis polling behavior.</li>
+</ul>
+<p>Update documentation when changing:</p>
+<ul>
+<li>public Kotlin APIs</li>
+<li>HTTP endpoints or status codes</li>
+<li>heartbeat protocol fields</li>
+<li>Redis metadata schema</li>
+<li>Docker or runtime configuration</li>
+<li>operational behavior</li>
+</ul>
+<h2 id="compatibility-rules">Compatibility Rules</h2>
+<p>Follow <a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>.</p>
+<p>Breaking changes need:</p>
+<ul>
+<li>a new major version or explicit pre-1.0 migration note</li>
+<li>release note entry</li>
+<li>compatibility tests</li>
+<li>Redis schema migration plan if persisted metadata changes</li>
+</ul>
+<p>Do not silently overwrite Redis metadata with an unsupported future <code>schemaVersion</code>.</p>
+<h2 id="code-style">Code Style</h2>
+<p>Use existing Kotlin and Spring Boot patterns in the repo. Keep coordinator logic deterministic and avoid adding data-plane processing behavior to the coordinator server.</p>
+<p>Prefer explicit domain errors through <code>CoordinatorError</code> and <code>CoordinatorException</code>.</p>
+<h2 id="release-checklist">Release Checklist</h2>
+<p>Before a public release:</p>
+<ol>
+<li>Update <code>gradle.properties</code> <code>projectVersion</code>.</li>
+<li>Update <code>CHANGELOG.md</code>.</li>
+<li>Run <code>./gradlew test build --no-daemon</code>.</li>
+<li>Run Redis integration tests.</li>
+<li>Run Docker smoke test or the <code>Docker image</code> workflow.</li>
+<li>Publish the coordinator image manually through the <code>Docker image</code> workflow.</li>
+<li>Attach compatibility notes for artifact version, heartbeat protocol, HTTP API, and Redis metadata schema.</li>
+</ol>
       </main>
     </div>
   </body>

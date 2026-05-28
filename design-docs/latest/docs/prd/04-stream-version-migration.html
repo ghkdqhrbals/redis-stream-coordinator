@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stream Version Migration and Routing</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .wrap {
+        width: min(100%, 980px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin-top: 6px;
+      }
+      nav a {
+        color: var(--accent);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .responsive-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <div class="index-title">Index</div>
+        <nav aria-label="Design document navigation">
+        <a href="../../CHANGELOG.html">Changelog</a>
+        <a href="../../CONTRIBUTING.html">Contributing</a>
+        <a href="../../README.html">Redis Stream Coordinator</a>
+        <a href="../../SECURITY.html">Security Policy</a>
+        <a href="../AGENTS.html">Redis Stream Coordinator 문서 작업 지침</a>
+        <a href="../PRD.html">Redis Stream Coordinator PRD</a>
+        <a href="../docker.html">Docker Guide</a>
+        <a href="../implementation-status.html">Implementation Status</a>
+        <a href="../intellij-setup.html">IntelliJ Setup</a>
+        <a href="../operations-runbook.html">Operations Runbook</a>
+        <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+        <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+        <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+        <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+        <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+        <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+        <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+        <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+        <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+        <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+        <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+        <a href="../testing.html">Testing Guide</a>
+        <a href="../../infra/aws/README.html">AWS ElastiCache Redis Cluster</a>
+        <a href="../../prompts/review.html">Codex PR Review</a>
+        <a href="../../samples/consumer-pod/README.html">Redis Stream Consumer Pod Sample</a>
+        <a href="../../samples/publisher-pod/README.html">Redis Stream Publisher Pod Sample</a>
+        </nav>
+      </div>
+    </header>
+    <div class="wrap">
+      <main>
+<h1 id="stream-version-migration-and-routing">Stream Version Migration and Routing</h1>
+<h2 id="routing-contract">Routing Contract</h2>
+<p>이 문서에서 topic partition에 해당하는 최소 routing 단위는 Redis Stream shard이다.</p>
+<p><code>streamVersion</code>, <code>activeWriteVersion</code>, <code>readableVersions</code>, <code>fromVersion</code>, <code>toVersion</code>은 모두 정수이다. <code>v1</code>, <code>v2</code> 같은 prefix 문자열을 저장하지 않는다.</p>
+<p>Producer는 local shard count를 직접 쓰지 않는다.</p>
+<p>Producer는 coordinator의 producer routing metadata endpoint를 캐시한다.</p>
+<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+</code></pre>
+<pre><code class="language-text">metadata = metadataCache.activeWrite(streamPrefix, consumerGroup)
+shardIndex = routeV1(partitionKey, metadata.shardCount)
+streamKey = format(metadata.streamKeyPattern, metadata.activeWriteVersion, shardIndex)
+</code></pre>
+<p><code>metadataVersion</code>이 바뀌면 producer는 cached routing metadata를 갱신해야 한다.</p>
+<p>Routing is a v1 protocol contract, not group metadata. The producer computes a 32-bit Murmur3 hash, rejects values in the incomplete modulo tail, and rehashes deterministically until the value maps uniformly into <code>[0, shardCount)</code>. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.</p>
+<h2 id="routing-and-duplicate-delivery-constraints">Routing and Duplicate Delivery Constraints</h2>
+<p>Routing determinism is scoped to one routing metadata snapshot:</p>
+<pre><code class="language-text">{producerRoutingProtocolVersion, activeWriteVersion, shardCount, partitionKey}
+</code></pre>
+<p>동일 partition key라도 shard scale-out/in으로 <code>activeWriteVersion</code> 또는 <code>shardCount</code>가 바뀌면 다른 Redis Stream shard로 route될 수 있다. 예를 들어 <code>order-123</code>이 version <code>1</code>, shard count <code>4</code>에서는 shard <code>2</code>로 route되더라도, scale-out 후 version <code>2</code>, shard count <code>8</code>에서는 shard <code>6</code>으로 route될 수 있다.</p>
+<p>Producer retry와 shard scale-out/in은 중복 publish 시도를 만들 수 있다. 이 프로젝트는 전체 <code>streamPrefix</code>, 전체 shard, 전체 stream version의 동일 <code>eventId</code>를 전역으로 deduplicate하지 않는다.</p>
+<p>중요 시나리오:</p>
+<pre><code class="language-text">1. producer A가 eventId=E, partitionKey=order-123을 old routing metadata로 version 1 shard 2에 XADD한다.
+2. Redis 응답이 producer에게 도달하기 전에 네트워크 오류가 발생한다.
+3. 운영자가 shard scale-out을 실행해 activeWriteVersion=2, shardCount=8로 전환한다.
+4. producer A 또는 다른 producer가 같은 eventId=E를 retry하면서 새 routing metadata를 사용한다.
+5. 같은 partitionKey가 version 2 shard 6으로 route된다.
+6. 결과적으로 동일 eventId=E가 서로 다른 stream version/shard에 존재할 수 있다.
+</code></pre>
+<p>따라서 다음 운영 제약을 둔다.</p>
+<ul>
+<li>중복에 민감한 workload에서는 shard scale-out/in 중 produce를 수행하지 않는다.</li>
+<li>scale 요청 전 producer를 quiesce하고, in-flight XADD와 publish retry window가 drain된 뒤 scale을 실행한다.</li>
+<li>scale 완료 후 producer routing cache를 refresh하고 새 metadata로 produce를 재개한다.</li>
+<li>producer traffic을 멈출 수 없는 workload는 producer semantics를 at-least-once로 보고, application domain의 idempotency, deduplication, unique constraint, compensation으로 중복 side effect를 방지한다.</li>
+</ul>
+<h2 id="coordinator-admin-scale-request">Coordinator Admin Scale Request</h2>
+<p>Shard count 변경은 member startup이나 <code>application.yaml</code> desired spec sync로 시작하지 않는다. 운영자 또는 배포 자동화가 Coordinator Admin API에 scale-out/in을 요청하고, coordinator가 metadata를 검증한 뒤 migration을 시작한다. producer, consumer, direct Redis key write는 shard count를 변경할 수 없다. 중복에 민감한 group에서는 이 API가 producer quiescence 이후에만 호출되어야 한다.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant Admin as Operator or Deploy Automation
+    participant C as Coordinator
+    participant Store as Redis Store
+    participant Stream as Redis Stream Shards
+    participant M as Members
+
+    Admin-&gt;&gt;C: scale request targetShardCount consumerConcurrencyPolicy
+    C-&gt;&gt;Store: active migration 확인
+    C-&gt;&gt;Store: current stream metadata 조회
+    C-&gt;&gt;Store: consumer concurrency policy 검증과 저장
+    C-&gt;&gt;Store: migration state PREPARING 생성
+    C-&gt;&gt;Stream: next version shard와 consumer group 생성
+    C-&gt;&gt;Store: active write를 next version으로 전환
+    C-&gt;&gt;Store: old ACTIVE를 DRAINING, new를 ACTIVE로 저장
+    C-&gt;&gt;Store: groupEpoch 증가와 target assignment 재계산
+    C--&gt;&gt;Admin: reshardingId와 old/new version 반환
+    M-&gt;&gt;C: 다음 heartbeat에서 metadataVersion 확인
+    C--&gt;&gt;M: readable versions와 assignment assigned/pending 전달
+</code></pre>
+<p>Member startup에서 수행하는 일은 다음으로 제한한다.</p>
+<ul>
+<li>coordinator metadata를 읽어 active write version과 readable versions를 캐시한다.</li>
+<li>직접 생성한 <code>memberId</code>로 heartbeat를 시작한다.</li>
+<li>heartbeat는 coordinator API의 <code>{streamPrefix, consumerGroup}</code> path로 보낸다.</li>
+<li>heartbeat response로 받은 assignment만 current assignment에 반영한다.</li>
+<li>local YAML의 shard count를 coordinator에 desired state로 제출하지 않는다.</li>
+<li>local YAML의 group identifier 값으로 group을 생성하거나 변경하지 않는다.</li>
+<li>local YAML의 <code>maxConcurrency</code>는 runtime upper bound일 뿐, coordinator의 server-side consumer concurrency policy를 변경하지 않는다.</li>
+</ul>
+<h2 id="admin-api-semantics">Admin API Semantics</h2>
+<p>초기 group 생성과 shard scale-out/in은 Coordinator Admin API로만 수행한다.</p>
+<p>Source of truth:</p>
+<ul>
+<li>shard count는 coordinator stream metadata가 유일한 source of truth이다.</li>
+<li>consumer <code>maxConcurrency</code>는 coordinator consumer concurrency policy가 유일한 server-side source of truth이다.</li>
+<li><code>maxConcurrency</code>는 partition/shard 개수가 아니라 member 내부 consumer worker 수이다.</li>
+<li>member heartbeat는 현재 runtime 여유 consumer worker 수를 보고할 수 있지만, shard count나 server-side <code>maxConcurrency</code>를 변경하지 못한다.</li>
+</ul>
+<h3 id="create-group">Create Group</h3>
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+</code></pre>
+<pre><code class="language-json">{
+  &quot;initialShardCount&quot;: 12,
+  &quot;versionPolicy&quot;: &quot;AUTO_INCREMENT&quot;,
+  &quot;consumerConcurrencyPolicy&quot;: {
+    &quot;defaultMaxConcurrency&quot;: 12
+  },
+  &quot;reason&quot;: &quot;create summary group&quot;,
+  &quot;requestedBy&quot;: &quot;deploy-automation&quot;
+}
+</code></pre>
+<p><code>initialShardCount</code>와 <code>consumerConcurrencyPolicy.defaultMaxConcurrency</code>가 생략되면 coordinator YAML의 <code>defaults</code> 값을 사용한다. 요청에 값이 있으면 해당 group metadata에 개별 설정으로 저장한다.</p>
+<p>처리 순서:</p>
+<ol>
+<li>group metadata가 없으면 stream version <code>1</code>을 생성한다.</li>
+<li><code>1</code> shard stream과 Redis consumer group을 생성한다.</li>
+<li>server-side consumer concurrency policy를 저장한다.</li>
+<li><code>activeWriteVersion=1</code>, <code>readableVersions=[1]</code>, <code>groupEpoch=1</code>을 저장한다.</li>
+<li>group metadata가 이미 있으면 <code>409 Conflict</code>로 거절한다.</li>
+</ol>
+<h3 id="scale-group">Scale Group</h3>
+<p><code>scale-out</code>과 <code>scale-in</code>은 같은 API의 <code>targetShardCount</code> 차이로 표현한다.</p>
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
+</code></pre>
+<pre><code class="language-json">{
+  &quot;targetShardCount&quot;: 24,
+  &quot;consumerConcurrencyPolicy&quot;: {
+    &quot;defaultMaxConcurrency&quot;: 24
+  },
+  &quot;reason&quot;: &quot;increase consumer parallelism&quot;,
+  &quot;requestedBy&quot;: &quot;deploy-automation&quot;,
+  &quot;deprecatedAfter&quot;: &quot;P7D&quot;
+}
+</code></pre>
+<p>Coordinator는 다음 조건을 만족할 때만 요청을 수락한다.</p>
+<ul>
+<li>같은 group에 active migration이 없다.</li>
+<li><code>targetShardCount</code>가 현재 active shard count와 다르다.</li>
+<li><code>targetShardCount</code>가 양수이다.</li>
+</ul>
+<p><code>consumerConcurrencyPolicy</code>를 함께 보낸 scale 요청은 migration metadata와 consumer concurrency policy를 하나의 coordinator metadata update로 반영한다.
+같은 group에 active migration이 있거나 이미 같은 shard count이면 새 migration을 만들지 않고 conflict 또는 no-op response로 처리한다.</p>
+<p>Response:</p>
+<pre><code class="language-json">{
+  &quot;reshardingId&quot;: &quot;reshard-018f8d27&quot;,
+  &quot;fromVersion&quot;: 1,
+  &quot;toVersion&quot;: 2,
+  &quot;fromShardCount&quot;: 12,
+  &quot;toShardCount&quot;: 24,
+  &quot;state&quot;: &quot;PREPARING&quot;
+}
+</code></pre>
+<h3 id="update-consumer-concurrency">Update Consumer Concurrency</h3>
+<p>Shard count 변경 없이 member 내부 consumer worker 수 상한만 바꿀 때는 consumer concurrency API를 사용한다. 이 API는 새 stream version을 만들지 않고 <code>metadataVersion</code>을 증가시킨 뒤 member heartbeat response의 <code>assignedMaxConcurrency</code>를 갱신한다. assignment weight policy가 <code>maxConcurrency</code>를 사용하는 경우에만 <code>groupEpoch</code>도 증가시키고 target assignment를 다시 계산한다.</p>
+<pre><code class="language-http">PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
+</code></pre>
+<pre><code class="language-json">{
+  &quot;defaultMaxConcurrency&quot;: 24,
+  &quot;memberOverrides&quot;: [
+    {&quot;memberName&quot;: &quot;summary-consumer-a&quot;, &quot;maxConcurrency&quot;: 16}
+  ],
+  &quot;reason&quot;: &quot;raise server-side consumer concurrency&quot;,
+  &quot;requestedBy&quot;: &quot;deploy-automation&quot;
+}
+</code></pre>
+<p>처리 규칙:</p>
+<ul>
+<li>변경된 consumer concurrency policy는 member heartbeat response의 <code>assignedMaxConcurrency</code>로 전파된다.</li>
+<li>member가 heartbeat에서 더 큰 runtime consumer worker 수를 보고해도 server-side policy를 초과해서 worker를 열 수 없다.</li>
+<li>concurrency 축소는 partition/shard 수를 줄이지 않는다. member는 소유 shard를 더 적은 consumer worker로 multiplexing한다.</li>
+<li>coordinator는 Kafka-style rebalance control plane이므로 별도 global min/max concurrency config를 두지 않는다.</li>
+<li>요청값이 현재 policy와 같으면 metadata를 새로 쓰지 않고 현재 policy를 반환한다.</li>
+</ul>
+<h3 id="get-metadata">Get Metadata</h3>
+<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+</code></pre>
+<p>반환 값에는 <code>groupEpoch</code>, <code>assignmentEpoch</code>, <code>activeWriteVersion</code>, <code>readableVersions</code>, consumer concurrency policy, active migration, target/current assignment summary가 포함된다.</p>
+<h3 id="get-migration">Get Migration</h3>
+<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
+</code></pre>
+<p>반환 값에는 old/new version, member-reported drain progress, revoke progress가 포함된다.</p>
+<h3 id="rollback-migration">Rollback Migration</h3>
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
+</code></pre>
+<p>Rollback은 cutover 직후 rollback window 안에서만 허용한다. 이미 new version에 write된 message는 운영 정책에 따라 drain 또는 replay 대상이 된다.</p>
+<h3 id="authorization-and-audit">Authorization and Audit</h3>
+<ul>
+<li>create, scale, consumer concurrency update, rollback은 운영 권한이 있는 caller만 호출할 수 있다.</li>
+<li>MVP 접근제어는 coordinator YAML의 <code>admin-username</code> / <code>admin-password</code> 기반 Basic Auth로 처리한다.</li>
+<li>모든 admin mutation은 <code>requestedBy</code>, <code>reason</code>, <code>requestedAt</code>, <code>coordinatorId</code>를 audit log로 남긴다.</li>
+</ul>
+<h2 id="online-migration">Online Migration</h2>
+<pre><code class="language-text">old ACTIVE    accepts_writes=true  accepts_reads=true
+new PREPARING accepts_writes=false accepts_reads=false
+
+cutover 후
+
+old DRAINING  accepts_writes=false accepts_reads=true
+new ACTIVE    accepts_writes=true  accepts_reads=true
+</code></pre>
+<p>Coordinator 책임:</p>
+<ul>
+<li>next stream version metadata 생성</li>
+<li>stream shard와 consumer group 생성</li>
+<li>active write pointer 전환</li>
+<li>readable versions 갱신</li>
+<li>group epoch 증가</li>
+<li>target assignment 재계산</li>
+<li>old version drain 완료 후 <code>DEPRECATED</code> 전환</li>
+</ul>
+<p>Member 책임:</p>
+<ul>
+<li>readable versions에 포함된 shard만 처리한다.</li>
+<li>assigned <code>ACTIVE</code>와 <code>DRAINING</code> shard를 모두 읽는다.</li>
+<li><code>DRAINING</code> shard drain 완료 여부를 heartbeat <code>ownedShards</code>와 <code>revokingShards</code>로 보고한다.</li>
+</ul>
+<h2 id="migration-completion">Migration Completion</h2>
+<p>old version을 <code>DEPRECATED</code>로 바꾸려면 다음 조건을 만족해야 한다.</p>
+<ul>
+<li>old version의 target assignment가 비어 있다.</li>
+<li>모든 live member <code>ownedShards</code>에서 old version shard가 제거됐다.</li>
+<li>old version을 처리하던 member가 drain complete를 보고했다.</li>
+</ul>
+<h2 id="rollback-policy">Rollback Policy</h2>
+<p>Cutover 직후 문제가 있으면 coordinator는 active write pointer를 old version으로 되돌릴 수 있다. 단, rollback window 안에서만 허용하고 new version에 이미 write된 message는 운영 정책에 따라 drain 또는 replay한다.</p>
+      </main>
+    </div>
+  </body>
+</html>

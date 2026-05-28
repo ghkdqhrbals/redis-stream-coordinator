@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Coordinator Data, Configuration, and Observability</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .wrap {
+        width: min(100%, 980px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin-top: 6px;
+      }
+      nav a {
+        color: var(--accent);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .responsive-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <div class="index-title">Index</div>
+        <nav aria-label="Design document navigation">
+        <a href="../../CHANGELOG.html">Changelog</a>
+        <a href="../../CONTRIBUTING.html">Contributing</a>
+        <a href="../../README.html">Redis Stream Coordinator</a>
+        <a href="../../SECURITY.html">Security Policy</a>
+        <a href="../AGENTS.html">Redis Stream Coordinator 문서 작업 지침</a>
+        <a href="../PRD.html">Redis Stream Coordinator PRD</a>
+        <a href="../docker.html">Docker Guide</a>
+        <a href="../implementation-status.html">Implementation Status</a>
+        <a href="../intellij-setup.html">IntelliJ Setup</a>
+        <a href="../operations-runbook.html">Operations Runbook</a>
+        <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+        <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+        <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+        <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+        <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+        <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+        <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+        <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+        <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+        <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+        <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+        <a href="../testing.html">Testing Guide</a>
+        <a href="../../infra/aws/README.html">AWS ElastiCache Redis Cluster</a>
+        <a href="../../prompts/review.html">Codex PR Review</a>
+        <a href="../../samples/consumer-pod/README.html">Redis Stream Consumer Pod Sample</a>
+        <a href="../../samples/publisher-pod/README.html">Redis Stream Publisher Pod Sample</a>
+        </nav>
+      </div>
+    </header>
+    <div class="wrap">
+      <main>
+<h1 id="coordinator-data-configuration-and-observability">Coordinator Data, Configuration, and Observability</h1>
+<h2 id="scope">Scope</h2>
+<p>Redis Stream Coordinator는 KIP-848 스타일의 rebalance control plane이다. 이 서버는 group metadata, member liveness, target/current assignment, migration state만 관리한다.</p>
+<p>Coordinator config에 두지 않는 것:</p>
+<ul>
+<li><code>streamPrefix</code>, <code>consumerGroup</code>: API path/body의 group identifier이다.</li>
+<li>consumer handler thread, Redis Stream read batch, block timeout, ack mode.</li>
+<li>pending recovery, idempotency marker lifecycle.</li>
+<li>producer routing cache나 member runtime local tuning.</li>
+</ul>
+<h2 id="redis-key-model">Redis Key Model</h2>
+<p>Coordinator가 직접 소유하는 key만 둔다.</p>
+<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:group
+redis-stream:coord:{streamPrefix:consumerGroup}:members
+redis-stream:coord:{streamPrefix:consumerGroup}:member:{memberId}
+redis-stream:coord:{streamPrefix:consumerGroup}:target-assignment
+redis-stream:coord:{streamPrefix:consumerGroup}:current-assignment:{memberId}
+redis-stream:coord:{streamPrefix:consumerGroup}:migration:active
+redis-stream:coord:{streamPrefix:consumerGroup}:migration:{reshardingId}
+redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
+</code></pre>
+<p>Data-plane key는 coordinator 문서의 config에 넣지 않는다. 예를 들어 processing marker, stream read cursor, handler retry state는 member/consumer 구현 소관이다.</p>
+<p>The group aggregate JSON stored at <code>...:group</code> includes <code>schemaVersion</code>. The current schema version is <code>1</code>. Redis-backed reads and writes reject unsupported future schema versions instead of silently downgrading or overwriting metadata from a newer coordinator. Metadata written before <code>schemaVersion</code> existed is treated as schema version <code>1</code>.</p>
+<h2 id="minimal-configuration">Minimal Configuration</h2>
+<pre><code class="language-yaml">coordinator:
+  # Coordinator HTTP API 설정이다. group 식별자는 이 API path/body로 들어오며 YAML에 고정하지 않는다.
+  api:
+    # Coordinator API base path이다. create/scale/heartbeat/rollback endpoint가 이 path 아래에 열린다.
+    base-path: /coord/v1
+    # Admin API와 monitoring API 접근 계정이다. MVP는 Basic Auth로 시작한다.
+    admin-username: admin
+    # 운영 환경에서는 환경변수/secret으로 주입한다. 기본 local password는 password이다.
+    admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
+    # 선택 ACL이다. 비어 있으면 admin-username/admin-password가 ADMIN/MONITOR/MEMBER 전체 권한을 가진다.
+    users:
+      - username: admin
+        password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
+        roles: [ADMIN]
+      - username: monitor
+        password: ${REDIS_STREAM_COORDINATOR_MONITOR_PASSWORD:}
+        roles: [MONITOR]
+      - username: member
+        password: ${REDIS_STREAM_COORDINATOR_MEMBER_PASSWORD:}
+        roles: [MEMBER]
+    # true이면 member heartbeat API에도 MEMBER role 인증을 요구한다.
+    authenticate-member-api: false
+    # Admin mutation API에 per-caller/group fixed-window rate limit을 적용한다.
+    rate-limit:
+      enabled: false
+      admin-mutations-per-minute: 60
+
+  audit:
+    # log 또는 redis. redis는 group-scoped admin audit list에 이벤트를 저장한다.
+    sink: log
+    redis-max-entries: 1000
+
+  # Coordinator metadata store로 사용할 Redis 접속 정보이다.
+  redis:
+    # Redis host이다.
+    host: localhost
+    # Redis port이다.
+    port: 6379
+    # Redis database index이다.
+    database: 0
+    # Redis ACL username이다. ACL을 쓰지 않으면 비워둘 수 있다.
+    username:
+    # Redis password이다. 운영 환경에서는 환경변수/secret으로 주입한다.
+    password: ${REDIS_PASSWORD:}
+    # Redis TLS 사용 여부이다.
+    ssl: false
+
+  # KIP-848 스타일 rebalance control plane의 동작 주기와 정책 경계이다.
+  # member에게 HeartbeatResponse.heartbeatIntervalMs로 내려줄 권장 heartbeat 주기이다.
+  heartbeat-interval: 3s
+  # member heartbeat가 이 시간보다 오래 오지 않으면 EXPIRED/FENCED로 보고 target assignment를 다시 계산한다.
+  member-lease-ttl: 15s
+  loop:
+    # Coordinator event loop 활성화 여부이다.
+    enabled: true
+    # heartbeat timeout, rebalance timeout, migration drain state를 이 주기마다 평가한다.
+    tick-interval: 1s
+  coordination:
+    state-mutex:
+      # Redis-backed store에서 coordinator state 접근을 Redis mutex critical section으로 직렬화한다.
+      # open source 사용자는 k8s Recreate/blue-green active-passive를 직접 맞출 필요 없이
+      # 여러 coordinator pod를 띄울 수 있고, mutex를 잡은 요청만 state를 읽고 처리하고 저장한다.
+      enabled: true
+      # 요청 처리 중 coordinator가 죽으면 이 시간이 지난 뒤 다른 instance가 critical section을 이어받는다.
+      ttl: 30s
+      # mutex가 바쁠 때 heartbeat/admin/read-refresh 요청이 기다릴 최대 시간이다.
+      acquire-timeout: 5s
+      # mutex 획득 재시도 간격이다.
+      retry-interval: 100ms
+
+  # Admin API 요청에서 값이 생략됐을 때 적용되는 기본값이다.
+  defaults:
+    # create group 요청에서 initialShardCount가 없을 때 사용할 기본 shard count이다.
+    initial-shard-count: 1
+    # create/update 요청에서 maxConcurrency가 없을 때 member별로 내려줄 기본 consumer worker 수이다.
+    consumer-max-concurrency: 1
+</code></pre>
+<p>Shard count와 consumer <code>maxConcurrency</code>의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 <code>defaults</code>는 요청값이 생략됐을 때만 쓰이며, stream/group별 개별 설정은 Admin API로 저장한다. Kafka coordinator처럼 coordinator server config에는 shard count나 consumer concurrency min/max를 두지 않는다.</p>
+<h2 id="coordinator-state-mutex">Coordinator State Mutex</h2>
+<p>Redis-backed coordinator는 open source 배포에서 사용자가 k8s rollout 전략을 세밀하게 맞추지 않아도 되도록 Redis state mutex를 기본 사용한다.</p>
+<ul>
+<li>Redis store이면 <code>coordinator.coordination.state-mutex.enabled=true</code>가 기본이다.</li>
+<li>create, heartbeat, scale, rollback, consumer concurrency update, migration read, monitoring read-time operational refresh, scheduled tick은 state mutex를 획득한 instance만 수행한다.</li>
+<li>critical section 순서는 <code>acquire mutex -&gt; read latest Redis state -&gt; validate/process/reconcile -&gt; save with storeRevision CAS -&gt; release mutex</code>이다.</li>
+<li>여러 coordinator pod가 같은 Redis store를 보더라도 동시에 state를 읽고 처리하지 않고, 요청 단위로 짧게 mutex를 잡아 직렬화한다.</li>
+<li>event loop tick은 mutex를 못 잡으면 조용히 skip하고, 다른 instance가 처리한다.</li>
+<li><code>storeRevision</code> CAS는 mutex 이후에도 남아 stale snapshot overwrite를 막는 마지막 방어선이다.</li>
+<li>memory store는 개발용이며 process-local state이므로 여러 coordinator replicas에 사용하지 않는다.</li>
+</ul>
+<p>이 구조의 목적은 active-active coordinator semantics가 아니라, 사용자가 <code>replicas=1</code>, <code>Recreate</code>, blue/green passive mode 같은 배포 세부사항을 직접 맞추지 않아도 안전하게 운영을 시작할 수 있게 하는 것이다.</p>
+<h2 id="access-control">Access Control</h2>
+<p>MVP는 Basic Auth를 사용한다. <code>api.users</code>가 비어 있으면 <code>admin-username</code> / <code>admin-password</code>가 <code>ADMIN</code>, <code>MONITOR</code>, <code>MEMBER</code> 전체 권한을 가진다.</p>
+<p><code>api.users</code>가 설정되면 각 user의 role로 ACL을 평가한다.</p>
+<ul>
+<li><code>ADMIN</code>: create, scale, consumer concurrency update, rollback 같은 mutation API.</li>
+<li><code>MONITOR</code>: monitoring API와 producer routing/group/migration 조회 API.</li>
+<li><code>MEMBER</code>: member heartbeat API. <code>authenticate-member-api=true</code>일 때만 요구한다.</li>
+</ul>
+<p>인증 실패는 <code>401 Unauthorized</code>를 반환한다. 권한이 없는 mutation 요청은 <code>403 Forbidden</code>을 반환한다.</p>
+<h2 id="api-rate-limiting">API Rate Limiting</h2>
+<p><code>coordinator.api.rate-limit.enabled=true</code>이면 create, scale, consumer concurrency update, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 <code>{streamPrefix, consumerGroup}</code> 조합이다.</p>
+<p>Rate limit 초과 시 coordinator는 <code>429 Too Many Requests</code>와 <code>Retry-After</code> header를 반환한다. Monitoring read API와 member heartbeat API는 이 limit에 포함하지 않는다. 현재 구현은 coordinator instance local limiter이므로, 여러 coordinator instance를 운영할 경우 global rate limit은 외부 gateway나 load balancer에서 보강한다.</p>
+<h2 id="monitoring-api">Monitoring API</h2>
+<p>Monitoring API는 coordinator state를 조회만 한다. 상태 변경은 Admin API로만 수행한다.
+Health response는 active configuration 기준으로 dependency를 판단한다. Redis-backed store, Redis audit, stream provisioning 중 하나가 활성화된 경우에만 Redis health를 필수 dependency로 검사한다.</p>
+<pre><code class="language-http">GET /coord/v1/monitoring/health
+GET /coord/v1/monitoring/groups
+GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}
+GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members
+GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments
+GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption
+GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations
+</code></pre>
+<p>Monitoring response에는 다음 요약만 포함한다.</p>
+<ul>
+<li>group state, <code>groupEpoch</code>, <code>assignmentEpoch</code></li>
+<li>active/readable stream version</li>
+<li>active/expired member count</li>
+<li>target/current assignment summary</li>
+<li>revoke progress</li>
+<li>consumer-reported shard consumption progress, including stream key, shard, last delivered id, last acked id, pending count, and update time</li>
+<li>active migration progress</li>
+</ul>
+<h2 id="metrics">Metrics</h2>
+<p>Coordinator metric is the public observability surface. Consumer and producer modules may keep local diagnostics internally, but open-source users should rely on Coordinator metrics and monitoring APIs for group-level operation.</p>
+<ul>
+<li><code>redis_stream_coord_up</code></li>
+<li><code>redis_stream_coord_group_epoch</code></li>
+<li><code>redis_stream_coord_assignment_epoch</code></li>
+<li><code>redis_stream_coord_members</code></li>
+<li><code>redis_stream_coord_member_active</code></li>
+<li><code>redis_stream_coord_member_heartbeat_age_seconds</code></li>
+<li><code>redis_stream_coord_member_lease_remaining_seconds</code></li>
+<li><code>redis_stream_coord_member_assigned_max_concurrency</code></li>
+<li><code>redis_stream_coord_member_runtime_max_concurrency</code></li>
+<li><code>redis_stream_coord_member_active_workers</code></li>
+<li><code>redis_stream_coord_member_current_shards</code></li>
+<li><code>redis_stream_coord_member_revoking_shards</code></li>
+<li><code>redis_stream_coord_heartbeat_total</code></li>
+<li><code>redis_stream_coord_member_expired_total</code></li>
+<li><code>redis_stream_coord_rebalance_total</code></li>
+<li><code>redis_stream_coord_rebalance_duration</code></li>
+<li><code>redis_stream_coord_scale_request_total</code></li>
+<li><code>redis_stream_coord_scale_request_failed_total</code></li>
+<li><code>redis_stream_coord_consumer_concurrency_update_total</code></li>
+<li><code>redis_stream_coord_producer_routing_request_total</code></li>
+<li><code>redis_stream_coord_migration_active</code></li>
+<li><code>redis_stream_coord_migration_active_age_seconds</code></li>
+<li><code>redis_stream_coord_revoke_pending</code></li>
+<li><code>redis_stream_coord_invariant_violations</code></li>
+<li><code>redis_stream_coord_invariant_violation_total</code></li>
+<li><code>redis_stream_coord_tick_total</code></li>
+<li><code>redis_stream_coord_tick_duration</code></li>
+<li><code>redis_stream_coord_state_conflict_total</code></li>
+<li><code>redis_stream_coord_consumer_shard_last_delivered_ms</code></li>
+<li><code>redis_stream_coord_consumer_shard_last_delivered_seq</code></li>
+<li><code>redis_stream_coord_consumer_shard_last_acked_ms</code></li>
+<li><code>redis_stream_coord_consumer_shard_last_acked_seq</code></li>
+<li><code>redis_stream_coord_consumer_shard_pending</code></li>
+<li><code>redis_stream_coord_consumer_shard_progress_updated_at_seconds</code></li>
+<li><code>redis_stream_coord_consumer_shard_progress_age_seconds</code></li>
+</ul>
+<p>Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.</p>
+<h2 id="redis-command-template-boundary">Redis Command Template Boundary</h2>
+<p>Coordinator Redis calls are centralized behind a command template instead of being scattered across state store, mutex, audit, and stream provisioning code. This keeps Lua scripts, lock operations, list/set access, health ping, and stream provisioning commands discoverable in one place and makes Redis command compatibility easier to review.</p>
+<h2 id="logs">Logs</h2>
+<p>Structured log fields:</p>
+<ul>
+<li><code>streamPrefix</code></li>
+<li><code>consumerGroup</code></li>
+<li><code>coordinatorId</code></li>
+<li><code>groupEpoch</code></li>
+<li><code>assignmentEpoch</code></li>
+<li><code>memberId</code></li>
+<li><code>memberEpoch</code></li>
+<li><code>eventType</code></li>
+<li><code>reason</code></li>
+<li><code>requestedBy</code></li>
+<li><code>reshardingId</code></li>
+</ul>
+<p>Admin audit events are emitted for create, scale, consumer concurrency update, and rollback. The default sink is structured application logs. When <code>coordinator.audit.sink=redis</code>, the coordinator writes JSON audit events to:</p>
+<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
+</code></pre>
+<h2 id="alerts">Alerts</h2>
+<ul>
+<li>coordinator API unavailable</li>
+<li>group epoch은 증가했지만 assignment epoch이 따라오지 않음</li>
+<li>member expired 급증</li>
+<li>revoke pending 지속 증가</li>
+<li>invariant violation 발생</li>
+<li>active migration 장기 지속</li>
+</ul>
+      </main>
+    </div>
+  </body>
+</html>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Redis Stream Coordinator Design Docs</title>
+    <title>Redis Stream Consumer Pod Sample</title>
     <style>
       * {
         box-sizing: border-box;
@@ -213,38 +213,57 @@
       <div class="wrap">
         <div class="index-title">Index</div>
         <nav aria-label="Design document navigation">
-        <a href="CHANGELOG.html">Changelog</a>
-        <a href="CONTRIBUTING.html">Contributing</a>
-        <a href="README.html">Redis Stream Coordinator</a>
-        <a href="SECURITY.html">Security Policy</a>
-        <a href="docs/AGENTS.html">Redis Stream Coordinator 문서 작업 지침</a>
-        <a href="docs/PRD.html">Redis Stream Coordinator PRD</a>
-        <a href="docs/docker.html">Docker Guide</a>
-        <a href="docs/implementation-status.html">Implementation Status</a>
-        <a href="docs/intellij-setup.html">IntelliJ Setup</a>
-        <a href="docs/operations-runbook.html">Operations Runbook</a>
-        <a href="docs/prd/01-context-goals.html">Context, Goals, Non-Goals</a>
-        <a href="docs/prd/02-coordinator-architecture.html">Coordinator Architecture</a>
-        <a href="docs/prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-        <a href="docs/prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
-        <a href="docs/prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
-        <a href="docs/prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
-        <a href="docs/prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
-        <a href="docs/prd/08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
-        <a href="docs/prd/09-api-endpoints.html">Coordinator API Endpoints</a>
-        <a href="docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
-        <a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
-        <a href="docs/testing.html">Testing Guide</a>
-        <a href="infra/aws/README.html">AWS ElastiCache Redis Cluster</a>
-        <a href="prompts/review.html">Codex PR Review</a>
-        <a href="samples/consumer-pod/README.html">Redis Stream Consumer Pod Sample</a>
-        <a href="samples/publisher-pod/README.html">Redis Stream Publisher Pod Sample</a>
+        <a href="../../CHANGELOG.html">Changelog</a>
+        <a href="../../CONTRIBUTING.html">Contributing</a>
+        <a href="../../README.html">Redis Stream Coordinator</a>
+        <a href="../../SECURITY.html">Security Policy</a>
+        <a href="../../docs/AGENTS.html">Redis Stream Coordinator 문서 작업 지침</a>
+        <a href="../../docs/PRD.html">Redis Stream Coordinator PRD</a>
+        <a href="../../docs/docker.html">Docker Guide</a>
+        <a href="../../docs/implementation-status.html">Implementation Status</a>
+        <a href="../../docs/intellij-setup.html">IntelliJ Setup</a>
+        <a href="../../docs/operations-runbook.html">Operations Runbook</a>
+        <a href="../../docs/prd/01-context-goals.html">Context, Goals, Non-Goals</a>
+        <a href="../../docs/prd/02-coordinator-architecture.html">Coordinator Architecture</a>
+        <a href="../../docs/prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+        <a href="../../docs/prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
+        <a href="../../docs/prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
+        <a href="../../docs/prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+        <a href="../../docs/prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+        <a href="../../docs/prd/08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+        <a href="../../docs/prd/09-api-endpoints.html">Coordinator API Endpoints</a>
+        <a href="../../docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+        <a href="../../docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+        <a href="../../docs/testing.html">Testing Guide</a>
+        <a href="../../infra/aws/README.html">AWS ElastiCache Redis Cluster</a>
+        <a href="../../prompts/review.html">Codex PR Review</a>
+        <a href="README.html">Redis Stream Consumer Pod Sample</a>
+        <a href="../publisher-pod/README.html">Redis Stream Publisher Pod Sample</a>
         </nav>
       </div>
     </header>
     <div class="wrap">
       <main>
-<h1>Redis Stream Coordinator Design Docs</h1><p><a href="CHANGELOG.html">Open the design document</a>.</p>
+<h1 id="redis-stream-consumer-pod-sample">Redis Stream Consumer Pod Sample</h1>
+<p>This sample is a small Spring Boot server that loads <code>com.redisstream:redisstream-spring-boot-starter</code> as a real application would.</p>
+<p>It is intended for local end-to-end testing:</p>
+<ul>
+<li>sends coordinator heartbeats</li>
+<li>receives assigned, pending, revoked, and fenced callbacks</li>
+<li>consumes Redis Stream messages from assigned shards</li>
+<li>exposes a small publish endpoint for smoke testing producer routing</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-bash">SERVER_PORT=18081 CONSUMER_MEMBER_ID=consumer-pod-1 CONSUMER_MEMBER_NAME=consumer-pod-1 \
+  ./gradlew :samples:consumer-pod:bootRun
+</code></pre>
+<p>Useful endpoints:</p>
+<ul>
+<li><code>GET /sample/status</code></li>
+<li><code>GET /sample/events</code></li>
+<li><code>DELETE /sample/events</code></li>
+<li><code>POST /sample/publish</code></li>
+</ul>
       </main>
     </div>
   </body>
