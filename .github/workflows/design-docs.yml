@@ -106,15 +106,37 @@ jobs:
           name: coordinator-design-docs-html
           path: public-design-docs
 
-      - name: Publish Design HTML
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Checkout GitHub Pages branch
+        uses: actions/checkout@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: public-design-docs
-          destination_dir: ${{ needs.build.outputs.destination }}
-          keep_files: true
-          commit_message: "Publish design docs for ${{ needs.build.outputs.source_ref }}"
+          ref: gh-pages
+          path: gh-pages-site
+          fetch-depth: 0
+
+      - name: Publish Design HTML
+        shell: bash
+        env:
+          DESTINATION: ${{ needs.build.outputs.destination }}
+          SOURCE_REF: ${{ needs.build.outputs.source_ref }}
+        run: |
+          set -euo pipefail
+
+          rm -rf "gh-pages-site/${DESTINATION}"
+          mkdir -p "gh-pages-site/${DESTINATION}"
+          cp -a public-design-docs/. "gh-pages-site/${DESTINATION}/"
+          touch gh-pages-site/.nojekyll
+
+          cd gh-pages-site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A ".nojekyll" "${DESTINATION}"
+          if git diff --cached --quiet; then
+            echo "No design docs changes to publish."
+            exit 0
+          fi
+
+          git commit -m "Publish design docs for ${SOURCE_REF}"
+          git push
 
   post_render_result:
     if: always() && needs.build.result == 'success' && github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository

@@ -99,7 +99,7 @@ class RenderDesignDocsTest(unittest.TestCase):
             prd = docs / "prd"
             prd.mkdir(parents=True)
             (docs / "PRD.md").write_text(
-                "# Redis Stream Coordinator PRD\n\n[Architecture](prd/02-coordinator-architecture.md)\n",
+                "# Redis Stream Coordinator Design\n\n[Architecture](prd/02-coordinator-architecture.md)\n",
                 encoding="utf-8",
             )
             (prd / "02-coordinator-architecture.md").write_text("# Coordinator Architecture\n", encoding="utf-8")
@@ -108,9 +108,9 @@ class RenderDesignDocsTest(unittest.TestCase):
             self._run_renderer(source, output)
 
             html = (output / "index.html").read_text(encoding="utf-8")
-            self.assertIn("<h1 id=\"redis-stream-coordinator-prd\">Redis Stream Coordinator PRD</h1>", html)
+            self.assertIn("<h1 id=\"redis-stream-coordinator-design\">Redis Stream Coordinator Design</h1>", html)
             self.assertIn('href="docs/prd/02-coordinator-architecture.html"', html)
-            self.assertIn('aria-current="page">Redis Stream Coordinator PRD</a>', html)
+            self.assertIn('aria-current="page">Redis Stream Coordinator Design</a>', html)
             self.assertFalse((output / "README.html").exists())
 
     def test_heading_levels_do_not_render_underline_rules(self) -> None:

@@ -1,15 +1,8 @@
-# Redis Stream Coordinator PRD
+# Redis Stream Coordinator Design
 
-이 문서는 Redis Stream sharding을 KIP-848 스타일의 coordinator-managed protocol로 관리하기 위한 PRD entrypoint이다. 전체 요구사항은 lazy loading 방식으로 나누어 관리한다.
+이 문서는 KIP-848의 coordinator 기능을 Redis Stream에 맞게 재설계한 내용을 정리한다. 이 프로젝트는 Redis Stream sharding과 consumer group ownership을 관리하는 coordinator 전용 서버, Spring Boot consumer 통합 모듈, Spring Boot producer routing/publishing 모듈을 함께 제공한다.
 
-## Source
-
-* KIP-848: [The Next Generation of the Consumer Rebalance Protocol](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)
-* 사용자 정리 글: [Kafka KIP-848 는 왜 등장했는가](https://ghkdqhrbals.github.io/portfolios/docs/Java/51/)
-* 기존 coordinatorless 설계: [`../redis-stream-sharding/PRD.md`](../redis-stream-sharding/PRD.md)
-* 폴더 작업 지침: [`AGENTS.md`](AGENTS.md)
-
-## Lazy Loading Index
+## Design Index
 
 1. [Context, Goals, Non-Goals](prd/01-context-goals.md)
 2. [Coordinator Architecture](prd/02-coordinator-architecture.md)
@@ -25,7 +18,9 @@
 
 ## Product Summary
 
-Coordinator API control plane이 Redis Stream shard ownership을 중앙에서 관리한다. 각 runtime member는 coordinator API로 heartbeat를 보내 현재 상태를 보고하고, coordinator는 group metadata 변화에 따라 target assignment를 계산한다. member는 target assignment에 독립적으로 수렴하며, coordinator는 revoke가 완료되기 전 같은 shard를 다른 member에게 assign하지 않는다.
+Redis Stream Coordinator는 Redis Stream shard ownership을 중앙에서 관리하는 control-plane 서버이다. 각 consumer runtime member는 coordinator API로 heartbeat를 보내 현재 상태를 보고하고, coordinator는 group metadata 변화에 따라 target assignment를 계산한다. member는 target assignment에 독립적으로 수렴하며, coordinator는 revoke가 완료되기 전 같은 shard를 다른 member에게 assign하지 않는다.
+
+Consumer 모듈은 heartbeat, assignment, revoke, fencing, optional Redis Stream polling을 애플리케이션에 연결한다. Producer 모듈은 coordinator의 active stream version과 shard routing metadata를 사용해 Redis Stream shard로 publish한다.
 
 ## Core Decisions
 
