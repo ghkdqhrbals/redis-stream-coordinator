@@ -69,12 +69,13 @@ class RenderDesignDocsTest(unittest.TestCase):
             html = (output / "index.html").read_text(encoding="utf-8")
             self.assertIn("font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);", html)
             self.assertIn("line-height: 1.5;", html)
-            self.assertIn("width: min(100%, 980px);", html)
+            self.assertIn("width: min(100%, 1180px);", html)
             self.assertIn("padding: clamp(14px, 2.6vw, 24px);", html)
+            self.assertIn("grid-template-columns: 260px minmax(0, 1fr);", html)
             self.assertIn("font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);", html)
             self.assertIn("font-size: 0.93em;", html)
 
-    def test_shows_index_at_top_before_document_body(self) -> None:
+    def test_shows_vertical_index_sidebar_before_document_body(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
             source = Path(source_dir)
             output = Path(output_dir)
@@ -84,10 +85,33 @@ class RenderDesignDocsTest(unittest.TestCase):
             self._run_renderer(source, output)
 
             html = (output / "index.html").read_text(encoding="utf-8")
-            self.assertIn('<div class="index-title">Index</div>', html)
-            self.assertIn('<nav aria-label="Design document navigation">', html)
-            self.assertLess(html.index('<div class="index-title">Index</div>'), html.index("<main>"))
+            self.assertIn('<aside class="sidebar" aria-label="Design document index">', html)
+            self.assertIn('<div class="index-title">Pages</div>', html)
+            self.assertIn('<nav class="doc-index" aria-label="Design document navigation">', html)
+            self.assertLess(html.index('<aside class="sidebar"'), html.index("<main>"))
             self.assertLess(html.index('href="rebalance.html"'), html.index("<main>"))
+
+    def test_design_docs_publish_prd_as_landing_page(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            docs = source / "docs"
+            prd = docs / "prd"
+            prd.mkdir(parents=True)
+            (docs / "PRD.md").write_text(
+                "# Redis Stream Coordinator PRD\n\n[Architecture](prd/02-coordinator-architecture.md)\n",
+                encoding="utf-8",
+            )
+            (prd / "02-coordinator-architecture.md").write_text("# Coordinator Architecture\n", encoding="utf-8")
+            (source / "README.md").write_text("# Repository README\n", encoding="utf-8")
+
+            self._run_renderer(source, output)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("<h1 id=\"redis-stream-coordinator-prd\">Redis Stream Coordinator PRD</h1>", html)
+            self.assertIn('href="docs/prd/02-coordinator-architecture.html"', html)
+            self.assertIn('aria-current="page">Redis Stream Coordinator PRD</a>', html)
+            self.assertFalse((output / "README.html").exists())
 
     def test_heading_levels_do_not_render_underline_rules(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:

@@ -14,6 +14,13 @@ from urllib.parse import urlsplit, urlunsplit
 import markdown
 
 
+DESIGN_DOC_EXTRAS = (
+    Path("docs/implementation-status.md"),
+    Path("docs/operations-runbook.md"),
+    Path("docs/testing.md"),
+)
+
+
 def title_for(markdown_text: str, fallback: str) -> str:
     for line in markdown_text.splitlines():
         if line.startswith("# "):
@@ -175,6 +182,25 @@ def make_tables_responsive(body: str) -> str:
     return "".join(parser.output)
 
 
+def discover_markdown_files(source: Path) -> list[Path]:
+    primary = source / "docs" / "PRD.md"
+    if primary.exists():
+        ordered = [primary]
+        ordered.extend(sorted((source / "docs" / "prd").glob("*.md")))
+        ordered.extend(source / extra for extra in DESIGN_DOC_EXTRAS)
+        seen: set[Path] = set()
+        return [
+            path
+            for path in ordered
+            if path.exists() and path not in seen and not seen.add(path)
+        ]
+
+    return sorted(
+        path for path in source.rglob("*.md")
+        if ".git" not in path.parts
+    )
+
+
 def render_page(title: str, body: str, nav: str) -> str:
     escaped_title = html.escape(title)
     return f"""<!doctype html>
@@ -199,6 +225,7 @@ def render_page(title: str, body: str, nav: str) -> str:
         --panel: #f7f9fb;
         --accent: #1428a0;
         --code: #eef3f7;
+        --sidebar: #fbfcfd;
       }}
       body {{
         margin: 0;
@@ -212,21 +239,58 @@ def render_page(title: str, body: str, nav: str) -> str:
         border-bottom: 1px solid var(--border);
         background: var(--panel);
       }}
-      .wrap {{
-        width: min(100%, 980px);
+      .topbar {{
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: 12px clamp(14px, 2.2vw, 24px);
+      }}
+      .site-title {{
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }}
+      .site-subtitle {{
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }}
+      .layout {{
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1180px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
       }}
-      nav {{
+      .sidebar {{
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }}
+      .doc-index {{
         display: flex;
-        flex-wrap: wrap;
-        gap: 4px 14px;
-        margin-top: 6px;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
       }}
-      nav a {{
+      .doc-index a {{
         color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
         text-decoration: none;
         overflow-wrap: anywhere;
+      }}
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {{
+        background: var(--code);
       }}
       .index-title {{
         color: var(--muted);
@@ -238,6 +302,7 @@ def render_page(title: str, body: str, nav: str) -> str:
       main {{
         min-width: 0;
         max-width: 100%;
+        padding-bottom: 56px;
       }}
       h1, h2, h3, h4 {{
         line-height: 1.25;
@@ -318,6 +383,21 @@ def render_page(title: str, body: str, nav: str) -> str:
         height: auto;
       }}
       @media (max-width: 720px) {{
+        .layout {{
+          display: block;
+        }}
+        .sidebar {{
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }}
+        .doc-index {{
+          max-height: 220px;
+          overflow: auto;
+        }}
         .responsive-table,
         .responsive-table thead,
         .responsive-table tbody,
@@ -389,14 +469,18 @@ def render_page(title: str, body: str, nav: str) -> str:
   </head>
   <body>
     <header>
-      <div class="wrap">
-        <div class="index-title">Index</div>
-        <nav aria-label="Design document navigation">
-{nav}
-        </nav>
+      <div class="topbar">
+        <div class="site-title">Redis Stream Coordinator</div>
+        <div class="site-subtitle">Design docs</div>
       </div>
     </header>
-    <div class="wrap">
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+{nav}
+        </nav>
+      </aside>
       <main>
 {body}
       </main>
@@ -416,10 +500,7 @@ def main() -> None:
     destination = args.destination
     destination.mkdir(parents=True, exist_ok=True)
 
-    markdown_files = sorted(
-        path for path in source.rglob("*.md")
-        if ".git" not in path.parts
-    )
+    markdown_files = discover_markdown_files(source)
     if not markdown_files:
         raise SystemExit(f"No Markdown design documents found in {source}")
 
@@ -433,11 +514,17 @@ def main() -> None:
         output_paths[resolved_markdown_path] = rendered_path
         pages.append((markdown_path, title, rendered_path))
 
-    def nav_for(current_output: Path) -> str:
-        return "\n".join(
-            f'        <a href="{html.escape(relative_href(current_output, file_name))}">{html.escape(title)}</a>'
-            for _, title, file_name in pages
-        )
+    def nav_for(current_output: Path, active_output: Path | None = None) -> str:
+        active = active_output or current_output
+        links = []
+        for _, title, file_name in pages:
+            current = file_name == active
+            attrs = ' aria-current="page"' if current else ""
+            links.append(
+                f'          <a href="{html.escape(relative_href(current_output, file_name))}"{attrs}>'
+                f'{html.escape(title)}</a>'
+            )
+        return "\n".join(links)
 
     renderer = markdown.Markdown(extensions=["extra", "tables", "toc", "fenced_code", "sane_lists"])
     for markdown_path, title, file_name in pages:
@@ -454,15 +541,33 @@ def main() -> None:
         target.write_text(render_page(title, body, nav_for(file_name)), encoding="utf-8")
 
     if not (destination / "index.html").exists():
-        first_page = pages[0][2]
-        (destination / "index.html").write_text(
-            render_page(
-                "Redis Stream Coordinator Design Docs",
-                f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page.as_posix())}">Open the design document</a>.</p>',
-                nav_for(Path("index.html")),
-            ),
-            encoding="utf-8",
-        )
+        primary = source / "docs" / "PRD.md"
+        resolved_primary = primary.resolve()
+        primary_output = output_paths.get(resolved_primary)
+        if primary_output is not None:
+            text = primary.read_text(encoding="utf-8")
+            title = title_for(text, primary.stem.replace("-", " ").title())
+            body = rewrite_markdown_links(
+                renderer.reset().convert(text),
+                resolved_primary,
+                Path("index.html"),
+                output_paths,
+            )
+            body = make_tables_responsive(body)
+            (destination / "index.html").write_text(
+                render_page(title, body, nav_for(Path("index.html"), active_output=primary_output)),
+                encoding="utf-8",
+            )
+        else:
+            first_page = pages[0][2]
+            (destination / "index.html").write_text(
+                render_page(
+                    "Redis Stream Coordinator Design Docs",
+                    f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page.as_posix())}">Open the design document</a>.</p>',
+                    nav_for(Path("index.html")),
+                ),
+                encoding="utf-8",
+            )
 
     asset_names = {"png", "jpg", "jpeg", "gif", "svg", "webp"}
     for asset in source.rglob("*"):
