@@ -1,0 +1,142 @@
+services:
+  coordinator:
+    image: redis-stream-coordinator/coordinator:local
+    build:
+      context: .
+      args:
+        APP_TASK: :coordinator-server:bootJar
+        APP_LIB_DIR: coordinator-server/build/libs
+    environment:
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:?Set AWS_REDIS_CLUSTER_NODES to the ElastiCache configuration endpoint}
+      COORDINATOR_ID: aws-local-coordinator
+      COORDINATOR_STORE_TYPE: redis
+      COORDINATOR_STREAMS_PROVISIONING_ENABLED: "true"
+      COORDINATOR_DEFAULTS_INITIAL_SHARD_COUNT: "6"
+      COORDINATOR_DEFAULTS_CONSUMER_MAX_CONCURRENCY: "6"
+      REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+    ports:
+      - "8080:8080"
+    tmpfs:
+      - /tmp:size=128m
+    networks:
+      - redis-stream-aws
+
+  coordinator-group-init:
+    image: redis:7.4-alpine
+    depends_on:
+      coordinator:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        until wget -qO- http://coordinator:8080/actuator/info >/dev/null 2>&1; do
+          sleep 1
+        done
+        if wget -qO- \
+          --header="Authorization: Basic YWRtaW46cGFzc3dvcmQ=" \
+          http://coordinator:8080/coord/v1/streams/demo.orders/groups/demo-workers >/dev/null 2>&1; then
+          echo "Coordinator group already exists"
+          exit 0
+        fi
+        wget -qO- \
+          --header="Content-Type: application/json" \
+          --header="Authorization: Basic YWRtaW46cGFzc3dvcmQ=" \
+          --post-data='{"initialShardCount":6,"hashAlgorithm":"murmur3","consumerConcurrencyPolicy":{"defaultMaxConcurrency":6},"requestedBy":"compose.aws-elasticache","reason":"aws elasticache pod smoke"}' \
+          http://coordinator:8080/coord/v1/streams/demo.orders/groups/demo-workers
+        echo
+        echo "Coordinator group initialized"
+    networks:
+      - redis-stream-aws
+
+  consumer-pod-1:
+    image: redis-stream-coordinator/consumer-pod:local
+    build:
+      context: .
+      args:
+        APP_TASK: :samples:consumer-pod:bootJar
+        APP_LIB_DIR: samples/consumer-pod/build/libs
+    depends_on:
+      coordinator-group-init:
+        condition: service_completed_successfully
+    environment:
+      SERVER_PORT: "18081"
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:?Set AWS_REDIS_CLUSTER_NODES to the ElastiCache configuration endpoint}
+      COORDINATOR_BASE_URL: http://coordinator:8080
+      STREAM_PREFIX: demo.orders
+      CONSUMER_GROUP: demo-workers
+      CONSUMER_MEMBER_ID: consumer-pod-1
+      CONSUMER_MEMBER_NAME: consumer-pod-1
+      CONSUMER_RUNTIME_MAX_CONCURRENCY: "4"
+      COORDINATOR_USERNAME: admin
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+    ports:
+      - "18081:18081"
+    tmpfs:
+      - /tmp:size=128m
+    networks:
+      - redis-stream-aws
+
+  consumer-pod-2:
+    image: redis-stream-coordinator/consumer-pod:local
+    build:
+      context: .
+      args:
+        APP_TASK: :samples:consumer-pod:bootJar
+        APP_LIB_DIR: samples/consumer-pod/build/libs
+    depends_on:
+      coordinator-group-init:
+        condition: service_completed_successfully
+    environment:
+      SERVER_PORT: "18082"
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:?Set AWS_REDIS_CLUSTER_NODES to the ElastiCache configuration endpoint}
+      COORDINATOR_BASE_URL: http://coordinator:8080
+      STREAM_PREFIX: demo.orders
+      CONSUMER_GROUP: demo-workers
+      CONSUMER_MEMBER_ID: consumer-pod-2
+      CONSUMER_MEMBER_NAME: consumer-pod-2
+      CONSUMER_RUNTIME_MAX_CONCURRENCY: "4"
+      COORDINATOR_USERNAME: admin
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+    ports:
+      - "18082:18082"
+    tmpfs:
+      - /tmp:size=128m
+    networks:
+      - redis-stream-aws
+
+  publisher-pod:
+    image: redis-stream-coordinator/publisher-pod:local
+    build:
+      context: .
+      args:
+        APP_TASK: :samples:publisher-pod:bootJar
+        APP_LIB_DIR: samples/publisher-pod/build/libs
+    depends_on:
+      coordinator-group-init:
+        condition: service_completed_successfully
+    environment:
+      SERVER_PORT: "18090"
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:?Set AWS_REDIS_CLUSTER_NODES to the ElastiCache configuration endpoint}
+      COORDINATOR_BASE_URL: http://coordinator:8080
+      STREAM_PREFIX: demo.orders
+      CONSUMER_GROUP: demo-workers
+      COORDINATOR_USERNAME: admin
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      PUBLISHER_AUTO_PUBLISH_ENABLED: "true"
+      PUBLISHER_PUBLISH_INTERVAL_MS: "1000"
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+    ports:
+      - "18090:18090"
+    tmpfs:
+      - /tmp:size=128m
+    networks:
+      - redis-stream-aws
+
+networks:
+  redis-stream-aws:
+    name: redis-stream-coordinator-aws

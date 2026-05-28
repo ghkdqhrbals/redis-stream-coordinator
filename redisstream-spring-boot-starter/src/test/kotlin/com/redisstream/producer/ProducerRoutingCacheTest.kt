@@ -14,6 +14,8 @@ import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class ProducerRoutingCacheTest {
     @Test
@@ -122,6 +124,25 @@ class ProducerRoutingCacheTest {
     }
 
     @Test
+    fun `unbiased murmur3 hash retries modulo tail instead of returning legacy modulo shard`() {
+        val shardCount = 1_500_000_001
+        val legacy = hashOnlyRouting(shardCount = shardCount, hashAlgorithm = RedisStreamHashAlgorithms.MURMUR3_32)
+        val unbiased = hashOnlyRouting(shardCount = shardCount, hashAlgorithm = RedisStreamHashAlgorithms.MURMUR3_32_UNBIASED)
+        val key = (0..10_000)
+            .map { "order-$it" }
+            .firstOrNull {
+                RedisStreamPartitionHasher.shardIndex(legacy, it) !=
+                    RedisStreamPartitionHasher.shardIndex(unbiased, it)
+            } ?: error("test fixture did not find a hash in the rejected modulo tail")
+
+        val legacyShard = RedisStreamPartitionHasher.shardIndex(legacy, key)
+        val unbiasedShard = RedisStreamPartitionHasher.shardIndex(unbiased, key)
+
+        assertNotEquals(legacyShard, unbiasedShard)
+        assertTrue(unbiasedShard in 0 until shardCount)
+    }
+
+    @Test
     fun `routing metadata for a different group is rejected`() {
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
@@ -182,6 +203,22 @@ class ProducerRoutingCacheTest {
                     redisSlot = shardIndex,
                 )
             },
+        )
+
+    private fun hashOnlyRouting(
+        shardCount: Int,
+        hashAlgorithm: String,
+    ): ProducerRoutingResponse =
+        ProducerRoutingResponse(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            metadataVersion = 1,
+            activeWriteVersion = 1,
+            shardCount = shardCount,
+            hashAlgorithm = hashAlgorithm,
+            hashSeed = "default",
+            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+            shards = emptyList(),
         )
 }
 

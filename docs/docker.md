@@ -28,7 +28,7 @@ Create a group:
 curl -u admin:password \
   -H 'Content-Type: application/json' \
   -X POST http://localhost:8080/coord/v1/streams/orders/groups/orders-consumer \
-  -d '{"initialShardCount":4,"hashAlgorithm":"murmur3","requestedBy":"local","reason":"local bootstrap"}'
+  -d '{"initialShardCount":4,"requestedBy":"local","reason":"local bootstrap"}'
 ```
 
 ## Build Image

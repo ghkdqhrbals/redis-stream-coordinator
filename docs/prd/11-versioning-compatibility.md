@@ -88,6 +88,7 @@ Rules:
 Current MVP status:
 
 * Redis store uses aggregate/projection keys and `storeRevision` CAS.
+* Redis-backed coordinator state access is serialized through a Redis state mutex so open source deployments do not depend on user-managed single-active rollout rules.
 * Group aggregate metadata includes `schemaVersion=1`.
 * Coordinator rejects unsupported future schema versions instead of overwriting them.
 * Legacy group aggregate metadata without `schemaVersion` is treated as version `1`.

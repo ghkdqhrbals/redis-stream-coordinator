@@ -1,0 +1,57 @@
+server:
+  port: ${SERVER_PORT:18081}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    try-it-out-enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+
+spring:
+  config:
+    import: ${SPRING_CONFIG_IMPORT:optional:configtree:/run/secrets/}
+  application:
+    name: redisstream-consumer-pod-sample
+  data:
+    redis:
+      cluster:
+        nodes:
+          - ${REDIS_CLUSTER_NODE_1:localhost:7001}
+          - ${REDIS_CLUSTER_NODE_2:localhost:7002}
+          - ${REDIS_CLUSTER_NODE_3:localhost:7003}
+
+redis-stream-coordinator:
+  consumer:
+    enabled: true
+    auto-startup: true
+    coordinator-base-url: ${COORDINATOR_BASE_URL:http://localhost:8080}
+    stream-prefix: ${STREAM_PREFIX:demo.orders}
+    consumer-group: ${CONSUMER_GROUP:demo-workers}
+    member-id: ${CONSUMER_MEMBER_ID:consumer-pod-1}
+    member-name: ${CONSUMER_MEMBER_NAME:consumer-pod-1}
+    heartbeat-interval: ${CONSUMER_HEARTBEAT_INTERVAL:1s}
+    rebalance-timeout: ${CONSUMER_REBALANCE_TIMEOUT:10s}
+    runtime-max-concurrency: ${CONSUMER_RUNTIME_MAX_CONCURRENCY:4}
+    graceful-leave-on-stop: true
+    redis:
+      enabled: true
+      poll-batch-size: 10
+      poll-timeout: 250ms
+  producer:
+    enabled: true
+    coordinator-base-url: ${COORDINATOR_BASE_URL:http://localhost:8080}
+    stream-prefix: ${STREAM_PREFIX:demo.orders}
+    consumer-group: ${CONSUMER_GROUP:demo-workers}
+    routing-refresh-interval: 2s
+    publish-max-attempts: 2
+    username: ${COORDINATOR_USERNAME:admin}
+    password: ${COORDINATOR_PASSWORD:password}

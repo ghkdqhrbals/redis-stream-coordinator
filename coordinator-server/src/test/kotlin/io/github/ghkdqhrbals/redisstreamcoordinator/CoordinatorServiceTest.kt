@@ -12,6 +12,7 @@ import org.springframework.beans.factory.support.StaticListableBeanFactory
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import java.time.ZoneId
 import java.time.Clock
@@ -33,6 +34,23 @@ class CoordinatorServiceTest {
 
         assertEquals(CoordinatorError.GROUP_ALREADY_EXISTS, error.error)
         assertEquals(CoordinatorError.GROUP_ALREADY_EXISTS.code, error.errorCode)
+    }
+
+    @Test
+    fun `group create rejects unsupported hash algorithm before state is written`() {
+        val error = kotlin.runCatching {
+            service.createGroup(
+                "bad-hash",
+                "orders-consumer",
+                createGroupRequest().copy(hashAlgorithm = "sha256"),
+            )
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.INVALID_REQUEST, error.error)
+        assertEquals(CoordinatorError.INVALID_REQUEST.code, error.errorCode)
+        assertEquals(CoordinatorError.GROUP_NOT_FOUND, kotlin.runCatching {
+            service.getGroup("bad-hash", "orders-consumer")
+        }.exceptionOrNull().let { it as CoordinatorException }.error)
     }
 
     @Test
@@ -378,6 +396,39 @@ class CoordinatorServiceTest {
         assertEquals(HeartbeatStatus.OK, rejoined.status)
         assertEquals(MemberState.ACTIVE, member.state)
         assertEquals(rejoined.memberEpoch, member.memberEpoch)
+    }
+
+    @Test
+    fun `membership rejoin restores gracefully left member`() {
+        service.createGroup("logs", "logs-consumer", createGroupRequest(initialShardCount = 2))
+        val joined = service.heartbeat("logs", "logs-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "logs",
+            "logs-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = joined.memberEpoch, ownedShards = joined.assignment.assignedShards),
+        )
+        service.heartbeat(
+            "logs",
+            "logs-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = -1,
+                ownedShards = joined.assignment.assignedShards,
+                revokingShards = joined.assignment.assignedShards.map {
+                    RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
+                },
+            ),
+        )
+
+        val rejoined = service.heartbeat("logs", "logs-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        val member = service.listMembers("logs", "logs-consumer").members.single()
+
+        assertEquals(HeartbeatStatus.OK, rejoined.status)
+        assertEquals(MemberState.ACTIVE, member.state)
+        assertEquals(rejoined.memberEpoch, member.memberEpoch)
+        assertEquals(joined.assignment.assignedShards, rejoined.assignment.assignedShards)
     }
 
     @Test
@@ -985,6 +1036,54 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `migration scale lets live consumers revoke old assignments without fencing`() {
+        service.createGroup("live-scale", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = SimulatedConsumer("member-a")
+        val memberB = SimulatedConsumer("member-b")
+
+        fun poll(member: SimulatedConsumer): HeartbeatResponse {
+            val response = service.heartbeat(
+                "live-scale",
+                "orders-consumer",
+                member.memberId,
+                heartbeat(
+                    member.memberId,
+                    memberEpoch = member.memberEpoch,
+                    ownedShards = member.ownedShards,
+                    revokingShards = member.revokingShards,
+                ),
+            )
+            member.apply(response)
+            return response
+        }
+
+        poll(memberA)
+        poll(memberA)
+        poll(memberB)
+        poll(memberA)
+        poll(memberB)
+        poll(memberB)
+
+        service.scaleGroup(
+            "live-scale",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "live scale"),
+        )
+
+        repeat(8) {
+            assertNotEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, poll(memberA).status)
+            assertNotEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, poll(memberB).status)
+        }
+        val assignments = service.assignments("live-scale", "orders-consumer")
+        val members = service.listMembers("live-scale", "orders-consumer").members
+
+        assertTrue(assignments.invariantViolations.isEmpty())
+        assertEquals(assignments.targetAssignment, assignments.currentAssignments.filterValues { it.isNotEmpty() })
+        assertTrue(members.all { it.state == MemberState.ACTIVE })
+        assertTrue(assignments.targetAssignment.values.flatten().all { it.streamVersion == 2 })
+    }
+
+    @Test
     fun `producer routing returns active write metadata`() {
         service.createGroup(
             "route-orders",
@@ -1007,7 +1106,7 @@ class CoordinatorServiceTest {
 
         assertEquals(1, beforeScale.activeWriteVersion)
         assertEquals(2, beforeScale.shardCount)
-        assertEquals("murmur3", beforeScale.hashAlgorithm)
+        assertEquals(RoutingHashAlgorithms.MURMUR3_32, beforeScale.hashAlgorithm)
         assertEquals("tenant-a", beforeScale.hashSeed)
         assertEquals("route-orders:v{streamVersion}:shard:{shardIndex}", beforeScale.streamKeyPattern)
         assertEquals(listOf("route-orders:v1:shard:0", "route-orders:v1:shard:1"), beforeScale.shards.map { it.streamKey })
@@ -1086,6 +1185,35 @@ class CoordinatorServiceTest {
         val memberATarget: Set<ShardId>,
         val memberBTarget: Set<ShardId>,
     )
+
+    private data class SimulatedConsumer(
+        val memberId: String,
+        var memberEpoch: Long = 0,
+        var ownedShards: Set<ShardId> = emptySet(),
+        var revokingShards: List<RevokingShardReport> = emptyList(),
+    ) {
+        fun apply(response: HeartbeatResponse) {
+            when (response.status) {
+                HeartbeatStatus.OK -> {
+                    memberEpoch = response.memberEpoch
+                    val nextOwned = response.assignment.assignedShards
+                    val revoked = ownedShards - nextOwned
+                    ownedShards = nextOwned
+                    revokingShards = revoked.map {
+                        RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
+                    }
+                }
+                HeartbeatStatus.FENCED_MEMBER_EPOCH, HeartbeatStatus.UNKNOWN_MEMBER_ID -> {
+                    memberEpoch = 0
+                    ownedShards = emptySet()
+                    revokingShards = emptyList()
+                }
+                HeartbeatStatus.RETRY -> Unit
+                HeartbeatStatus.UNSUPPORTED_PROTOCOL, HeartbeatStatus.INVALID_REQUEST ->
+                    error("Unexpected heartbeat status ${response.status}")
+            }
+        }
+    }
 
     private fun convergeTwoMemberGroup(streamPrefix: String): ConvergedTwoMemberGroup {
         service.createGroup(streamPrefix, "orders-consumer", createGroupRequest(initialShardCount = 2))

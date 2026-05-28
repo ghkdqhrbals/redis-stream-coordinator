@@ -23,6 +23,8 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
 * `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
+* `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
+* `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
 
 ## Versioning
 
@@ -140,6 +142,24 @@ redis-stream-coordinator:
 docker compose --profile coordinator up --build
 curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
 ```
+
+Run a full local pod smoke stack with Redis Cluster, coordinator, two consumer pods, and one auto-publishing pod:
+
+```bash
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+curl -sS http://localhost:18090/sample/status
+curl -sS http://localhost:18081/sample/events
+curl -sS http://localhost:18082/sample/events
+```
+
+Swagger UI is available for interactive local testing:
+
+* Coordinator: `http://localhost:8080/swagger-ui.html`
+* Consumer pod 1: `http://localhost:18081/swagger-ui.html`
+* Consumer pod 2: `http://localhost:18082/swagger-ui.html`
+* Publisher pod: `http://localhost:18090/swagger-ui.html`
+
+Use `admin` / `password` in the coordinator Swagger Authorize dialog for protected coordinator endpoints.
 
 ## Current Status
 

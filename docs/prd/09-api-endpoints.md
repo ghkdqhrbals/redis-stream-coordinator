@@ -68,7 +68,7 @@ Common status codes:
 | `422 Unprocessable Entity` | 요청은 유효하지만 현재 group state에서 수행 불가. |
 | `429 Too Many Requests` | caller 또는 group 단위 rate limit 초과. |
 | `500 Internal Server Error` | coordinator 내부 오류. |
-| `503 Service Unavailable` | Redis store 또는 coordinator loop가 정상 동작하지 않음. |
+| `503 Service Unavailable` | Redis store 또는 coordinator loop가 정상 동작하지 않거나 Redis state mutex를 획득하지 못함. |
 
 ## Endpoint Index
 
@@ -103,7 +103,7 @@ Request body:
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `initialShardCount` | no | Initial shard count. Omitted value uses coordinator `defaults.initial-shard-count`. |
-| `hashAlgorithm` | yes | Partition key hash algorithm. |
+| `hashAlgorithm` | no | Partition key hash algorithm. Omitted value uses `murmur3_32_unbiased`. Existing groups keep their stored algorithm for routing compatibility. |
 | `hashSeed` | no | Hash seed. |
 | `versionPolicy` | no | Stream version naming policy. MVP default is `AUTO_INCREMENT`. |
 | `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Default member consumer worker limit. Omitted value uses coordinator `defaults.consumer-max-concurrency`. |
@@ -161,9 +161,11 @@ Returns the active write metadata that producers need to route partition keys to
 Producer routing formula:
 
 ```text
-shardIndex = hash(hashAlgorithm, hashSeed, partitionKey) % shardCount
+shardIndex = route(hashAlgorithm, hashSeed, partitionKey, shardCount)
 streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 ```
+
+`murmur3_32_unbiased` is the default for new groups. It maps the 32-bit Murmur3 hash into the shard range with deterministic rejection sampling so `2^32 % shardCount` tail values do not create modulo bias. `murmur3`, `murmur3_32`, and `murmur3-32` are accepted as legacy aliases for the previous modulo mapping and are retained so existing partition keys do not move unexpectedly.
 
 Response summary:
 

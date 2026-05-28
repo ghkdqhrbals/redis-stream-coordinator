@@ -16,11 +16,13 @@ GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 
 ```text
 metadata = metadataCache.activeWrite(streamPrefix, consumerGroup)
-shardIndex = hash(metadata.hashAlgorithm, metadata.hashSeed, partitionKey) % metadata.shardCount
+shardIndex = route(metadata.hashAlgorithm, metadata.hashSeed, partitionKey, metadata.shardCount)
 streamKey = format(metadata.streamKeyPattern, metadata.activeWriteVersion, shardIndex)
 ```
 
 `metadataVersion`이 바뀌면 producer는 cached routing metadata를 갱신해야 한다.
+
+New groups default to `murmur3_32_unbiased`. The producer computes a 32-bit Murmur3 hash with the stored seed, rejects values in the incomplete modulo tail, and rehashes deterministically until the value maps uniformly into `[0, shardCount)`. Legacy `murmur3`, `murmur3_32`, and `murmur3-32` metadata keeps the previous modulo mapping to avoid moving existing partition keys.
 
 ## Coordinator Admin Scale Request
 
@@ -79,7 +81,6 @@ POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 ```json
 {
   "initialShardCount": 12,
-  "hashAlgorithm": "murmur3",
   "hashSeed": "default",
   "versionPolicy": "AUTO_INCREMENT",
   "consumerConcurrencyPolicy": {

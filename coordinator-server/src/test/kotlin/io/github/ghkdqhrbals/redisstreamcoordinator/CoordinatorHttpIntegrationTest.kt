@@ -57,6 +57,18 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `openapi docs and swagger ui are exposed for interactive tests`() {
+        mockMvc.perform(get("/v3/api-docs"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.info.title").value("Redis Stream Coordinator API"))
+            .andExpect(jsonPath("$.components.securitySchemes.basicAuth.type").value("http"))
+            .andExpect(jsonPath("$.components.securitySchemes.basicAuth.scheme").value("basic"))
+
+        mockMvc.perform(get("/swagger-ui.html"))
+            .andExpect(status().is3xxRedirection)
+    }
+
+    @Test
     fun `basic auth scheme is parsed case insensitively`() {
         mockMvc.perform(
             get("/coord/v1/monitoring/groups")
@@ -75,6 +87,24 @@ class CoordinatorHttpIntegrationTest {
         )
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value(CoordinatorError.INVALID_REQUEST.code))
+    }
+
+    @Test
+    fun `create group defaults producer hash algorithm when omitted`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/http-default-hash/groups/orders-consumer")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"initialShardCount":2,"requestedBy":"test"}"""),
+        )
+            .andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/coord/v1/streams/http-default-hash/groups/orders-consumer/producer-routing")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.hashAlgorithm").value(RoutingHashAlgorithms.DEFAULT))
     }
 
     @Test
@@ -127,7 +157,7 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.metadataVersion").value(1))
             .andExpect(jsonPath("$.activeWriteVersion").value(1))
             .andExpect(jsonPath("$.shardCount").value(2))
-            .andExpect(jsonPath("$.hashAlgorithm").value("murmur3"))
+            .andExpect(jsonPath("$.hashAlgorithm").value(RoutingHashAlgorithms.MURMUR3_32))
             .andExpect(jsonPath("$.hashSeed").value("default"))
             .andExpect(jsonPath("$.streamKeyPattern").value("http-routing:v{streamVersion}:shard:{shardIndex}"))
             .andExpect(jsonPath("$.shards.length()").value(2))

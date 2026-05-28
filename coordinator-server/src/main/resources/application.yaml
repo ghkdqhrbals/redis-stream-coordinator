@@ -7,7 +7,18 @@ management:
       exposure:
         include: health,info
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    try-it-out-enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+
 spring:
+  config:
+    import: ${SPRING_CONFIG_IMPORT:optional:configtree:/run/secrets/}
   data:
     redis:
       cluster:
@@ -51,6 +62,12 @@ coordinator:
   store:
     type: memory
     key-prefix: redis-stream:coord
+  coordination:
+    state-mutex:
+      enabled: true
+      ttl: 30s
+      acquire-timeout: 5s
+      retry-interval: 100ms
   streams:
     provisioning-enabled: false
   audit:

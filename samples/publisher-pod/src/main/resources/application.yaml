@@ -1,0 +1,48 @@
+server:
+  port: ${SERVER_PORT:18090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    try-it-out-enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+
+spring:
+  config:
+    import: ${SPRING_CONFIG_IMPORT:optional:configtree:/run/secrets/}
+  application:
+    name: redisstream-publisher-pod-sample
+  data:
+    redis:
+      cluster:
+        nodes:
+          - ${REDIS_CLUSTER_NODE_1:localhost:7001}
+          - ${REDIS_CLUSTER_NODE_2:localhost:7002}
+          - ${REDIS_CLUSTER_NODE_3:localhost:7003}
+
+redis-stream-coordinator:
+  producer:
+    enabled: true
+    coordinator-base-url: ${COORDINATOR_BASE_URL:http://localhost:8080}
+    stream-prefix: ${STREAM_PREFIX:demo.orders}
+    consumer-group: ${CONSUMER_GROUP:demo-workers}
+    routing-refresh-interval: 2s
+    publish-max-attempts: 2
+    username: ${COORDINATOR_USERNAME:admin}
+    password: ${COORDINATOR_PASSWORD:password}
+
+sample:
+  publisher:
+    auto-publish-enabled: ${PUBLISHER_AUTO_PUBLISH_ENABLED:true}
+    publish-interval-ms: ${PUBLISHER_PUBLISH_INTERVAL_MS:1000}
+    partition-key-prefix: ${PUBLISHER_PARTITION_KEY_PREFIX:order}
+    payload-prefix: ${PUBLISHER_PAYLOAD_PREFIX:sample-message}

@@ -36,8 +36,7 @@ data class ConsumerConcurrencyPolicy(
 data class CreateGroupRequest(
     @field:Min(1)
     val initialShardCount: Int? = null,
-    @field:NotBlank
-    val hashAlgorithm: String,
+    val hashAlgorithm: String = RoutingHashAlgorithms.DEFAULT,
     val hashSeed: String = "default",
     val versionPolicy: String = "AUTO_INCREMENT",
     @field:Valid

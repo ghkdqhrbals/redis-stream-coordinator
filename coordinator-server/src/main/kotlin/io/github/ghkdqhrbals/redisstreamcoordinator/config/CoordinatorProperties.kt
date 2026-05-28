@@ -13,6 +13,7 @@ data class CoordinatorProperties(
     val protocol: Protocol = Protocol(),
     val redisCluster: RedisCluster = RedisCluster(),
     val store: Store = Store(),
+    val coordination: Coordination = Coordination(),
     val streams: Streams = Streams(),
     val audit: Audit = Audit(),
     val defaults: Defaults = Defaults(),
@@ -62,6 +63,17 @@ data class CoordinatorProperties(
     data class Store(
         val type: StoreType = StoreType.MEMORY,
         val keyPrefix: String = "redis-stream:coord",
+    )
+
+    data class Coordination(
+        val stateMutex: StateMutex = StateMutex(),
+    )
+
+    data class StateMutex(
+        val enabled: Boolean = true,
+        val ttl: Duration = Duration.ofSeconds(30),
+        val acquireTimeout: Duration = Duration.ofSeconds(5),
+        val retryInterval: Duration = Duration.ofMillis(100),
     )
 
     data class Streams(

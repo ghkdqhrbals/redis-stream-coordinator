@@ -18,7 +18,7 @@ Overall status:
 | Project foundation | Done | Gradle Kotlin DSL, Gradle Wrapper `8.14.5`, Spring Boot `4.0.6`, Kotlin `2.2.21`, Java toolchain `24`, Foojay resolver. |
 | Coordinator API | Done | Admin, member heartbeat, producer routing, migration, rollback, and monitoring endpoints are implemented. |
 | Rebalance semantics | Done for MVP | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, stale ownership fencing, rebalance timeout, migration drain, and monitoring refresh conflict retry are implemented. |
-| Redis state store | Done | Memory and Redis stores are available. Redis writes use store revision compare-and-set, schema version guard, and Lua aggregate/projection updates. |
+| Redis state store | Done | Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua aggregate/projection updates. |
 | Redis Stream shard provisioning | Done | Optional initial and next-version stream/consumer-group provisioning is implemented and gated by config. Idempotent retry and partial failure behavior are covered. |
 | Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
 | Observability | Done for MVP | Coordinator and starter Micrometer metrics are implemented. Monitoring APIs are implemented. |
@@ -62,6 +62,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Monitoring health, group, member, assignment, and migration APIs.
 * [x] Shared error enum for HTTP status, error code, and default message.
 * [x] Scheduled coordinator event loop for lease expiry, rebalance timeout, and migration drain progress.
+* [x] Redis-backed distributed state mutex so multiple coordinator pods can be deployed without user-managed single-active rollout rules.
 
 ### Coordination Semantics
 
@@ -91,6 +92,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] In-memory state store.
 * [x] Redis state store for aggregate group metadata.
 * [x] Redis projection keys for members, target assignment, current assignment, migrations, active migration, and revision.
+* [x] Redis state mutex key for request-level coordinator critical-section serialization.
 * [x] Redis store revision compare-and-set for stale write detection.
 * [x] Redis metadata `schemaVersion` guard for persisted group aggregate reads and writes.
 * [x] Lua aggregate/projection updates to avoid reader-visible partial writes.

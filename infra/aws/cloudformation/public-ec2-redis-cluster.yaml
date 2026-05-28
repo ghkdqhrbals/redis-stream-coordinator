@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Public development Redis Cluster on one EC2 instance. Do not use for production."
+
+Parameters:
+  StackNamePrefix:
+    Type: String
+    Default: redis-stream-coordinator-public-dev
+    AllowedPattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  AllowedClientCidr:
+    Type: String
+    Description: "External client CIDR allowed to connect to Redis ports 6379-6381."
+  InstanceType:
+    Type: String
+    Default: t4g.micro
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+  RedisPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    AllowedPattern: "^[A-Za-z0-9_+=,.@:-]+$"
+    Description: "Redis AUTH password. Avoid shell metacharacters."
+
+Resources:
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Public development Redis Cluster access"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6381
+          CidrIp: !Ref AllowedClientCidr
+          Description: "Redis client access from the current development IP"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackNamePrefix}-sg"
+        - Key: Project
+          Value: redis-stream-coordinator
+
+  RedisClusterSelfIngressClientPorts:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RedisSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6381
+      SourceSecurityGroupId: !Ref RedisSecurityGroup
+      Description: "Redis nodes on the same instance can connect to each other"
+
+  RedisClusterSelfIngressBusPorts:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RedisSecurityGroup
+      IpProtocol: tcp
+      FromPort: 16379
+      ToPort: 16381
+      SourceSecurityGroupId: !Ref RedisSecurityGroup
+      Description: "Redis cluster bus between local nodes"
+
+  RedisInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 20
+            DeleteOnTermination: true
+            Encrypted: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackNamePrefix}-redis"
+        - Key: Project
+          Value: redis-stream-coordinator
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          dnf update -y
+          dnf install -y docker
+          systemctl enable --now docker
+
+          TOKEN=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          PUBLIC_IP=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/public-ipv4")
+          REDIS_PASSWORD='${RedisPassword}'
+          REDIS_IMAGE="redis:7.4-alpine"
+
+          docker pull "$REDIS_IMAGE"
+
+          start_node() {
+            local name="$1"
+            local port="$2"
+            local bus_port="$3"
+
+            docker rm -f "$name" || true
+            docker volume create "$name-data"
+            docker run -d \
+              --name "$name" \
+              --restart unless-stopped \
+              --network host \
+              -v "$name-data:/data" \
+              "$REDIS_IMAGE" \
+              redis-server \
+                --port "$port" \
+                --cluster-enabled yes \
+                --cluster-config-file "nodes-$port.conf" \
+                --cluster-node-timeout 5000 \
+                --appendonly yes \
+                --protected-mode no \
+                --bind 0.0.0.0 \
+                --requirepass "$REDIS_PASSWORD" \
+                --masterauth "$REDIS_PASSWORD" \
+                --cluster-announce-ip "$PUBLIC_IP" \
+                --cluster-announce-port "$port" \
+                --cluster-announce-bus-port "$bus_port"
+          }
+
+          start_node redis-node-1 6379 16379
+          start_node redis-node-2 6380 16380
+          start_node redis-node-3 6381 16381
+
+          for port in 6379 6380 6381; do
+            until docker run --rm --network host "$REDIS_IMAGE" redis-cli -a "$REDIS_PASSWORD" -h 127.0.0.1 -p "$port" ping >/dev/null 2>&1; do
+              sleep 1
+            done
+          done
+
+          if ! docker run --rm --network host "$REDIS_IMAGE" redis-cli -a "$REDIS_PASSWORD" -h 127.0.0.1 -p 6379 cluster info | grep -q 'cluster_state:ok'; then
+            yes yes | docker run -i --rm --network host "$REDIS_IMAGE" redis-cli -a "$REDIS_PASSWORD" --cluster create \
+              "$PUBLIC_IP:6379" \
+              "$PUBLIC_IP:6380" \
+              "$PUBLIC_IP:6381" \
+              --cluster-replicas 0
+          fi
+
+Outputs:
+  PublicIp:
+    Value: !GetAtt RedisInstance.PublicIp
+  ClusterNodes:
+    Value: !Sub
+      - "${Ip}:6379,${Ip}:6380,${Ip}:6381"
+      - Ip: !GetAtt RedisInstance.PublicIp
+  RedisSecurityGroupId:
+    Value: !Ref RedisSecurityGroup
+  InstanceId:
+    Value: !Ref RedisInstance
