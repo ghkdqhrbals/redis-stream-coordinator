@@ -20,6 +20,7 @@
         --panel: #f7f9fb;
         --accent: #1428a0;
         --code: #eef3f7;
+        --sidebar: #fbfcfd;
       }
       body {
         margin: 0;
@@ -33,21 +34,58 @@
         border-bottom: 1px solid var(--border);
         background: var(--panel);
       }
-      .wrap {
-        width: min(100%, 980px);
+      .topbar {
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: 12px clamp(14px, 2.2vw, 24px);
+      }
+      .site-title {
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .site-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1180px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
       }
-      nav {
+      .sidebar {
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }
+      .doc-index {
         display: flex;
-        flex-wrap: wrap;
-        gap: 4px 14px;
-        margin-top: 6px;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
       }
-      nav a {
+      .doc-index a {
         color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
         text-decoration: none;
         overflow-wrap: anywhere;
+      }
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {
+        background: var(--code);
       }
       .index-title {
         color: var(--muted);
@@ -59,6 +97,7 @@
       main {
         min-width: 0;
         max-width: 100%;
+        padding-bottom: 56px;
       }
       h1, h2, h3, h4 {
         line-height: 1.25;
@@ -139,6 +178,21 @@
         height: auto;
       }
       @media (max-width: 720px) {
+        .layout {
+          display: block;
+        }
+        .sidebar {
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }
+        .doc-index {
+          max-height: 220px;
+          overflow: auto;
+        }
         .responsive-table,
         .responsive-table thead,
         .responsive-table tbody,
@@ -210,39 +264,32 @@
   </head>
   <body>
     <header>
-      <div class="wrap">
-        <div class="index-title">Index</div>
-        <nav aria-label="Design document navigation">
-        <a href="../../CHANGELOG.html">Changelog</a>
-        <a href="../../CONTRIBUTING.html">Contributing</a>
-        <a href="../../README.html">Redis Stream Coordinator</a>
-        <a href="../../SECURITY.html">Security Policy</a>
-        <a href="../AGENTS.html">Redis Stream Coordinator 문서 작업 지침</a>
-        <a href="../PRD.html">Redis Stream Coordinator PRD</a>
-        <a href="../docker.html">Docker Guide</a>
-        <a href="../implementation-status.html">Implementation Status</a>
-        <a href="../intellij-setup.html">IntelliJ Setup</a>
-        <a href="../operations-runbook.html">Operations Runbook</a>
-        <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
-        <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
-        <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-        <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
-        <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
-        <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
-        <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
-        <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
-        <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
-        <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
-        <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
-        <a href="../testing.html">Testing Guide</a>
-        <a href="../../infra/aws/README.html">AWS ElastiCache Redis Cluster</a>
-        <a href="../../prompts/review.html">Codex PR Review</a>
-        <a href="../../samples/consumer-pod/README.html">Redis Stream Consumer Pod Sample</a>
-        <a href="../../samples/publisher-pod/README.html">Redis Stream Publisher Pod Sample</a>
-        </nav>
+      <div class="topbar">
+        <div class="site-title">Redis Stream Coordinator</div>
+        <div class="site-subtitle">Design docs</div>
       </div>
     </header>
-    <div class="wrap">
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+          <a href="../PRD.html">Redis Stream Coordinator PRD</a>
+          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+          <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="05-processing-reliability.html" aria-current="page">Member Data-Plane Boundary</a>
+          <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+          <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+          <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="../implementation-status.html">Implementation Status</a>
+          <a href="../operations-runbook.html">Operations Runbook</a>
+          <a href="../testing.html">Testing Guide</a>
+        </nav>
+      </aside>
       <main>
 <h1 id="member-data-plane-boundary">Member Data-Plane Boundary</h1>
 <p>Redis Stream Coordinator는 message processor가 아니다. 이 문서는 coordinator와 member data-plane의 경계만 정의한다.</p>
