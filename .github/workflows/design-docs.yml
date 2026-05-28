@@ -6,6 +6,13 @@ on:
     paths:
       - ".github/workflows/design-docs.yml"
       - ".github/scripts/render_design_docs.py"
+      - ".github/scripts/test_render_design_docs.py"
+      - "docs/PRD.md"
+      - "docs/en/**/*.md"
+      - "docs/prd/**/*.md"
+      - "docs/implementation-status.md"
+      - "docs/operations-runbook.md"
+      - "docs/testing.md"
   workflow_dispatch:
     inputs:
       source_ref:

@@ -186,7 +186,11 @@ def discover_markdown_files(source: Path) -> list[Path]:
     primary = source / "docs" / "PRD.md"
     if primary.exists():
         ordered = [primary]
+        english_primary = source / "docs" / "en" / "PRD.md"
+        if english_primary.exists():
+            ordered.append(english_primary)
         ordered.extend(sorted((source / "docs" / "prd").glob("*.md")))
+        ordered.extend(sorted((source / "docs" / "en" / "prd").glob("*.md")))
         ordered.extend(source / extra for extra in DESIGN_DOC_EXTRAS)
         seen: set[Path] = set()
         return [
@@ -201,10 +205,20 @@ def discover_markdown_files(source: Path) -> list[Path]:
     )
 
 
-def render_page(title: str, body: str, nav: str) -> str:
+def language_for(markdown_path: Path) -> str:
+    parts = markdown_path.parts
+    if "docs" in parts and "en" in parts:
+        return "en"
+    if "docs" in parts:
+        return "ko"
+    return "en"
+
+
+def render_page(title: str, body: str, nav: str, language: str = "en") -> str:
     escaped_title = html.escape(title)
+    escaped_language = html.escape(language, quote=True)
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{escaped_language}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -538,7 +552,10 @@ def main() -> None:
         body = make_tables_responsive(body)
         target = destination / file_name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(render_page(title, body, nav_for(file_name)), encoding="utf-8")
+        target.write_text(
+            render_page(title, body, nav_for(file_name), language_for(markdown_path)),
+            encoding="utf-8",
+        )
 
     if not (destination / "index.html").exists():
         primary = source / "docs" / "PRD.md"
@@ -555,7 +572,12 @@ def main() -> None:
             )
             body = make_tables_responsive(body)
             (destination / "index.html").write_text(
-                render_page(title, body, nav_for(Path("index.html"), active_output=primary_output)),
+                render_page(
+                    title,
+                    body,
+                    nav_for(Path("index.html"), active_output=primary_output),
+                    language_for(primary),
+                ),
                 encoding="utf-8",
             )
         else:

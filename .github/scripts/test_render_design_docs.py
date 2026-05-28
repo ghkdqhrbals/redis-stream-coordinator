@@ -113,6 +113,34 @@ class RenderDesignDocsTest(unittest.TestCase):
             self.assertIn('aria-current="page">Redis Stream Coordinator Design</a>', html)
             self.assertFalse((output / "README.html").exists())
 
+    def test_design_docs_include_english_prd_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            docs = source / "docs"
+            docs.mkdir(parents=True)
+            english_docs = docs / "en"
+            english_docs.mkdir(parents=True)
+            (docs / "PRD.md").write_text(
+                "# Redis Stream Coordinator Design\n\nLanguage: [English](en/PRD.md)\n",
+                encoding="utf-8",
+            )
+            (english_docs / "PRD.md").write_text(
+                "# Redis Stream Coordinator Design (English)\n\nLanguage: [Korean](../PRD.md)\n",
+                encoding="utf-8",
+            )
+
+            self._run_renderer(source, output)
+
+            korean_html = (output / "docs" / "PRD.html").read_text(encoding="utf-8")
+            english_html = (output / "docs" / "en" / "PRD.html").read_text(encoding="utf-8")
+            self.assertIn('<html lang="ko">', korean_html)
+            self.assertIn('href="en/PRD.html"', korean_html)
+            self.assertIn('Redis Stream Coordinator Design (English)</a>', korean_html)
+            self.assertIn('<html lang="en">', english_html)
+            self.assertIn('href="../PRD.html"', english_html)
+            self.assertIn('aria-current="page">Redis Stream Coordinator Design (English)</a>', english_html)
+
     def test_heading_levels_do_not_render_underline_rules(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
             source = Path(source_dir)

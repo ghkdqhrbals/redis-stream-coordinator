@@ -2,6 +2,8 @@
 
 이 문서는 KIP-848의 coordinator 기능을 Redis Stream에 맞게 재설계한 내용을 정리한다. 이 프로젝트는 Redis Stream sharding과 consumer group ownership을 관리하는 coordinator 전용 서버, Spring Boot consumer 통합 모듈, Spring Boot producer routing/publishing 모듈을 함께 제공한다.
 
+Language: [English](en/PRD.md)
+
 ## Design Index
 
 1. [Context, Goals, Non-Goals](prd/01-context-goals.md)
