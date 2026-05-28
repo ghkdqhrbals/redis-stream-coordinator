@@ -131,6 +131,46 @@ class RenderDesignDocsTest(unittest.TestCase):
             self.assertIn("This is the English design document.", html)
             self.assertFalse((output / "docs" / "en" / "PRD.html").exists())
 
+    def test_design_docs_publish_korean_mirror_with_query_redirect(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            docs = source / "docs"
+            korean_docs = docs / "ko"
+            prd = docs / "prd"
+            korean_prd = korean_docs / "prd"
+            prd.mkdir(parents=True)
+            korean_prd.mkdir(parents=True)
+            (docs / "PRD.md").write_text(
+                "# Redis Stream Coordinator Design\n\n[Architecture](prd/02-coordinator-architecture.md)\n",
+                encoding="utf-8",
+            )
+            (prd / "02-coordinator-architecture.md").write_text("# Coordinator Architecture\n", encoding="utf-8")
+            (korean_docs / "PRD.md").write_text(
+                "# Redis Stream Coordinator Design\n\n[아키텍처](prd/02-coordinator-architecture.md)\n",
+                encoding="utf-8",
+            )
+            (korean_prd / "02-coordinator-architecture.md").write_text("# Coordinator Architecture\n\n한글 본문\n", encoding="utf-8")
+
+            self._run_renderer(source, output)
+
+            english_index = (output / "index.html").read_text(encoding="utf-8")
+            korean_index = (output / "ko" / "index.html").read_text(encoding="utf-8")
+            english_prd = (output / "docs" / "PRD.html").read_text(encoding="utf-8")
+            korean_prd_html = (output / "ko" / "docs" / "PRD.html").read_text(encoding="utf-8")
+            self.assertIn('<html lang="en">', english_index)
+            self.assertIn('targetLanguage === "ko"', english_index)
+            self.assertIn('new URL("ko/index.html"', english_index)
+            self.assertIn('href="ko/index.html"', english_index)
+            self.assertIn('<html lang="ko">', korean_index)
+            self.assertIn('targetLanguage === "en"', korean_index)
+            self.assertIn('new URL("../index.html"', korean_index)
+            self.assertIn('href="../index.html"', korean_index)
+            self.assertIn('href="../ko/docs/PRD.html"', english_prd)
+            self.assertIn('href="docs/prd/02-coordinator-architecture.html"', korean_index)
+            self.assertIn('href="prd/02-coordinator-architecture.html"', korean_prd_html)
+            self.assertIn("한글 본문", (output / "ko" / "docs" / "prd" / "02-coordinator-architecture.html").read_text(encoding="utf-8"))
+
     def test_heading_levels_do_not_render_underline_rules(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
             source = Path(source_dir)
