@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -274,7 +274,6 @@
         <div class="index-title">Pages</div>
         <nav class="doc-index" aria-label="Design document navigation">
           <a href="../PRD.html">Redis Stream Coordinator Design</a>
-          <a href="../en/PRD.html">Redis Stream Coordinator Design (English)</a>
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
@@ -293,209 +292,174 @@
       </aside>
       <main>
 <h1 id="stream-version-migration-and-routing">Stream Version Migration and Routing</h1>
-<h2 id="routing-contract">Routing Contract</h2>
-<p>이 문서에서 topic partition에 해당하는 최소 routing 단위는 Redis Stream shard이다.</p>
-<p><code>streamVersion</code>, <code>activeWriteVersion</code>, <code>readableVersions</code>, <code>fromVersion</code>, <code>toVersion</code>은 모두 정수이다. <code>v1</code>, <code>v2</code> 같은 prefix 문자열을 저장하지 않는다.</p>
-<p>Producer는 local shard count를 직접 쓰지 않는다.</p>
-<p>Producer는 coordinator의 producer routing metadata endpoint를 캐시한다.</p>
-<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
-</code></pre>
-<pre><code class="language-text">metadata = metadataCache.activeWrite(streamPrefix, consumerGroup)
-shardIndex = routeV1(partitionKey, metadata.shardCount)
-streamKey = format(metadata.streamKeyPattern, metadata.activeWriteVersion, shardIndex)
-</code></pre>
-<p><code>metadataVersion</code>이 바뀌면 producer는 cached routing metadata를 갱신해야 한다.</p>
-<p>Routing is a v1 protocol contract, not group metadata. The producer computes a 32-bit Murmur3 hash, rejects values in the incomplete modulo tail, and rehashes deterministically until the value maps uniformly into <code>[0, shardCount)</code>. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.</p>
-<h2 id="routing-and-duplicate-delivery-constraints">Routing and Duplicate Delivery Constraints</h2>
-<p>Routing determinism is scoped to one routing metadata snapshot:</p>
-<pre><code class="language-text">{producerRoutingProtocolVersion, activeWriteVersion, shardCount, partitionKey}
-</code></pre>
-<p>동일 partition key라도 shard scale-out/in으로 <code>activeWriteVersion</code> 또는 <code>shardCount</code>가 바뀌면 다른 Redis Stream shard로 route될 수 있다. 예를 들어 <code>order-123</code>이 version <code>1</code>, shard count <code>4</code>에서는 shard <code>2</code>로 route되더라도, scale-out 후 version <code>2</code>, shard count <code>8</code>에서는 shard <code>6</code>으로 route될 수 있다.</p>
-<p>Producer retry와 shard scale-out/in은 중복 publish 시도를 만들 수 있다. 이 프로젝트는 전체 <code>streamPrefix</code>, 전체 shard, 전체 stream version의 동일 <code>eventId</code>를 전역으로 deduplicate하지 않는다.</p>
-<p>중요 시나리오:</p>
-<pre><code class="language-text">1. producer A가 eventId=E, partitionKey=order-123을 old routing metadata로 version 1 shard 2에 XADD한다.
-2. Redis 응답이 producer에게 도달하기 전에 네트워크 오류가 발생한다.
-3. 운영자가 shard scale-out을 실행해 activeWriteVersion=2, shardCount=8로 전환한다.
-4. producer A 또는 다른 producer가 같은 eventId=E를 retry하면서 새 routing metadata를 사용한다.
-5. 같은 partitionKey가 version 2 shard 6으로 route된다.
-6. 결과적으로 동일 eventId=E가 서로 다른 stream version/shard에 존재할 수 있다.
-</code></pre>
-<p>따라서 다음 운영 제약을 둔다.</p>
+<h2 id="stream-version-model">Stream Version Model</h2>
+<p>The minimum routing unit is a Redis Stream shard. Each stream version has a fixed shard count.</p>
+<p>Version fields are integers:</p>
 <ul>
-<li>중복에 민감한 workload에서는 shard scale-out/in 중 produce를 수행하지 않는다.</li>
-<li>scale 요청 전 producer를 quiesce하고, in-flight XADD와 publish retry window가 drain된 뒤 scale을 실행한다.</li>
-<li>scale 완료 후 producer routing cache를 refresh하고 새 metadata로 produce를 재개한다.</li>
-<li>producer traffic을 멈출 수 없는 workload는 producer semantics를 at-least-once로 보고, application domain의 idempotency, deduplication, unique constraint, compensation으로 중복 side effect를 방지한다.</li>
+<li><code>streamVersion</code></li>
+<li><code>activeWriteVersion</code></li>
+<li><code>readableVersions</code></li>
+<li><code>fromVersion</code></li>
+<li><code>toVersion</code></li>
 </ul>
-<h2 id="coordinator-admin-scale-request">Coordinator Admin Scale Request</h2>
-<p>Shard count 변경은 member startup이나 <code>application.yaml</code> desired spec sync로 시작하지 않는다. 운영자 또는 배포 자동화가 Coordinator Admin API에 scale-out/in을 요청하고, coordinator가 metadata를 검증한 뒤 migration을 시작한다. producer, consumer, direct Redis key write는 shard count를 변경할 수 없다. 중복에 민감한 group에서는 이 API가 producer quiescence 이후에만 호출되어야 한다.</p>
+<p>The coordinator does not store version strings such as <code>v1</code> or <code>v2</code>.</p>
+<h2 id="producer-routing">Producer Routing</h2>
+<p>Producers never use a local shard count as the source of truth. They fetch routing metadata from the coordinator:</p>
+<pre><code class="language-json">{
+  &quot;streamPrefix&quot;: &quot;orders&quot;,
+  &quot;consumerGroup&quot;: &quot;orders-consumer&quot;,
+  &quot;metadataVersion&quot;: 12,
+  &quot;activeWriteVersion&quot;: 2,
+  &quot;shardCount&quot;: 8,
+  &quot;streamKeyPattern&quot;: &quot;orders.v{version}.s{shard}&quot;
+}
+</code></pre>
+<p>The producer caches this metadata and routes a partition key to a shard within the active write version. If <code>metadataVersion</code> changes, or a publish detects stale routing, the producer refreshes the cache.</p>
+<h2 id="routing-boundary">Routing Boundary</h2>
+<p>Routing is deterministic only within the same routing metadata snapshot:</p>
+<ul>
+<li>same routing protocol,</li>
+<li>same <code>activeWriteVersion</code>,</li>
+<li>same <code>shardCount</code>,</li>
+<li>same partition key.</li>
+</ul>
+<p>If shard count or active stream version changes, the same partition key can route to a different Redis Stream shard.</p>
+<p>Example:</p>
+<ol>
+<li><code>order-123</code> routes to version <code>1</code>, shard <code>2</code> when shard count is <code>4</code>.</li>
+<li>The group scales to version <code>2</code>, shard count <code>8</code>.</li>
+<li><code>order-123</code> can now route to version <code>2</code>, shard <code>6</code>.</li>
+</ol>
+<h2 id="duplicate-publish-boundary">Duplicate Publish Boundary</h2>
+<p>The project supports shard-local idempotent publish behavior where Redis and application configuration allow it, but it does not globally deduplicate the same <code>eventId</code> across all versions and shards.</p>
+<p>Important scenario:</p>
+<ol>
+<li>Producer A publishes <code>eventId=E</code>, <code>partitionKey=order-123</code> with old routing metadata to version <code>1</code>, shard <code>2</code>.</li>
+<li>The Redis response is lost before the producer observes success.</li>
+<li>An operator performs shard scale-out and the active write version becomes <code>2</code>.</li>
+<li>Producer A retries after refreshing routing metadata.</li>
+<li>The same partition key routes to version <code>2</code>, shard <code>6</code>.</li>
+<li>The same event ID can now exist in two different stream version/shard locations.</li>
+</ol>
+<p>Operational constraint:</p>
+<ul>
+<li>Duplicate-sensitive workloads must not produce during shard scale-out/in.</li>
+<li>Stop producers before scale.</li>
+<li>Drain in-flight XADD and retry windows.</li>
+<li>Execute scale.</li>
+<li>Refresh producer routing metadata.</li>
+<li>Resume publishing.</li>
+</ul>
+<p>If producer traffic cannot stop, the workload must be treated as at-least-once and protected by application idempotency.</p>
+<h2 id="resharding-flow">Resharding Flow</h2>
+<p>Shard count changes are performed through the Coordinator Admin API.</p>
 <pre><code class="language-mermaid">sequenceDiagram
-    autonumber
-    participant Admin as Operator or Deploy Automation
+    participant Admin
     participant C as Coordinator
-    participant Store as Redis Store
-    participant Stream as Redis Stream Shards
-    participant M as Members
+    participant Store as Metadata Store
+    participant Stream as Redis Stream
+    participant M as Member
 
-    Admin-&gt;&gt;C: scale request targetShardCount consumerConcurrencyPolicy
-    C-&gt;&gt;Store: active migration 확인
-    C-&gt;&gt;Store: current stream metadata 조회
-    C-&gt;&gt;Store: consumer concurrency policy 검증과 저장
-    C-&gt;&gt;Store: migration state PREPARING 생성
-    C-&gt;&gt;Stream: next version shard와 consumer group 생성
-    C-&gt;&gt;Store: active write를 next version으로 전환
-    C-&gt;&gt;Store: old ACTIVE를 DRAINING, new를 ACTIVE로 저장
-    C-&gt;&gt;Store: groupEpoch 증가와 target assignment 재계산
-    C--&gt;&gt;Admin: reshardingId와 old/new version 반환
-    M-&gt;&gt;C: 다음 heartbeat에서 metadataVersion 확인
-    C--&gt;&gt;M: readable versions와 assignment assigned/pending 전달
+    Admin-&gt;&gt;C: Request resharding(targetShardCount)
+    C-&gt;&gt;Store: Acquire state mutex
+    C-&gt;&gt;Store: Read current stream metadata
+    C-&gt;&gt;Store: Validate no active resharding
+    C-&gt;&gt;Store: Create PREPARING resharding state
+    C-&gt;&gt;Stream: Provision next-version stream shards and consumer groups
+    C-&gt;&gt;Store: Switch active write version
+    C-&gt;&gt;Store: Mark old version DRAINING and new version ACTIVE
+    C-&gt;&gt;Store: Increment group epoch and recalculate target assignment
+    C--&gt;&gt;Admin: Return reshardingId and old/new versions
+    M-&gt;&gt;C: Next heartbeat with current ownership/progress
+    C--&gt;&gt;M: readableVersions and updated assignment
 </code></pre>
-<p>Member startup에서 수행하는 일은 다음으로 제한한다.</p>
+<h2 id="member-startup-boundary">Member Startup Boundary</h2>
+<p>Member startup is limited to:</p>
 <ul>
-<li>coordinator metadata를 읽어 active write version과 readable versions를 캐시한다.</li>
-<li>직접 생성한 <code>memberId</code>로 heartbeat를 시작한다.</li>
-<li>heartbeat는 coordinator API의 <code>{streamPrefix, consumerGroup}</code> path로 보낸다.</li>
-<li>heartbeat response로 받은 assignment만 current assignment에 반영한다.</li>
-<li>local YAML의 shard count를 coordinator에 desired state로 제출하지 않는다.</li>
-<li>local YAML의 group identifier 값으로 group을 생성하거나 변경하지 않는다.</li>
-<li>local YAML의 <code>maxConcurrency</code>는 runtime upper bound일 뿐, coordinator의 server-side consumer concurrency policy를 변경하지 않는다.</li>
+<li>read coordinator metadata,</li>
+<li>create or load a member ID,</li>
+<li>start heartbeating to <code>{streamPrefix, consumerGroup}</code>,</li>
+<li>apply assignment received from heartbeat responses,</li>
+<li>report capacity and progress.</li>
 </ul>
-<h2 id="admin-api-semantics">Admin API Semantics</h2>
-<p>초기 group 생성과 shard scale-out/in은 Coordinator Admin API로만 수행한다.</p>
+<p>Member startup does not:</p>
+<ul>
+<li>submit local YAML shard count as desired state,</li>
+<li>create or mutate group metadata,</li>
+<li>change server-side consumer concurrency policy,</li>
+<li>change active write version.</li>
+</ul>
+<h2 id="admin-api-source-of-truth">Admin API Source of Truth</h2>
+<p>Initial group creation and shard scale-out/in happen only through the Coordinator Admin API.</p>
 <p>Source of truth:</p>
 <ul>
-<li>shard count는 coordinator stream metadata가 유일한 source of truth이다.</li>
-<li>consumer <code>maxConcurrency</code>는 coordinator consumer concurrency policy가 유일한 server-side source of truth이다.</li>
-<li><code>maxConcurrency</code>는 partition/shard 개수가 아니라 member 내부 consumer worker 수이다.</li>
-<li>member heartbeat는 현재 runtime 여유 consumer worker 수를 보고할 수 있지만, shard count나 server-side <code>maxConcurrency</code>를 변경하지 못한다.</li>
+<li>shard count: coordinator stream metadata,</li>
+<li>consumer <code>maxConcurrency</code>: coordinator consumer concurrency policy,</li>
+<li>routing metadata: coordinator producer routing endpoint.</li>
 </ul>
-<h3 id="create-group">Create Group</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
-</code></pre>
-<pre><code class="language-json">{
-  &quot;initialShardCount&quot;: 12,
-  &quot;versionPolicy&quot;: &quot;AUTO_INCREMENT&quot;,
-  &quot;consumerConcurrencyPolicy&quot;: {
-    &quot;defaultMaxConcurrency&quot;: 12
-  },
-  &quot;reason&quot;: &quot;create summary group&quot;,
-  &quot;requestedBy&quot;: &quot;deploy-automation&quot;
-}
-</code></pre>
-<p><code>initialShardCount</code>와 <code>consumerConcurrencyPolicy.defaultMaxConcurrency</code>가 생략되면 coordinator YAML의 <code>defaults</code> 값을 사용한다. 요청에 값이 있으면 해당 group metadata에 개별 설정으로 저장한다.</p>
-<p>처리 순서:</p>
+<h2 id="create-group">Create Group</h2>
+<p><code>initialShardCount</code> and <code>consumerConcurrencyPolicy.defaultMaxConcurrency</code> can be omitted. In that case the coordinator uses configured defaults.</p>
+<p>Processing order:</p>
 <ol>
-<li>group metadata가 없으면 stream version <code>1</code>을 생성한다.</li>
-<li><code>1</code> shard stream과 Redis consumer group을 생성한다.</li>
-<li>server-side consumer concurrency policy를 저장한다.</li>
-<li><code>activeWriteVersion=1</code>, <code>readableVersions=[1]</code>, <code>groupEpoch=1</code>을 저장한다.</li>
-<li>group metadata가 이미 있으면 <code>409 Conflict</code>로 거절한다.</li>
+<li>Verify the group does not already exist.</li>
+<li>Create stream version <code>1</code>.</li>
+<li>Provision shard stream keys and Redis consumer groups when provisioning is enabled.</li>
+<li>Store consumer concurrency policy.</li>
+<li>Store <code>activeWriteVersion=1</code>, <code>readableVersions=[1]</code>, and <code>groupEpoch=1</code>.</li>
+<li>Reject duplicate create requests with <code>409 Conflict</code>.</li>
 </ol>
-<h3 id="scale-group">Scale Group</h3>
-<p><code>scale-out</code>과 <code>scale-in</code>은 같은 API의 <code>targetShardCount</code> 차이로 표현한다.</p>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
-</code></pre>
-<pre><code class="language-json">{
-  &quot;targetShardCount&quot;: 24,
-  &quot;consumerConcurrencyPolicy&quot;: {
-    &quot;defaultMaxConcurrency&quot;: 24
-  },
-  &quot;reason&quot;: &quot;increase consumer parallelism&quot;,
-  &quot;requestedBy&quot;: &quot;deploy-automation&quot;,
-  &quot;deprecatedAfter&quot;: &quot;P7D&quot;
-}
-</code></pre>
-<p>Coordinator는 다음 조건을 만족할 때만 요청을 수락한다.</p>
+<h2 id="scale-out-scale-in">Scale Out / Scale In</h2>
+<p><code>scale-out</code> and <code>scale-in</code> are represented by the same <code>targetShardCount</code> request.</p>
+<p>The coordinator accepts the request only when:</p>
 <ul>
-<li>같은 group에 active migration이 없다.</li>
-<li><code>targetShardCount</code>가 현재 active shard count와 다르다.</li>
-<li><code>targetShardCount</code>가 양수이다.</li>
+<li>there is no active resharding for the group,</li>
+<li><code>targetShardCount</code> differs from the current active shard count,</li>
+<li><code>targetShardCount</code> is positive.</li>
 </ul>
-<p><code>consumerConcurrencyPolicy</code>를 함께 보낸 scale 요청은 migration metadata와 consumer concurrency policy를 하나의 coordinator metadata update로 반영한다.
-같은 group에 active migration이 있거나 이미 같은 shard count이면 새 migration을 만들지 않고 conflict 또는 no-op response로 처리한다.</p>
-<p>Response:</p>
-<pre><code class="language-json">{
-  &quot;reshardingId&quot;: &quot;reshard-018f8d27&quot;,
-  &quot;fromVersion&quot;: 1,
-  &quot;toVersion&quot;: 2,
-  &quot;fromShardCount&quot;: 12,
-  &quot;toShardCount&quot;: 24,
-  &quot;state&quot;: &quot;PREPARING&quot;
-}
-</code></pre>
-<h3 id="update-consumer-concurrency">Update Consumer Concurrency</h3>
-<p>Shard count 변경 없이 member 내부 consumer worker 수 상한만 바꿀 때는 consumer concurrency API를 사용한다. 이 API는 새 stream version을 만들지 않고 <code>metadataVersion</code>을 증가시킨 뒤 member heartbeat response의 <code>assignedMaxConcurrency</code>를 갱신한다. assignment weight policy가 <code>maxConcurrency</code>를 사용하는 경우에만 <code>groupEpoch</code>도 증가시키고 target assignment를 다시 계산한다.</p>
-<pre><code class="language-http">PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
-</code></pre>
-<pre><code class="language-json">{
-  &quot;defaultMaxConcurrency&quot;: 24,
-  &quot;memberOverrides&quot;: [
-    {&quot;memberName&quot;: &quot;summary-consumer-a&quot;, &quot;maxConcurrency&quot;: 16}
-  ],
-  &quot;reason&quot;: &quot;raise server-side consumer concurrency&quot;,
-  &quot;requestedBy&quot;: &quot;deploy-automation&quot;
-}
-</code></pre>
-<p>처리 규칙:</p>
+<p>If a consumer concurrency policy is provided with the scale request, it is stored in the same metadata update.</p>
+<h2 id="consumer-concurrency-update">Consumer Concurrency Update</h2>
+<p>When only the local worker capacity limit changes, operators use the consumer concurrency API. This does not create a new stream version.</p>
+<p>Rules:</p>
 <ul>
-<li>변경된 consumer concurrency policy는 member heartbeat response의 <code>assignedMaxConcurrency</code>로 전파된다.</li>
-<li>member가 heartbeat에서 더 큰 runtime consumer worker 수를 보고해도 server-side policy를 초과해서 worker를 열 수 없다.</li>
-<li>concurrency 축소는 partition/shard 수를 줄이지 않는다. member는 소유 shard를 더 적은 consumer worker로 multiplexing한다.</li>
-<li>coordinator는 Kafka-style rebalance control plane이므로 별도 global min/max concurrency config를 두지 않는다.</li>
-<li>요청값이 현재 policy와 같으면 metadata를 새로 쓰지 않고 현재 policy를 반환한다.</li>
+<li>the policy is propagated through <code>assignedMaxConcurrency</code> in heartbeat responses,</li>
+<li>a member cannot exceed server-side policy even if it reports a larger runtime capacity,</li>
+<li>reducing concurrency does not reduce shard count,</li>
+<li>if the assignment weight policy depends on <code>maxConcurrency</code>, the coordinator increments <code>groupEpoch</code> and recalculates assignment,</li>
+<li>no-op updates return current policy without writing new metadata.</li>
 </ul>
-<h3 id="get-metadata">Get Metadata</h3>
-<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
-</code></pre>
-<p>반환 값에는 <code>groupEpoch</code>, <code>assignmentEpoch</code>, <code>activeWriteVersion</code>, <code>readableVersions</code>, consumer concurrency policy, active migration, target/current assignment summary가 포함된다.</p>
-<h3 id="get-migration">Get Migration</h3>
-<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
-</code></pre>
-<p>반환 값에는 old/new version, member-reported drain progress, revoke progress가 포함된다.</p>
-<h3 id="rollback-migration">Rollback Migration</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
-</code></pre>
-<p>Rollback은 cutover 직후 rollback window 안에서만 허용한다. 이미 new version에 write된 message는 운영 정책에 따라 drain 또는 replay 대상이 된다.</p>
-<h3 id="authorization-and-audit">Authorization and Audit</h3>
+<h2 id="monitoring">Monitoring</h2>
+<p>Group monitoring returns:</p>
 <ul>
-<li>create, scale, consumer concurrency update, rollback은 운영 권한이 있는 caller만 호출할 수 있다.</li>
-<li>MVP 접근제어는 coordinator YAML의 <code>admin-username</code> / <code>admin-password</code> 기반 Basic Auth로 처리한다.</li>
-<li>모든 admin mutation은 <code>requestedBy</code>, <code>reason</code>, <code>requestedAt</code>, <code>coordinatorId</code>를 audit log로 남긴다.</li>
+<li>group epoch,</li>
+<li>assignment epoch,</li>
+<li>active write version,</li>
+<li>readable versions,</li>
+<li>consumer concurrency policy,</li>
+<li>active resharding,</li>
+<li>target/current assignment summary,</li>
+<li>member liveness,</li>
+<li>revoke progress,</li>
+<li>consumer progress.</li>
 </ul>
-<h2 id="online-migration">Online Migration</h2>
-<pre><code class="language-text">old ACTIVE    accepts_writes=true  accepts_reads=true
-new PREPARING accepts_writes=false accepts_reads=false
-
-cutover 후
-
-old DRAINING  accepts_writes=false accepts_reads=true
-new ACTIVE    accepts_writes=true  accepts_reads=true
-</code></pre>
-<p>Coordinator 책임:</p>
+<p>Resharding monitoring returns:</p>
 <ul>
-<li>next stream version metadata 생성</li>
-<li>stream shard와 consumer group 생성</li>
-<li>active write pointer 전환</li>
-<li>readable versions 갱신</li>
-<li>group epoch 증가</li>
-<li>target assignment 재계산</li>
-<li>old version drain 완료 후 <code>DEPRECATED</code> 전환</li>
+<li><code>reshardingId</code>,</li>
+<li>old/new versions,</li>
+<li>provisioning state,</li>
+<li>member-reported drain progress,</li>
+<li>revoke progress,</li>
+<li>rollback eligibility.</li>
 </ul>
-<p>Member 책임:</p>
+<h2 id="rollback">Rollback</h2>
+<p>Rollback is allowed only shortly after cutover and within the configured rollback window.</p>
+<p>If messages were already written to the new version, they must be drained, replayed, or handled by an operator-defined policy. Rollback does not provide a global transaction across Redis Stream data and coordinator metadata.</p>
+<h2 id="deprecating-old-versions">Deprecating Old Versions</h2>
+<p>The old version can move from <code>DRAINING</code> to <code>DEPRECATED</code> only when:</p>
 <ul>
-<li>readable versions에 포함된 shard만 처리한다.</li>
-<li>assigned <code>ACTIVE</code>와 <code>DRAINING</code> shard를 모두 읽는다.</li>
-<li><code>DRAINING</code> shard drain 완료 여부를 heartbeat <code>ownedShards</code>와 <code>revokingShards</code>로 보고한다.</li>
+<li>the old version has no target assignment,</li>
+<li>no live member reports old-version shards as owned,</li>
+<li>members that processed old-version shards have reported drain completion.</li>
 </ul>
-<h2 id="migration-completion">Migration Completion</h2>
-<p>old version을 <code>DEPRECATED</code>로 바꾸려면 다음 조건을 만족해야 한다.</p>
-<ul>
-<li>old version의 target assignment가 비어 있다.</li>
-<li>모든 live member <code>ownedShards</code>에서 old version shard가 제거됐다.</li>
-<li>old version을 처리하던 member가 drain complete를 보고했다.</li>
-</ul>
-<h2 id="rollback-policy">Rollback Policy</h2>
-<p>Cutover 직후 문제가 있으면 coordinator는 active write pointer를 old version으로 되돌릴 수 있다. 단, rollback window 안에서만 허용하고 new version에 이미 write된 message는 운영 정책에 따라 drain 또는 replay한다.</p>
       </main>
     </div>
   </body>

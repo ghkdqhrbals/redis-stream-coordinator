@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -274,7 +274,6 @@
         <div class="index-title">Pages</div>
         <nav class="doc-index" aria-label="Design document navigation">
           <a href="../PRD.html">Redis Stream Coordinator Design</a>
-          <a href="../en/PRD.html">Redis Stream Coordinator Design (English)</a>
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
@@ -293,58 +292,109 @@
       </aside>
       <main>
 <h1 id="member-data-plane-boundary">Member Data-Plane Boundary</h1>
-<p>Redis Stream Coordinator는 message processor가 아니다. 이 문서는 coordinator와 member data-plane의 경계만 정의한다.</p>
-<h2 id="coordinator-owns">Coordinator Owns</h2>
+<p>Redis Stream Coordinator is not a message processor. It coordinates shard ownership. The application remains responsible for reading Redis Stream records, executing business logic, handling retries, and acknowledging records.</p>
+<h2 id="coordinator-guarantees">Coordinator Guarantees</h2>
+<p>The coordinator provides:</p>
 <ul>
-<li>group metadata</li>
-<li>member liveness</li>
-<li>target assignment</li>
-<li>current assignment report</li>
-<li>assigned/pending shard assignment</li>
-<li>member epoch fencing status</li>
-<li>stream version migration state</li>
-<li>assignment epoch과 member epoch 기반 stale owner fencing</li>
+<li>target shard assignment,</li>
+<li>revoke-before-assign sequencing,</li>
+<li>member lease expiration,</li>
+<li>stale owner fencing,</li>
+<li>member epoch and assignment epoch validation,</li>
+<li>monitoring of member-reported progress.</li>
 </ul>
-<h2 id="member-data-plane-owns">Member Data-Plane Owns</h2>
+<p>The coordinator does not provide:</p>
 <ul>
-<li>Redis Stream <code>XREADGROUP</code> / <code>XACK</code></li>
-<li>pending recovery</li>
-<li>handler execution</li>
-<li>retry / DLQ</li>
-<li>idempotency marker</li>
-<li>key ordering</li>
-<li>read batch, block timeout, worker thread tuning</li>
+<li>exactly-once business processing,</li>
+<li>atomic commit between Redis Stream ACK and an external database,</li>
+<li>global event-id deduplication,</li>
+<li>application retry policy,</li>
+<li>DLQ policy,</li>
+<li>handler transaction management.</li>
 </ul>
-<h2 id="at-least-once-processing-model">At-Least-Once Processing Model</h2>
-<p>이 프로젝트의 기본 처리 모델은 at-least-once이다. Redis Stream consumer group delivery는 <code>XREADGROUP</code>/<code>XACK</code> 기준으로 중복 전달될 수 있고, consumer handler도 장애, pending recovery, rebalance 이후 다시 실행될 수 있다.</p>
-<p>단일 처리 보장은 제공하지 않는다. 실제 application handler는 하나의 message를 처리하면서 DB update, Redis write, HTTP call, external API call, local cache update 등 여러 비즈니스 side effect를 함께 수행할 수 있다. 이 프로젝트는 그런 side effect들과 Redis Stream ACK를 하나의 원자적 transaction으로 묶는 protocol을 제공하지 않는다.</p>
-<p>Application 책임:</p>
+<h2 id="processing-guarantee">Processing Guarantee</h2>
+<p>The baseline processing model is at-least-once.</p>
+<p>Redis Stream consumer group delivery can redeliver records through pending recovery. A consumer can crash after the handler runs but before ACK. A producer can retry after a lost response. Resharding can also create duplicate publish attempts when producer traffic is not quiesced.</p>
+<p>Applications must assume that handlers can be invoked more than once for the same business event.</p>
+<h2 id="application-responsibilities">Application Responsibilities</h2>
+<p>Applications must decide:</p>
 <ul>
-<li>handler는 중복 호출될 수 있다고 가정한다.</li>
-<li>business side effect는 domain-level idempotency, unique constraint, deduplication table, compensation 등으로 보호한다.</li>
-<li>Redis ACK는 application이 선택한 처리 정책에 따라 수행한다. ACK 전 crash는 재전달을 만들 수 있고, ACK 후 crash는 처리 유실을 만들 수 있으므로 application risk profile에 맞게 선택한다.</li>
-<li>coordinator가 내려준 <code>memberEpoch</code>, <code>assignmentEpoch</code>, shard ownership 정보는 stale owner fencing에 사용하지만, business side effect 중복 방지를 대신하지 않는다.</li>
+<li>whether to ACK before or after business processing,</li>
+<li>whether to use <code>XACK</code>, <code>XACKDEL</code>, or a custom NACK/retry flow,</li>
+<li>how to handle pending messages,</li>
+<li>how to detect duplicate business events,</li>
+<li>how to protect external side effects,</li>
+<li>when to send failed records to a DLQ.</li>
 </ul>
-<p>권장 처리 흐름:</p>
+<p>Recommended protections:</p>
+<ul>
+<li>domain-level idempotency keys,</li>
+<li>database unique constraints,</li>
+<li>deduplication tables,</li>
+<li>optimistic locking,</li>
+<li>compensating actions,</li>
+<li>explicit retry and DLQ policy.</li>
+</ul>
+<h2 id="recommended-handler-flow">Recommended Handler Flow</h2>
 <pre><code class="language-text">XREADGROUP
-  -&gt; memberEpoch / assignmentEpoch / shard ownership 확인
-  -&gt; business handler 실행
-  -&gt; application-level duplicate guard 또는 retry policy 적용
-  -&gt; XACKDEL 또는 XACK
+  -&gt; verify memberEpoch / assignmentEpoch / shard ownership
+  -&gt; execute business handler
+  -&gt; apply application-level duplicate guard or retry policy
+  -&gt; XACKDEL or XACK
 </code></pre>
-<p>보장 경계:</p>
-<ul>
-<li>Redis Stream delivery는 at-least-once이다.</li>
-<li>consumer handler execution은 at-least-once이다.</li>
-<li>producer publish는 retry와 migration 상황에서 duplicate를 만들 수 있다.</li>
-<li>전체 shard/version을 가로지르는 동일 event id produce 중복 방지는 제공하지 않는다.</li>
-<li>외부 side effect의 단일 반영은 제공하지 않는다.</li>
-</ul>
-<h2 id="contract">Contract</h2>
-<p>Coordinator heartbeat response의 <code>assignment.assignedShards</code>에서 기존 owned shard가 빠지면 member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 된 뒤 heartbeat의 <code>revokingShards.state=REVOKED</code>로 보고한다.</p>
-<p>Coordinator heartbeat response의 <code>assignment.assignedShards</code>에 새 shard가 포함되면 member는 shard를 <code>ownedShards</code>에 반영하고, 실제 Redis Stream read/recovery는 member data-plane 정책에 따라 수행한다.</p>
-<p>Coordinator가 <code>FENCED_MEMBER_EPOCH</code>을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 <code>memberEpoch=0</code> full heartbeat로 rejoin한다.</p>
-<p>Coordinator는 member가 보고한 <code>ownedShards</code>/<code>revokingShards</code>를 server-side target assignment와 이전에 수락한 current assignment 기준으로 검증한다. 아직 pending인 shard, 다른 live member가 소유 중인 shard, 또는 더 이상 허용되지 않는 shard를 owned로 보고하면 stale ownership으로 보고 fencing한다. 이미 처리된 terminal <code>REVOKED</code> duplicate report는 fencing하지 않고 무시한다.</p>
+<p>If the member is fenced or loses ownership, it should stop reads for that shard and avoid ACKing records it no longer owns unless the application explicitly accepts that risk.</p>
+<h2 id="revoke-flow">Revoke Flow</h2>
+<p>When a shard disappears from <code>assignment.assignedShards</code> in a heartbeat response:</p>
+<ol>
+<li>stop new reads for the shard,</li>
+<li>wait for local in-flight work to drain or hit the application timeout,</li>
+<li>report the shard in <code>revokingShards</code> with <code>state=REVOKED</code>,</li>
+<li>remove the shard from local active workers.</li>
+</ol>
+<p>The coordinator accepts the revoke acknowledgement and can assign the shard to the next target member.</p>
+<h2 id="fencing-flow">Fencing Flow</h2>
+<p>If the coordinator returns a fencing status or rejects stale ownership:</p>
+<ol>
+<li>stop reads and ACKs for affected shards,</li>
+<li>clear local ownership state,</li>
+<li>send a full heartbeat with <code>memberEpoch=0</code> or rejoin according to the client policy,</li>
+<li>start only the shards returned by the coordinator after rejoin.</li>
+</ol>
+<h2 id="guarantee-boundary-summary">Guarantee Boundary Summary</h2>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Area</th>
+<th>Guarantee</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Area">Shard ownership</td>
+<td data-label="Guarantee">Coordinator-managed with revoke-before-assign for live members</td>
+</tr>
+<tr>
+<td data-label="Area">Member liveness</td>
+<td data-label="Guarantee">Lease-based expiration</td>
+</tr>
+<tr>
+<td data-label="Area">Handler execution</td>
+<td data-label="Guarantee">At-least-once</td>
+</tr>
+<tr>
+<td data-label="Area">Producer publish</td>
+<td data-label="Guarantee">At-least-once under retry and resharding</td>
+</tr>
+<tr>
+<td data-label="Area">External side effects</td>
+<td data-label="Guarantee">Application-owned</td>
+</tr>
+<tr>
+<td data-label="Area">Global duplicate event prevention</td>
+<td data-label="Guarantee">Not provided</td>
+</tr>
+</tbody>
+</table>
       </main>
     </div>
   </body>

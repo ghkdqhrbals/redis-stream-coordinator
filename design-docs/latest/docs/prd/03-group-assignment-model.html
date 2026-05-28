@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -274,7 +274,6 @@
         <div class="index-title">Pages</div>
         <nav class="doc-index" aria-label="Design document navigation">
           <a href="../PRD.html">Redis Stream Coordinator Design</a>
-          <a href="../en/PRD.html">Redis Stream Coordinator Design (English)</a>
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html" aria-current="page">Group Metadata and Assignment Model</a>
@@ -293,32 +292,129 @@
       </aside>
       <main>
 <h1 id="group-metadata-and-assignment-model">Group Metadata and Assignment Model</h1>
-<h2 id="group-metadata">Group Metadata</h2>
-<pre><code class="language-json">{
-  &quot;streamPrefix&quot;: &quot;summary&quot;,
-  &quot;consumerGroup&quot;: &quot;summary-group&quot;,
-  &quot;groupEpoch&quot;: 12,
-  &quot;metadataVersion&quot;: 8,
-  &quot;assignmentEpoch&quot;: 11,
-  &quot;state&quot;: &quot;STABLE&quot;,
-  &quot;activeWriteVersion&quot;: 2,
-  &quot;readableVersions&quot;: [1, 2],
-  &quot;updatedAt&quot;: &quot;2026-05-15T10:00:00Z&quot;
-}
-</code></pre>
-<p><code>groupEpoch</code>은 group metadata가 바뀔 때 증가한다.
-Stream version 값은 정수이며 prefix 문자열을 붙이지 않는다.</p>
-<p>Trigger:</p>
+<h2 id="core-entities">Core Entities</h2>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Entity</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Entity">Group</td>
+<td data-label="Description">A <code>{streamPrefix, consumerGroup}</code> pair managed by the coordinator</td>
+</tr>
+<tr>
+<td data-label="Entity">Stream Version</td>
+<td data-label="Description">A numbered routing domain with a fixed shard count</td>
+</tr>
+<tr>
+<td data-label="Entity">Shard</td>
+<td data-label="Description">The minimum Redis Stream routing and ownership unit</td>
+</tr>
+<tr>
+<td data-label="Entity">Member</td>
+<td data-label="Description">A consumer runtime instance identified by <code>memberId</code></td>
+</tr>
+<tr>
+<td data-label="Entity">Target Assignment</td>
+<td data-label="Description">Coordinator-owned desired shard ownership</td>
+</tr>
+<tr>
+<td data-label="Entity">Current Assignment</td>
+<td data-label="Description">Member-reported applied ownership</td>
+</tr>
+<tr>
+<td data-label="Entity">Group Epoch</td>
+<td data-label="Description">Generation of group metadata changes</td>
+</tr>
+<tr>
+<td data-label="Entity">Assignment Epoch</td>
+<td data-label="Description">Generation of target assignment calculation</td>
+</tr>
+<tr>
+<td data-label="Entity">Member Epoch</td>
+<td data-label="Description">Generation used to fence stale member state</td>
+</tr>
+<tr>
+<td data-label="Entity">Store Revision</td>
+<td data-label="Description">Optimistic write guard for Redis-backed state updates</td>
+</tr>
+</tbody>
+</table>
+<h2 id="metadata-ownership">Metadata Ownership</h2>
+<p>The coordinator owns:</p>
 <ul>
-<li>member join</li>
-<li>member lease TTL 만료</li>
-<li>member metadata 변경</li>
-<li>readable stream version 변경</li>
-<li>Coordinator Admin API로 요청된 shard count migration 시작/완료</li>
-<li>coordinator가 member를 fenced 처리</li>
+<li>stream versions and shard count,</li>
+<li>active write version,</li>
+<li>readable versions,</li>
+<li>member registry and lease timestamps,</li>
+<li>target assignment,</li>
+<li>accepted current assignment,</li>
+<li>resharding state,</li>
+<li>consumer concurrency policy,</li>
+<li>audit and monitoring projections.</li>
 </ul>
-<h2 id="group-state">Group State</h2>
-<p><code>state</code>는 group이 target assignment에 어느 정도 수렴했는지를 나타낸다.</p>
+<p>Members own:</p>
+<ul>
+<li>local worker lifecycle,</li>
+<li>actual Redis Stream reads,</li>
+<li>handler execution,</li>
+<li>ACK/NACK/XACKDEL policy,</li>
+<li>local progress reporting,</li>
+<li>local graceful shutdown.</li>
+</ul>
+<h2 id="assignment-state">Assignment State</h2>
+<p>Target assignment is declarative. It records which member should own each shard once the group converges.</p>
+<p>Current assignment is observational. It records what members have reported as applied through heartbeats.</p>
+<p>The coordinator compares both views to enforce safety:</p>
+<ul>
+<li>a shard cannot have two live owners,</li>
+<li>a member cannot claim a shard that is not assigned or pending for it,</li>
+<li>a stale owner must be fenced before a new owner starts,</li>
+<li>duplicate terminal revoke reports are ignored once already accepted.</li>
+</ul>
+<h2 id="epochs">Epochs</h2>
+<h3 id="group-epoch">Group Epoch</h3>
+<p><code>groupEpoch</code> increments when membership or group metadata changes in a way that can affect ownership or routing:</p>
+<ul>
+<li>new member joins,</li>
+<li>member gracefully leaves,</li>
+<li>member expires,</li>
+<li>shard count migration changes readable versions or active write version,</li>
+<li>consumer concurrency policy affects assignment weight,</li>
+<li>rollback changes stream version state.</li>
+</ul>
+<h3 id="assignment-epoch">Assignment Epoch</h3>
+<p><code>assignmentEpoch</code> increments when target assignment is recalculated. If <code>groupEpoch</code> changes but assignment does not need to change, <code>assignmentEpoch</code> can remain stable.</p>
+<h3 id="member-epoch">Member Epoch</h3>
+<p><code>memberEpoch</code> increments when the coordinator needs to fence stale member state or acknowledge a new member lifecycle. A member that sends a heartbeat with an old epoch can be fenced and required to rejoin.</p>
+<h3 id="store-revision">Store Revision</h3>
+<p><code>storeRevision</code> protects Redis state from stale overwrites. Even with the Redis state mutex, it remains useful as a final compare-and-set guard when a process resumes with an old snapshot.</p>
+<h2 id="sticky-assignment">Sticky Assignment</h2>
+<p>The assignment algorithm prefers stability:</p>
+<ol>
+<li>Keep existing owners for shards when they are still live and eligible.</li>
+<li>Remove ownership from expired or leaving members.</li>
+<li>Assign unowned shards to live members.</li>
+<li>Balance shard counts using member capacity where configured.</li>
+<li>Move the smallest possible number of shards to reduce imbalance.</li>
+</ol>
+<p>The target is not perfect mathematical balance at all costs. The target is operational stability with bounded imbalance.</p>
+<h2 id="revoke-before-assign">Revoke-Before-Assign</h2>
+<p>When a shard must move from member A to member B:</p>
+<ol>
+<li>Coordinator removes the shard from A's assigned set.</li>
+<li>A receives the missing shard in the next heartbeat response.</li>
+<li>A stops new reads and drains in-flight work.</li>
+<li>A reports <code>revokingShards.state=REVOKED</code>.</li>
+<li>Coordinator accepts the revoke acknowledgement.</li>
+<li>Coordinator returns the shard to B as assigned.</li>
+<li>B starts reading and reports ownership.</li>
+</ol>
+<p>If A expires before acknowledging revoke, the coordinator fences A and can assign the shard to B.</p>
+<h2 id="membership-states">Membership States</h2>
 <table class="responsive-table">
 <thead>
 <tr>
@@ -328,197 +424,38 @@ Stream version 값은 정수이며 prefix 문자열을 붙이지 않는다.</p>
 </thead>
 <tbody>
 <tr>
-<td data-label="State"><code>EMPTY</code></td>
-<td data-label="Meaning">살아 있는 member가 없고 readable shard owner도 없다.</td>
-</tr>
-<tr>
-<td data-label="State"><code>ASSIGNING</code></td>
-<td data-label="Meaning"><code>groupEpoch &gt; assignmentEpoch</code>라서 coordinator가 새 target assignment를 계산해야 한다.</td>
-</tr>
-<tr>
-<td data-label="State"><code>RECONCILING</code></td>
-<td data-label="Meaning">target assignment는 계산됐지만 일부 member가 revoke/assign을 아직 완료하지 않았다.</td>
+<td data-label="State"><code>JOINING</code></td>
+<td data-label="Meaning">Member has started heartbeating but may not own shards yet</td>
 </tr>
 <tr>
 <td data-label="State"><code>STABLE</code></td>
-<td data-label="Meaning">모든 active member의 current assignment가 target assignment와 같은 epoch으로 수렴했다.</td>
+<td data-label="Meaning">Member is live and reconciled with assignment</td>
+</tr>
+<tr>
+<td data-label="State"><code>LEAVING</code></td>
+<td data-label="Meaning">Member requested graceful leave and should revoke shards</td>
+</tr>
+<tr>
+<td data-label="State"><code>EXPIRED</code></td>
+<td data-label="Meaning">Member lease timed out</td>
+</tr>
+<tr>
+<td data-label="State"><code>FENCED</code></td>
+<td data-label="Meaning">Member reported stale or invalid ownership</td>
 </tr>
 </tbody>
 </table>
-<p>Stream version migration의 <code>PREPARING</code>, <code>ACTIVE</code>, <code>DRAINING</code>, <code>DEPRECATED</code>는 group state가 아니라 stream version state이다.</p>
-<p>State transition:</p>
-<pre><code class="language-text">EMPTY
-  -&gt; ASSIGNING      first live member joins
-
-STABLE
-  -&gt; ASSIGNING      member join, member leave, idle removal, or readable metadata change
-  -&gt; EMPTY          last member leaves and no readable shard can be owned
-
-ASSIGNING
-  -&gt; RECONCILING    target assignment persisted for current groupEpoch
-
-RECONCILING
-  -&gt; STABLE         all active members converge
-  -&gt; ASSIGNING      another metadata change happens before convergence
-
-</code></pre>
-<h2 id="epoch-model">Epoch Model</h2>
-<p><code>epoch</code>은 시간이 아니라 stale actor를 막기 위한 세대 번호이다. coordinator는 epoch을 단조 증가시키고, member는 자신이 들고 있는 epoch이 최신인지 검증한 뒤 assignment를 적용한다.</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Epoch</th>
-<th>Owner</th>
-<th>Increments When</th>
-<th>Used For</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Epoch"><code>groupEpoch</code></td>
-<td data-label="Owner">coordinator</td>
-<td data-label="Increments When">member join/leave, idle removal, shard migration, readable metadata 변경</td>
-<td data-label="Used For">새 target assignment가 필요한지 판단</td>
-</tr>
-<tr>
-<td data-label="Epoch"><code>assignmentEpoch</code></td>
-<td data-label="Owner">coordinator</td>
-<td data-label="Increments When">target assignment를 새 group metadata 기준으로 저장할 때</td>
-<td data-label="Used For">target assignment가 어떤 group epoch 기준인지 표시</td>
-</tr>
-<tr>
-<td data-label="Epoch"><code>memberEpoch</code></td>
-<td data-label="Owner">coordinator</td>
-<td data-label="Increments When">member가 새 assignment를 적용해야 하거나 fencing될 때</td>
-<td data-label="Used For">stale member heartbeat/read/ack 차단</td>
-</tr>
-</tbody>
-</table>
-<p>Invariant:</p>
+<h2 id="ownership-validation">Ownership Validation</h2>
+<p>The coordinator validates every heartbeat ownership report:</p>
 <ul>
-<li><code>assignmentEpoch</code>은 target assignment를 계산한 <code>groupEpoch</code>과 같아야 한다.</li>
-<li>active member의 <code>memberEpoch</code>은 자신에게 내려간 target assignment epoch으로 수렴해야 한다.</li>
-<li>member data-plane은 <code>memberEpoch</code>과 <code>assignmentEpoch</code>이 유효한 assignment에서만 read/ack한다.</li>
-<li><code>STABLE</code> group에서는 active member의 current assignment 합집합이 target assignment와 같아야 한다.</li>
+<li>owned shards must be assigned or pending for the reporting member,</li>
+<li>revoking shards must match shards previously removed from assignment,</li>
+<li>a live member cannot claim a shard owned by another live member,</li>
+<li>stale member epochs are rejected,</li>
+<li>stale assignment epochs trigger rejoin or reconciliation,</li>
+<li>terminal duplicate revoke reports are ignored rather than treated as violations.</li>
 </ul>
-<h2 id="member-metadata">Member Metadata</h2>
-<pre><code class="language-json">{
-  &quot;memberId&quot;: &quot;018f8d27-8d71-7a7c-a7e7-b3f77c613d7f&quot;,
-  &quot;memberName&quot;: &quot;summary-consumer-a&quot;,
-  &quot;state&quot;: &quot;ACTIVE&quot;,
-  &quot;memberEpoch&quot;: 11,
-  &quot;metadataVersion&quot;: 8,
-  &quot;assignedMaxConcurrency&quot;: 12,
-  &quot;runtimeMaxConcurrency&quot;: 12,
-  &quot;activeConsumerWorkers&quot;: 8,
-  &quot;currentAssignment&quot;: [
-    {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 1},
-    {&quot;streamVersion&quot;: 1, &quot;shardIndex&quot;: 3}
-  ],
-  &quot;revoking&quot;: [],
-  &quot;lastHeartbeatAt&quot;: &quot;2026-05-15T10:00:00Z&quot;,
-  &quot;memberLeaseExpiresAt&quot;: &quot;2026-05-15T10:00:15Z&quot;
-}
-</code></pre>
-<p>Member metadata는 member lifecycle의 source of truth이다.</p>
-<ul>
-<li><code>lastHeartbeatAt</code>: coordinator가 마지막 heartbeat를 정상 반영한 시각이다.</li>
-<li><code>memberLeaseExpiresAt</code>: 이 시각 이후에는 <code>EXPIRED</code>로 fencing하고 재할당을 시작한다.</li>
-<li><code>assignedMaxConcurrency</code>: Coordinator Admin API가 저장한 server-side consumer concurrency policy 기준으로 허용된 consumer worker 수이다.</li>
-<li><code>runtimeMaxConcurrency</code>: member process가 heartbeat로 보고한 local consumer worker 상한이다.</li>
-<li><code>activeConsumerWorkers</code>: member가 현재 실행 중인 consumer worker 수이다.</li>
-<li><code>maxConcurrency</code>는 partition/shard 개수가 아니며, target assignment의 shard 수 상한으로 쓰지 않는다.</li>
-</ul>
-<h2 id="target-assignment">Target Assignment</h2>
-<p>Target assignment는 coordinator가 계산한 desired state이다.</p>
-<pre><code class="language-json">{
-  &quot;streamPrefix&quot;: &quot;summary&quot;,
-  &quot;consumerGroup&quot;: &quot;summary-group&quot;,
-  &quot;assignmentEpoch&quot;: 12,
-  &quot;groupEpoch&quot;: 12,
-  &quot;members&quot;: {
-    &quot;member-a&quot;: [
-      {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 0}
-    ],
-    &quot;member-b&quot;: [
-      {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 1}
-    ]
-  }
-}
-</code></pre>
-<p>Invariant:</p>
-<ul>
-<li>readable shard는 정확히 하나의 target owner를 가진다.</li>
-<li>unknown member에게 shard를 assign하지 않는다.</li>
-<li><code>DRAINING</code> shard도 readable이면 assignment 대상이다.</li>
-<li>revoke 완료 전 shard는 새 member의 effective assignment에 포함하지 않는다.</li>
-</ul>
-<h2 id="current-assignment">Current Assignment</h2>
-<p>Current assignment는 member가 실제로 적용 중이라고 보고한 state이다.</p>
-<pre><code class="language-json">{
-  &quot;memberId&quot;: &quot;member-a&quot;,
-  &quot;memberEpoch&quot;: 11,
-  &quot;owned&quot;: [
-    {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 0}
-  ],
-  &quot;revoking&quot;: [
-    {&quot;streamVersion&quot;: 1, &quot;shardIndex&quot;: 4}
-  ],
-  &quot;ackedRevocations&quot;: [
-    {&quot;streamVersion&quot;: 1, &quot;shardIndex&quot;: 4}
-  ]
-}
-</code></pre>
-<p>Coordinator는 current assignment를 보고 revoke ack가 들어온 shard만 새 owner에게 assign한다. 단, heartbeat report는 그대로 신뢰하지 않는다. Coordinator가 수락하는 ownership report는 다음 범위로 제한된다.</p>
-<ul>
-<li>member에게 이미 coordinator가 수락했던 <code>currentAssignment</code> 또는 <code>revoking</code> shard</li>
-<li>target assignment에 포함되어 있고 다른 live member의 current/revoking state에 의해 block되지 않은 shard</li>
-<li>terminal <code>REVOKED</code> duplicate report는 이미 release된 shard여도 무해하게 무시</li>
-</ul>
-<p>member가 아직 <code>pendingShards</code> 상태인 shard나 다른 active member가 소유한 shard를 <code>ownedShards</code>로 보고하면 coordinator는 해당 member를 fenced 처리하고 <code>FENCED_MEMBER_EPOCH</code>을 반환한다.</p>
-<h2 id="member-removal-state">Member Removal State</h2>
-<p>Member 제거는 두 경로로 진행된다.</p>
-<ul>
-<li>graceful scale-in: member가 <code>memberEpoch=-1</code> heartbeat를 보내면 coordinator가 해당 member의 assignment를 비우고 revoke ack를 기다린다.</li>
-<li>idle removal: heartbeat가 <code>member-lease-ttl</code>을 넘기면 coordinator가 member를 <code>EXPIRED</code>로 fencing하고 재할당한다.</li>
-</ul>
-<p><code>EXPIRED</code> member metadata는 즉시 삭제하지 않는다. 운영 디버깅과 group 이력 추적을 위해 장기간 유지한다.</p>
-<h2 id="sticky-partition-assignment">Sticky Partition Assignment</h2>
-<p>이 설계는 sticky partition assignment를 고정 전제로 둔다. member가 선택하거나 heartbeat로 보고할 값이 아니다.</p>
-<p>목표:</p>
-<ul>
-<li>shard를 live member 사이에 균등 분배한다.</li>
-<li>기존 owner를 최대한 유지한다.</li>
-<li>revoke가 필요한 shard만 이동한다.</li>
-<li><code>ACTIVE</code>와 <code>DRAINING</code> readable version을 모두 assignment 대상으로 포함한다.</li>
-</ul>
-<p>Sticky partition assignment는 현재 target assignment를 입력으로 사용해 movement cost를 최소화한다. scale-out에서는 필요한 일부 shard만 신규 member로 이동하고, scale-in에서는 사라지는 member의 shard만 살아 있는 member에게 재분배한다.</p>
-<h3 id="sticky-assignment-algorithm">Sticky Assignment Algorithm</h3>
-<p>Input:</p>
-<ul>
-<li>readable shard set: <code>ACTIVE</code>와 <code>DRAINING</code> stream version의 모든 shard</li>
-<li>live member set: <code>ACTIVE</code> 또는 <code>STARTING</code> member 중 <code>member-lease-ttl</code>이 유효한 member</li>
-<li>excluded member set: <code>LEAVING</code>, <code>EXPIRED</code>, <code>FENCED</code> member</li>
-<li>previous target assignment</li>
-<li>optional member weight: consumer worker 수를 load balancing 가중치로만 사용할 수 있다.</li>
-</ul>
-<p>Steps:</p>
-<ol>
-<li>previous owner가 live member이면 기존 shard owner를 우선 유지한다.</li>
-<li>excluded member가 가진 shard를 unassigned set으로 옮긴다.</li>
-<li>unassigned shard를 <code>{streamVersion, shardIndex}</code> 기준으로 deterministic sort한다.</li>
-<li>live member를 현재 shard load, optional member weight, <code>memberId</code> 순으로 정렬한다.</li>
-<li>각 unassigned shard를 가장 덜 찬 member에게 배정한다.</li>
-<li>previous owner와 target owner가 다르면 coordinator는 previous owner의 <code>assignment.assignedShards</code>에서 해당 shard를 제외한다.</li>
-<li>coordinator는 revoke ack 또는 expired member fencing을 확인한 뒤 target owner의 <code>assignment.assignedShards</code>에 해당 shard를 포함한다.</li>
-</ol>
-<p><code>maxConcurrency</code> 처리:</p>
-<ul>
-<li><code>maxConcurrency</code>는 member 내부 consumer worker 수이다.</li>
-<li><code>maxConcurrency</code>는 topic partition 수나 Redis Stream shard 수를 의미하지 않는다.</li>
-<li>member가 shard를 여러 개 소유할 수 있고, 소유 shard를 <code>assignedMaxConcurrency</code> 이하의 consumer worker가 multiplexing해서 읽는다.</li>
-<li>coordinator는 <code>maxConcurrency</code>를 처리량 가중치로 참고할 수 있지만, shard count 변경과 동일하게 취급하지 않는다.</li>
-</ul>
+<p>Invalid ownership reports are fenced to prevent split ownership.</p>
       </main>
     </div>
   </body>

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -274,7 +274,6 @@
         <div class="index-title">Pages</div>
         <nav class="doc-index" aria-label="Design document navigation">
           <a href="../PRD.html">Redis Stream Coordinator Design</a>
-          <a href="../en/PRD.html">Redis Stream Coordinator Design (English)</a>
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
@@ -293,1095 +292,231 @@
       </aside>
       <main>
 <h1 id="coordinator-api-endpoints">Coordinator API Endpoints</h1>
-<h2 id="scope">Scope</h2>
-<p>이 문서는 Redis Stream Coordinator가 제공하는 HTTP API endpoint catalog이다. Endpoint의 목록, 인증, mutation 여부, 중복 요청 처리, 요청/응답 핵심 필드만 한 곳에 정리한다.</p>
-<p>상세 동작은 다음 문서를 기준으로 한다.</p>
+<p>All endpoints are under the configured base path, defaulting to <code>/coord/v1</code>.</p>
+<p>The group identifier is always part of the API path:</p>
+<pre><code class="language-text">/{streamPrefix}/{consumerGroup}
+</code></pre>
+<h2 id="error-format">Error Format</h2>
+<p>Errors use a stable machine-readable code.</p>
+<pre><code class="language-json">{
+  &quot;code&quot;: &quot;GROUP_ALREADY_EXISTS&quot;,
+  &quot;message&quot;: &quot;Group already exists&quot;,
+  &quot;details&quot;: {
+    &quot;streamPrefix&quot;: &quot;orders&quot;,
+    &quot;consumerGroup&quot;: &quot;orders-consumer&quot;
+  }
+}
+</code></pre>
+<p>Coordinator error codes should be managed as enums in code so API responses, tests, and docs remain consistent.</p>
+<h2 id="create-group">Create Group</h2>
+<pre><code class="language-http">POST /coord/v1/groups/{streamPrefix}/{consumerGroup}
+Authorization: Basic ...
+Content-Type: application/json
+</code></pre>
+<p>Request:</p>
+<pre><code class="language-json">{
+  &quot;initialShardCount&quot;: 4,
+  &quot;consumerConcurrencyPolicy&quot;: {
+    &quot;defaultMaxConcurrency&quot;: 4
+  },
+  &quot;requestedBy&quot;: &quot;operator&quot;,
+  &quot;reason&quot;: &quot;initial deployment&quot;
+}
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  &quot;streamPrefix&quot;: &quot;orders&quot;,
+  &quot;consumerGroup&quot;: &quot;orders-consumer&quot;,
+  &quot;groupEpoch&quot;: 1,
+  &quot;assignmentEpoch&quot;: 1,
+  &quot;activeWriteVersion&quot;: 1,
+  &quot;readableVersions&quot;: [1],
+  &quot;shardCount&quot;: 4
+}
+</code></pre>
+<p>Conflicts:</p>
 <ul>
-<li>heartbeat/reconciliation flow: <a href="02-coordinator-architecture.html"><code>02-coordinator-architecture.md</code></a></li>
-<li>group state와 assignment model: <a href="03-group-assignment-model.html"><code>03-group-assignment-model.md</code></a></li>
-<li>shard scale과 stream version migration: <a href="04-stream-version-migration.html"><code>04-stream-version-migration.md</code></a></li>
-<li>config, monitoring, metrics: <a href="06-data-config-observability.html"><code>06-data-config-observability.md</code></a></li>
+<li><code>GROUP_ALREADY_EXISTS</code></li>
+<li><code>INVALID_SHARD_COUNT</code></li>
+<li><code>UNAUTHORIZED</code></li>
+<li><code>FORBIDDEN</code></li>
 </ul>
-<h2 id="base-contract">Base Contract</h2>
-<p>Base path:</p>
-<pre><code class="language-text">/coord/v1
+<h2 id="heartbeat">Heartbeat</h2>
+<pre><code class="language-http">POST /coord/v1/groups/{streamPrefix}/{consumerGroup}/members/{memberId}/heartbeat
+Content-Type: application/json
 </code></pre>
-<p>Common headers:</p>
-<pre><code class="language-http">Content-Type: application/json
-Accept: application/json
-Authorization: Basic &lt;base64(admin:password)&gt;
+<p>Request:</p>
+<pre><code class="language-json">{
+  &quot;protocolVersion&quot;: &quot;1.0&quot;,
+  &quot;memberEpoch&quot;: 3,
+  &quot;assignmentEpoch&quot;: 12,
+  &quot;runtimeMaxConcurrency&quot;: 4,
+  &quot;ownedShards&quot;: [
+    {
+      &quot;streamVersion&quot;: 1,
+      &quot;shard&quot;: 0,
+      &quot;lastDeliveredId&quot;: &quot;1710000000000-0&quot;,
+      &quot;lastAckedId&quot;: &quot;1710000000000-0&quot;,
+      &quot;pendingCount&quot;: 0
+    }
+  ],
+  &quot;revokingShards&quot;: [],
+  &quot;leaving&quot;: false
+}
 </code></pre>
-<p>Path parameters:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Parameter"><code>streamPrefix</code></td>
-<td data-label="Meaning">Coordinator가 관리하는 Redis Stream logical prefix.</td>
-</tr>
-<tr>
-<td data-label="Parameter"><code>consumerGroup</code></td>
-<td data-label="Meaning">Redis Stream consumer group logical name.</td>
-</tr>
-<tr>
-<td data-label="Parameter"><code>memberId</code></td>
-<td data-label="Meaning">member runtime이 생성한 UUID.</td>
-</tr>
-<tr>
-<td data-label="Parameter"><code>reshardingId</code></td>
-<td data-label="Meaning">Coordinator가 생성한 stream version resharding id.</td>
-</tr>
-</tbody>
-</table>
-<p>Auth policy:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>API Area</th>
-<th>Auth</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="API Area">Admin mutation API</td>
-<td data-label="Auth">Required</td>
-</tr>
-<tr>
-<td data-label="API Area">Monitoring API</td>
-<td data-label="Auth">Required</td>
-</tr>
-<tr>
-<td data-label="API Area">Member heartbeat API</td>
-<td data-label="Auth">내부망 호출을 전제로 하되 Basic Auth 적용 가능</td>
-</tr>
-</tbody>
-</table>
-<p>Common response fields:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>requestId</code></td>
-<td data-label="Meaning">caller가 보낸 request id 또는 server가 생성한 추적 id.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>status</code></td>
-<td data-label="Meaning">API 처리 결과.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>errorCode</code></td>
-<td data-label="Meaning">실패 시 machine-readable error code.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>message</code></td>
-<td data-label="Meaning">실패 시 사람이 읽는 설명.</td>
-</tr>
-</tbody>
-</table>
-<p>Common status codes:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>HTTP Status</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="HTTP Status"><code>200 OK</code></td>
-<td data-label="Meaning">조회 성공 또는 같은 상태를 다시 요청한 no-op 성공.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>201 Created</code></td>
-<td data-label="Meaning">새 group 또는 migration 생성 성공.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>202 Accepted</code></td>
-<td data-label="Meaning">mutation 요청을 수락했고 coordinator loop에서 수렴 진행.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>400 Bad Request</code></td>
-<td data-label="Meaning">request body나 path parameter가 유효하지 않음.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>401 Unauthorized</code></td>
-<td data-label="Meaning">인증 정보 없음 또는 실패.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>403 Forbidden</code></td>
-<td data-label="Meaning">인증됐지만 mutation 권한 없음.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>404 Not Found</code></td>
-<td data-label="Meaning">group, member, migration을 찾을 수 없음.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>409 Conflict</code></td>
-<td data-label="Meaning">active migration 존재, 이미 존재하는 group 생성 시도, epoch conflict.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>422 Unprocessable Entity</code></td>
-<td data-label="Meaning">요청은 유효하지만 현재 group state에서 수행 불가.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>429 Too Many Requests</code></td>
-<td data-label="Meaning">caller 또는 group 단위 rate limit 초과.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>500 Internal Server Error</code></td>
-<td data-label="Meaning">coordinator 내부 오류.</td>
-</tr>
-<tr>
-<td data-label="HTTP Status"><code>503 Service Unavailable</code></td>
-<td data-label="Meaning">Redis store 또는 coordinator loop가 정상 동작하지 않거나 Redis state mutex를 획득하지 못함.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="endpoint-index">Endpoint Index</h2>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Area</th>
-<th>Method</th>
-<th>Path</th>
-<th>Purpose</th>
-<th>Mutates State</th>
-<th>Duplicate Request Handling</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
-<td data-label="Purpose">group 생성</td>
-<td data-label="Mutates State">yes</td>
-<td data-label="Duplicate Request Handling">existing group is <code>409 Conflict</code></td>
-</tr>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
-<td data-label="Purpose">group metadata 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale</code></td>
-<td data-label="Purpose">shard scale-out/in migration 시작</td>
-<td data-label="Mutates State">yes</td>
-<td data-label="Duplicate Request Handling">active migration or same target is rejected/no-op</td>
-</tr>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>PATCH</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency</code></td>
-<td data-label="Purpose">server-side consumer <code>maxConcurrency</code> 변경</td>
-<td data-label="Mutates State">yes</td>
-<td data-label="Duplicate Request Handling">same policy returns current policy</td>
-</tr>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}</code></td>
-<td data-label="Purpose">migration 상태 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback</code></td>
-<td data-label="Purpose">migration rollback 요청</td>
-<td data-label="Mutates State">yes</td>
-<td data-label="Duplicate Request Handling">current migration state decides acceptance</td>
-</tr>
-<tr>
-<td data-label="Area">Member</td>
-<td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat</code></td>
-<td data-label="Purpose">member liveness/owned shard 보고 및 assignment 수신</td>
-<td data-label="Mutates State">yes</td>
-<td data-label="Duplicate Request Handling"><code>requestId</code>; effective state is <code>memberEpoch</code> + <code>ownedShards</code></td>
-</tr>
-<tr>
-<td data-label="Area">Monitoring</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/monitoring/health</code></td>
-<td data-label="Purpose">coordinator health 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Monitoring</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/monitoring/groups</code></td>
-<td data-label="Purpose">group 목록 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Monitoring</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
-<td data-label="Purpose">group 요약 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Monitoring</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members</code></td>
-<td data-label="Purpose">member 상태 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Monitoring</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments</code></td>
-<td data-label="Purpose">target/current assignment 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Monitoring</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption</code></td>
-<td data-label="Purpose">consumer shard별 Redis Stream progress 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Monitoring</td>
-<td data-label="Method"><code>GET</code></td>
-<td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations</code></td>
-<td data-label="Purpose">migration 목록/진행률 조회</td>
-<td data-label="Mutates State">no</td>
-<td data-label="Duplicate Request Handling">not required</td>
-</tr>
-</tbody>
-</table>
-<h2 id="admin-api">Admin API</h2>
-<h3 id="create-group">Create Group</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+<p>Response:</p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;OK&quot;,
+  &quot;heartbeatIntervalMs&quot;: 1000,
+  &quot;groupEpoch&quot;: 5,
+  &quot;assignmentEpoch&quot;: 13,
+  &quot;memberEpoch&quot;: 4,
+  &quot;assignedMaxConcurrency&quot;: 4,
+  &quot;assignment&quot;: {
+    &quot;assignedShards&quot;: [
+      { &quot;streamVersion&quot;: 1, &quot;shard&quot;: 0 }
+    ],
+    &quot;pendingShards&quot;: []
+  },
+  &quot;routing&quot;: {
+    &quot;activeWriteVersion&quot;: 1,
+    &quot;readableVersions&quot;: [1],
+    &quot;metadataVersion&quot;: 8
+  }
+}
 </code></pre>
-<p>Creates initial group metadata and stream version <code>1</code>. Stream version values are integers without a <code>v</code> prefix. Member startup, local YAML, producer, or consumer cannot create group metadata directly.</p>
-<p>Request body:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Required</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>initialShardCount</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Initial shard count. Omitted value uses coordinator <code>defaults.initial-shard-count</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>versionPolicy</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Stream version naming policy. MVP default is <code>AUTO_INCREMENT</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.defaultMaxConcurrency</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Default member consumer worker limit. Omitted value uses coordinator <code>defaults.consumer-max-concurrency</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>requestedBy</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Operator or automation identity for audit.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>reason</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Human-readable change reason.</td>
-</tr>
-</tbody>
-</table>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>streamPrefix</code> / <code>consumerGroup</code></td>
-<td data-label="Meaning">Created group identifier.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Initial group epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">Initial metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>activeWriteVersion</code></td>
-<td data-label="Meaning">Integer stream version <code>1</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>readableVersions</code></td>
-<td data-label="Meaning">Initial readable versions.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>shardCount</code></td>
-<td data-label="Meaning">Stored shard count.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Stored server-side consumer concurrency policy.</td>
-</tr>
-</tbody>
-</table>
-<p>Duplicate request behavior:</p>
+<p>Fencing statuses:</p>
 <ul>
-<li>같은 <code>{streamPrefix, consumerGroup}</code> metadata가 이미 있으면 <code>409 Conflict</code>로 거절한다.</li>
-<li>기존 metadata 조회는 <code>GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code>를 사용한다.</li>
+<li><code>FENCED_MEMBER_EPOCH</code></li>
+<li><code>FENCED_STALE_OWNERSHIP</code></li>
+<li><code>FENCED_UNKNOWN_MEMBER</code></li>
+<li><code>REJOIN_REQUIRED</code></li>
 </ul>
-<h3 id="get-group-metadata">Get Group Metadata</h3>
-<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+<h2 id="graceful-leave">Graceful Leave</h2>
+<pre><code class="language-http">POST /coord/v1/groups/{streamPrefix}/{consumerGroup}/members/{memberId}/leave
+Content-Type: application/json
 </code></pre>
-<p>Returns group source-of-truth metadata. This is an admin/debug endpoint, not the member heartbeat assignment channel.</p>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning">Group state: <code>EMPTY</code>, <code>ASSIGNING</code>, <code>RECONCILING</code>, <code>STABLE</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Current group metadata epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignmentEpoch</code></td>
-<td data-label="Meaning">Current target assignment epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">Current metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>activeWriteVersion</code></td>
-<td data-label="Meaning">Producer write target integer stream version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>readableVersions</code></td>
-<td data-label="Meaning">Member-readable integer stream versions.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Server-side consumer concurrency policy.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>activeMigration</code></td>
-<td data-label="Meaning">Active migration summary or null.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>targetAssignmentSummary</code></td>
-<td data-label="Meaning">Desired ownership summary.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>currentAssignmentSummary</code></td>
-<td data-label="Meaning">Member-reported ownership summary.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="get-producer-routing-metadata">Get Producer Routing Metadata</h3>
-<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+<p>Request:</p>
+<pre><code class="language-json">{
+  &quot;memberEpoch&quot;: 4,
+  &quot;reason&quot;: &quot;pod shutdown&quot;
+}
 </code></pre>
-<p>Returns the active write metadata that producers need to route partition keys to Redis Stream shards. This endpoint is read-only and does not create streams, change shard counts, or mutate group assignment.</p>
-<p>Producer routing formula:</p>
-<pre><code class="language-text">shardIndex = routeV1(partitionKey, shardCount)
-streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
+<p>Response:</p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;LEAVING&quot;,
+  &quot;groupEpoch&quot;: 6,
+  &quot;assignmentEpoch&quot;: 14
+}
 </code></pre>
-<p><code>routeV1</code> is a fixed protocol contract, not group metadata. The starter computes a 32-bit Murmur3 hash and maps it into <code>[0, shardCount)</code> using deterministic rejection sampling so <code>2^32 % shardCount</code> tail values do not create modulo bias. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.</p>
-<p>Routing is deterministic only for the returned <code>activeWriteVersion</code> and <code>shardCount</code>. After shard scale-out/in, the same partition key may route to a different stream key. The coordinator does not provide global event id deduplication across every shard and stream version.</p>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">Coordinator metadata version for producer cache invalidation.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>activeWriteVersion</code></td>
-<td data-label="Meaning">Integer stream version that producers must write to.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>shardCount</code></td>
-<td data-label="Meaning">Active write version shard count.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>streamKeyPattern</code></td>
-<td data-label="Meaning">Redis Stream key pattern with <code>{streamVersion}</code> and <code>{shardIndex}</code> placeholders.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>shards</code></td>
-<td data-label="Meaning">Active write version shard keys and Redis Cluster slots.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="scale-group">Scale Group</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
+<p>After this response, the member should stop new reads, revoke owned shards, and continue heartbeat until revocation is acknowledged.</p>
+<h2 id="producer-routing-metadata">Producer Routing Metadata</h2>
+<pre><code class="language-http">GET /coord/v1/groups/{streamPrefix}/{consumerGroup}/producer-routing
 </code></pre>
-<p>Starts shard scale-out or scale-in by creating a next stream version migration. This is the only supported shard count mutation path. For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.</p>
-<p>Request body:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Required</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>targetShardCount</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">New shard count. Must be positive and different from current active shard count.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.defaultMaxConcurrency</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional server-side consumer worker limit update in the same metadata change.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>reason</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Human-readable change reason.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>requestedBy</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Operator or automation identity for audit.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>deprecatedAfter</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Operational hint for old version deprecation window.</td>
-</tr>
-</tbody>
-</table>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>reshardingId</code></td>
-<td data-label="Meaning">Created resharding id.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>fromVersion</code> / <code>toVersion</code></td>
-<td data-label="Meaning">Old/new integer stream versions.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>fromShardCount</code> / <code>toShardCount</code></td>
-<td data-label="Meaning">Old/new shard counts.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning">Initial migration state, usually <code>PREPARING</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Group epoch after metadata mutation.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignmentEpoch</code></td>
-<td data-label="Meaning">Assignment epoch before or after recompute depending on loop timing.</td>
-</tr>
-</tbody>
-</table>
-<p>Duplicate request behavior:</p>
+<p>Response:</p>
+<pre><code class="language-json">{
+  &quot;streamPrefix&quot;: &quot;orders&quot;,
+  &quot;consumerGroup&quot;: &quot;orders-consumer&quot;,
+  &quot;metadataVersion&quot;: 12,
+  &quot;activeWriteVersion&quot;: 2,
+  &quot;shardCount&quot;: 8,
+  &quot;streamKeyPattern&quot;: &quot;orders.v{version}.s{shard}&quot;,
+  &quot;hashing&quot;: {
+    &quot;strategy&quot;: &quot;stable-default&quot;
+  }
+}
+</code></pre>
+<p>The public API should not expose arbitrary hash algorithm and seed controls unless a real compatibility requirement appears. The producer and coordinator must share one stable routing contract.</p>
+<h2 id="start-resharding">Start Resharding</h2>
+<pre><code class="language-http">POST /coord/v1/groups/{streamPrefix}/{consumerGroup}/resharding
+Authorization: Basic ...
+Content-Type: application/json
+</code></pre>
+<p>Request:</p>
+<pre><code class="language-json">{
+  &quot;targetShardCount&quot;: 8,
+  &quot;consumerConcurrencyPolicy&quot;: {
+    &quot;defaultMaxConcurrency&quot;: 4
+  },
+  &quot;requestedBy&quot;: &quot;operator&quot;,
+  &quot;reason&quot;: &quot;increase throughput&quot;
+}
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  &quot;reshardingId&quot;: &quot;rs-20260529-0001&quot;,
+  &quot;state&quot;: &quot;CUTOVER&quot;,
+  &quot;fromVersion&quot;: 1,
+  &quot;toVersion&quot;: 2,
+  &quot;activeWriteVersion&quot;: 2,
+  &quot;readableVersions&quot;: [1, 2],
+  &quot;groupEpoch&quot;: 7,
+  &quot;assignmentEpoch&quot;: 15
+}
+</code></pre>
+<p>Conflict codes:</p>
 <ul>
-<li>active migration이 있으면 새 migration을 만들지 않고 <code>409 Conflict</code>로 거절한다.</li>
-<li><code>targetShardCount</code>가 현재 active shard count와 같으면 새 migration을 만들지 않고 no-op response로 처리한다.</li>
+<li><code>RESHARDING_ALREADY_ACTIVE</code></li>
+<li><code>INVALID_TARGET_SHARD_COUNT</code></li>
+<li><code>SHARD_COUNT_UNCHANGED</code></li>
+<li><code>PROVISIONING_FAILED</code></li>
 </ul>
-<h3 id="update-consumer-concurrency">Update Consumer Concurrency</h3>
-<pre><code class="language-http">PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
+<h2 id="get-group-status">Get Group Status</h2>
+<pre><code class="language-http">GET /coord/v1/groups/{streamPrefix}/{consumerGroup}
 </code></pre>
-<p>Updates member-side consumer worker limit. This does not change shard count and does not create a new stream version.</p>
-<p>Request body:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Required</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>defaultMaxConcurrency</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Default consumer worker limit for members without override.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>memberOverrides</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional per-member-name max concurrency override.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>reason</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Human-readable change reason.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>requestedBy</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Operator or automation identity for audit.</td>
-</tr>
-</tbody>
-</table>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">New metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Bumped only if assignment weight policy depends on <code>maxConcurrency</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Stored policy.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>affectedMembers</code></td>
-<td data-label="Meaning">Members that will receive changed <code>assignedMaxConcurrency</code> on heartbeat.</td>
-</tr>
-</tbody>
-</table>
-<p>Duplicate request behavior:</p>
+<p>Response includes:</p>
 <ul>
-<li>요청 policy가 현재 policy와 같으면 metadata를 새로 쓰지 않고 현재 policy를 반환한다.</li>
+<li>group metadata,</li>
+<li>stream versions,</li>
+<li>assignment summary,</li>
+<li>member summary,</li>
+<li>active resharding,</li>
+<li>consumer concurrency policy.</li>
 </ul>
-<h3 id="get-migration">Get Migration</h3>
-<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
+<h2 id="get-resharding-status">Get Resharding Status</h2>
+<pre><code class="language-http">GET /coord/v1/groups/{streamPrefix}/{consumerGroup}/resharding/{reshardingId}
 </code></pre>
-<p>Returns one migration state and drain progress.</p>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>reshardingId</code></td>
-<td data-label="Meaning">Resharding id.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>fromVersion</code> / <code>toVersion</code></td>
-<td data-label="Meaning">Old/new integer stream versions.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>fromShardCount</code> / <code>toShardCount</code></td>
-<td data-label="Meaning">Old/new shard counts.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning"><code>PREPARING</code>, <code>ACTIVE</code>, <code>DRAINING</code>, <code>DEPRECATED</code>, or rollback state.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>drainProgress</code></td>
-<td data-label="Meaning">Old version drain progress reported by members.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>revokeProgress</code></td>
-<td data-label="Meaning">Revoke ack progress for moved shards.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>createdAt</code> / <code>updatedAt</code></td>
-<td data-label="Meaning">Audit timestamps.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="rollback-migration">Rollback Migration</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
-</code></pre>
-<p>Requests rollback inside the supported rollback window. Already-written messages in the new version are handled by the operational drain/replay policy.</p>
-<p>Request body:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Required</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>reason</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Human-readable rollback reason.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>requestedBy</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Operator or automation identity for audit.</td>
-</tr>
-</tbody>
-</table>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>reshardingId</code></td>
-<td data-label="Meaning">Resharding id.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning">Rollback state.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>activeWriteVersion</code></td>
-<td data-label="Meaning">Active write version after rollback decision.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>readableVersions</code></td>
-<td data-label="Meaning">Readable versions after rollback decision.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Group epoch after metadata update.</td>
-</tr>
-</tbody>
-</table>
-<p>Duplicate request behavior:</p>
+<p>Response includes:</p>
 <ul>
-<li>migration이 이미 rollback 상태이면 현재 migration state를 반환한다.</li>
-<li>rollback window가 지났거나 migration state가 rollback 불가능하면 <code>422 Unprocessable Entity</code>로 거절한다.</li>
+<li>resharding state,</li>
+<li>old/new stream versions,</li>
+<li>provisioned shards,</li>
+<li>drain progress,</li>
+<li>revoke progress,</li>
+<li>rollback eligibility.</li>
 </ul>
-<h2 id="member-api">Member API</h2>
-<h3 id="heartbeat">Heartbeat</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat
+<h2 id="rollback-resharding">Rollback Resharding</h2>
+<pre><code class="language-http">POST /coord/v1/groups/{streamPrefix}/{consumerGroup}/resharding/{reshardingId}/rollback
+Authorization: Basic ...
+Content-Type: application/json
 </code></pre>
-<p>Member liveness, owned shards, and revoke ack are reported through this endpoint. Coordinator assignment is returned in the same response. There is no separate assignment polling endpoint.</p>
-<p>KIP-848 mapping:</p>
-<ul>
-<li><code>GroupId</code> is represented by <code>{streamPrefix, consumerGroup}</code> in the HTTP path.</li>
-<li><code>TopicPartitions</code> is represented by <code>ownedShards</code>.</li>
-<li><code>Assignment.AssignedTopicPartitions</code> is represented by <code>assignment.assignedShards</code>.</li>
-<li><code>Assignment.PendingTopicPartitions</code> is represented by <code>assignment.pendingShards</code>.</li>
-</ul>
-<p>Request body:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Required</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>protocolVersion</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Heartbeat schema version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>requestId</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Request trace and retry id.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>memberId</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Must match path parameter. Runtime-start UUID that identifies this member incarnation.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>memberEpoch</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning"><code>0</code> means join/rejoin, <code>-1</code> means leave, positive value means active member epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>rebalanceTimeoutMs</code></td>
-<td data-label="Required">first heartbeat required</td>
-<td data-label="Meaning">Maximum time the coordinator waits for this member to finish revocation.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Member's cached metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>runtimeConsumerCapacity.runtimeMaxConcurrency</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Process-local maximum consumer workers. Does not change server-side <code>maxConcurrency</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>runtimeConsumerCapacity.availableConcurrency</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Currently available worker capacity.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>ownedShards</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Shards the member currently owns and may read.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>revokingShards</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Revoke/drain progress and <code>REVOKED</code> ack candidates.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>shardProgress</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Consumer-reported Redis Stream progress for assigned or revoking shards.</td>
-</tr>
-</tbody>
-</table>
-<p>Epoch validation:</p>
-<ul>
-<li><code>memberEpoch=0</code> is accepted only for a new member or a member already fenced/expired by the coordinator.</li>
-<li>An active member cannot reset itself by sending <code>memberEpoch=0</code>; the coordinator rejects it as <code>INVALID_REQUEST</code>.</li>
-<li>Positive <code>memberEpoch</code> must match the epoch last issued by the coordinator for that member.</li>
-<li>A lower positive epoch is stale and returns <code>FENCED_MEMBER_EPOCH</code>.</li>
-<li>A higher positive epoch is not coordinator-issued and returns <code>INVALID_REQUEST</code>.</li>
-<li>Negative values other than the graceful leave sentinel <code>-1</code> return <code>INVALID_REQUEST</code>.</li>
-</ul>
-<p>Response body:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>responseTo</code></td>
-<td data-label="Meaning">Request id this response handles.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>status</code></td>
-<td data-label="Meaning"><code>OK</code>, <code>RETRY</code>, <code>UNKNOWN_MEMBER_ID</code>, <code>FENCED_MEMBER_EPOCH</code>, <code>UNSUPPORTED_PROTOCOL</code>, <code>INVALID_REQUEST</code>, or <code>GROUP_AUTHORIZATION_FAILED</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>memberId</code></td>
-<td data-label="Meaning">Member id echoed by coordinator.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>memberEpoch</code></td>
-<td data-label="Meaning">Epoch the member must use from next heartbeat.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>heartbeatIntervalMs</code></td>
-<td data-label="Meaning">Server-side recommended next heartbeat interval.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Latest group epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignmentEpoch</code></td>
-<td data-label="Meaning">Latest target assignment epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">Latest metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignedMaxConcurrency</code></td>
-<td data-label="Meaning">Server-side consumer worker limit assigned to this member.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignment.assignedShards</code></td>
-<td data-label="Meaning">Shards the member can read immediately.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignment.pendingShards</code></td>
-<td data-label="Meaning">Target shards blocked until previous owner releases them.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignment.metadataVersion</code></td>
-<td data-label="Meaning">Metadata version to apply with the assignment.</td>
-</tr>
-</tbody>
-</table>
-<p>Mutation behavior:</p>
-<ul>
-<li>Updates member heartbeat time and member metadata.</li>
-<li>Stores member owned shard report as current assignment.</li>
-<li>Stores revoke ack progress.</li>
-<li>May bump group epoch when join/leave/fencing changes membership.</li>
-<li>Does not read, ack, retry, or modify Redis Stream messages.</li>
-</ul>
-<h2 id="monitoring-api">Monitoring API</h2>
-<p>Monitoring API is read-only. State changes must go through Admin API or member heartbeat.</p>
-<h3 id="health">Health</h3>
-<pre><code class="language-http">GET /coord/v1/monitoring/health
+<p>Request:</p>
+<pre><code class="language-json">{
+  &quot;requestedBy&quot;: &quot;operator&quot;,
+  &quot;reason&quot;: &quot;new version validation failed&quot;
+}
 </code></pre>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>status</code></td>
-<td data-label="Meaning"><code>UP</code>, <code>DEGRADED</code>, or <code>DOWN</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>coordinatorId</code></td>
-<td data-label="Meaning">Coordinator server identity.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>redis</code></td>
-<td data-label="Meaning">Redis dependency health. Redis is checked only when Redis-backed store, Redis audit, or stream provisioning is enabled.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>loop</code></td>
-<td data-label="Meaning">Coordinator loop health and last tick time.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="list-groups">List Groups</h3>
-<pre><code class="language-http">GET /coord/v1/monitoring/groups
+<p>Rollback is allowed only within the configured rollback window. Messages already written to the new version must be handled by an operator-defined drain or replay policy.</p>
+<h2 id="update-consumer-concurrency">Update Consumer Concurrency</h2>
+<pre><code class="language-http">PUT /coord/v1/groups/{streamPrefix}/{consumerGroup}/consumer-concurrency
+Authorization: Basic ...
+Content-Type: application/json
 </code></pre>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>groups</code></td>
-<td data-label="Meaning">Group summaries with <code>streamPrefix</code>, <code>consumerGroup</code>, state, epochs, member count, active migration flag.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="get-group-monitoring-summary">Get Group Monitoring Summary</h3>
-<pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}
+<p>Request:</p>
+<pre><code class="language-json">{
+  &quot;defaultMaxConcurrency&quot;: 8,
+  &quot;requestedBy&quot;: &quot;operator&quot;,
+  &quot;reason&quot;: &quot;increase worker capacity&quot;
+}
 </code></pre>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning">Group state.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>epochs</code></td>
-<td data-label="Meaning"><code>groupEpoch</code>, <code>assignmentEpoch</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>versions</code></td>
-<td data-label="Meaning">active/readable stream versions.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>members</code></td>
-<td data-label="Meaning">active/expired/fenced member counts.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignments</code></td>
-<td data-label="Meaning">target/current assignment summary.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>migration</code></td>
-<td data-label="Meaning">active migration summary.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="list-members">List Members</h3>
-<pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members
+<p>Response includes updated policy, <code>metadataVersion</code>, and whether assignment was recalculated.</p>
+<h2 id="monitoring-endpoints">Monitoring Endpoints</h2>
+<pre><code class="language-http">GET /coord/v1/monitoring/groups/{streamPrefix}/{consumerGroup}
+GET /coord/v1/monitoring/groups/{streamPrefix}/{consumerGroup}/members
+GET /coord/v1/monitoring/groups/{streamPrefix}/{consumerGroup}/assignments
+GET /coord/v1/monitoring/groups/{streamPrefix}/{consumerGroup}/progress
 </code></pre>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>members</code></td>
-<td data-label="Meaning">Member state, epochs, heartbeat age, assigned max concurrency, current assignment count, revoking count.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="get-assignments">Get Assignments</h3>
-<pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments
-</code></pre>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>targetAssignment</code></td>
-<td data-label="Meaning">Desired shard owner map.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>currentAssignments</code></td>
-<td data-label="Meaning">Member-reported owned/revoking/revoked state.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>revokeProgress</code></td>
-<td data-label="Meaning">Shards blocked by revoke-before-assign dependency.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>invariantViolations</code></td>
-<td data-label="Meaning">Duplicate owner, missing owner, stale epoch, or unknown member references.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="get-consumption-progress">Get Consumption Progress</h3>
-<pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption
-</code></pre>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>progress</code></td>
-<td data-label="Meaning">Flattened member/shard progress rows.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>progress[].memberId</code></td>
-<td data-label="Meaning">Consumer member reporting the progress.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>progress[].shard</code></td>
-<td data-label="Meaning">Stream version and shard index.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>progress[].streamKey</code></td>
-<td data-label="Meaning">Concrete Redis Stream key.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>progress[].lastDeliveredId</code></td>
-<td data-label="Meaning">Last Redis Stream id delivered to the consumer poller.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>progress[].lastAckedId</code></td>
-<td data-label="Meaning">Last Redis Stream id successfully acknowledged by the consumer poller.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>progress[].pendingCount</code></td>
-<td data-label="Meaning">Consumer-reported in-flight or pending count for the shard.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>progress[].updatedAt</code></td>
-<td data-label="Meaning">Time the member last updated the progress row.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="list-migrations">List Migrations</h3>
-<pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations
-</code></pre>
-<p>Response summary:</p>
-<table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>migrations</code></td>
-<td data-label="Meaning">Active and historical migration summaries.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>activeReshardingId</code></td>
-<td data-label="Meaning">Active resharding id or null.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>drainProgress</code></td>
-<td data-label="Meaning">Old readable version drain state.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="explicitly-unsupported-endpoints">Explicitly Unsupported Endpoints</h2>
-<p>The coordinator does not provide these API surfaces in the MVP:</p>
-<ul>
-<li>producer routing mutation endpoint</li>
-<li>member startup desired spec sync endpoint</li>
-<li>direct Redis Stream read/ack endpoint</li>
-<li>handler/retry/DLQ/idempotency marker endpoint</li>
-<li>assignor selection or assignor negotiation endpoint</li>
-<li>Kafka wire protocol endpoint</li>
-</ul>
+<p>Monitoring endpoints are read-only and require <code>MONITOR</code> role when ACL is enabled.</p>
       </main>
     </div>
   </body>
