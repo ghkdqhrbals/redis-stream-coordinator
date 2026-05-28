@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Versioning and Compatibility Policy</title>
+    <title>Context, Goals, Non-Goals</title>
     <style>
       * {
         box-sizing: border-box;
@@ -291,8 +291,8 @@
     <script>
       (() => {
         const targetLanguage = new URLSearchParams(window.location.search).get("tl");
-        if (targetLanguage === "ko") {
-          const target = new URL("../../ko/docs/prd/11-versioning-compatibility.html", window.location.href);
+        if (targetLanguage === "en") {
+          const target = new URL("../../../docs/prd/01-context-goals.html", window.location.href);
           target.hash = window.location.hash;
           window.location.replace(target);
         }
@@ -306,7 +306,7 @@
           <div class="site-title">Redis Stream Coordinator</div>
           <div class="site-subtitle">Design docs</div>
         </div>
-        <div class="language-switch" aria-label="Language switch"><a href="11-versioning-compatibility.html" aria-current="true">English</a><span aria-hidden="true">/</span><a href="../../ko/docs/prd/11-versioning-compatibility.html">한국어</a></div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/01-context-goals.html">English</a><span aria-hidden="true">/</span><a href="01-context-goals.html" aria-current="true">한국어</a></div>
       </div>
     </header>
     <div class="layout">
@@ -314,7 +314,7 @@
         <div class="index-title">Pages</div>
         <nav class="doc-index" aria-label="Design document navigation">
           <a href="../PRD.html">Redis Stream Coordinator Design</a>
-          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="01-context-goals.html" aria-current="page">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
           <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
@@ -324,110 +324,59 @@
           <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
-          <a href="11-versioning-compatibility.html" aria-current="page">Versioning and Compatibility Policy</a>
-          <a href="../implementation-status.html">Implementation Status</a>
-          <a href="../operations-runbook.html">Operations Runbook</a>
-          <a href="../testing.html">Testing Guide</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="../implementation-status.html">구현 상태</a>
+          <a href="../operations-runbook.html">운영 Runbook</a>
+          <a href="../testing.html">테스트 가이드</a>
         </nav>
       </aside>
       <main>
-<h1 id="versioning-and-compatibility-policy">Versioning and Compatibility Policy</h1>
-<h2 id="why-versioning-matters">Why Versioning Matters</h2>
-<p>This project is intended for open source use. Users can run different versions of the coordinator server, consumer starter, producer starter, Docker image, and Redis server. Compatibility must be explicit so upgrades can be planned safely.</p>
-<h2 id="artifact-versioning">Artifact Versioning</h2>
-<p>Artifacts follow Semantic Versioning:</p>
+<h1 id="context-goals-non-goals">Context, Goals, Non-Goals</h1>
+<h2 id="context">Context</h2>
+<p>Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을 Redis-backed coordinator로 구현해야 한다.</p>
+<h2 id="goals">Goals</h2>
 <ul>
-<li><code>MAJOR</code>: incompatible API, protocol, or metadata changes,</li>
-<li><code>MINOR</code>: backward-compatible features,</li>
-<li><code>PATCH</code>: bug fixes and documentation updates.</li>
+<li>coordinator가 group metadata, target assignment, current assignment를 source of truth로 관리한다.</li>
+<li>group 식별자는 coordinator API의 <code>{streamPrefix, consumerGroup}</code> path/body에서 받는다.</li>
+<li>member join/leave, metadata change, Coordinator Admin API로 요청된 shard count change를 group epoch 증가로 모델링한다.</li>
+<li>topic partition에 해당하는 Redis Stream shard count는 Coordinator Admin API 요청으로만 생성/증감한다.</li>
+<li>consumer <code>maxConcurrency</code>는 partition/shard 개수가 아니라 member 안에서 사용할 consumer worker 수이며, coordinator의 server-side consumer concurrency policy로 설정한다.</li>
+<li>target assignment는 coordinator가 계산하고 assignment epoch으로 versioning한다.</li>
+<li>member는 heartbeat/reconciliation loop로 target assignment에 수렴한다.</li>
+<li>coordinator는 <code>tick-interval</code>마다 heartbeat가 <code>member-lease-ttl</code>을 넘긴 member를 <code>EXPIRED</code>로 표시하고 shard를 재할당한다.</li>
+<li>revoke 완료 전 같은 shard를 다른 member에게 assign하지 않는다.</li>
+<li>영향 없는 member는 rebalance 중에도 기존 shard를 계속 consume한다.</li>
+<li>shard count 변경은 next stream version migration으로 처리한다. at-least-once producer는 online 전환할 수 있지만, 중복에 민감한 workload는 scale 전 producer quiescence를 운영 제약으로 둔다.</li>
+<li>actual read authority는 coordinator가 내려준 assignment epoch과 member epoch으로 fence한다.</li>
+<li>기본 처리 보장은 at-least-once이다. application은 중복 전달과 중복 처리 시도를 허용하도록 설계해야 한다.</li>
+<li>operator가 group epoch, assignment epoch, member epoch, target/current assignment, revoke progress를 볼 수 있게 한다.</li>
 </ul>
-<p>Artifacts:</p>
+<h2 id="non-goals">Non-Goals</h2>
 <ul>
-<li><code>coordinator-server</code>,</li>
-<li><code>redisstream-spring-boot-starter</code>,</li>
-<li>sample Docker images,</li>
-<li>published coordinator Docker image.</li>
+<li>Kafka broker protocol을 그대로 재구현</li>
+<li>Redis Cluster resharding 자동 대응</li>
+<li>hot shard 자동 split</li>
+<li>shard 전체 serial ordering</li>
+<li>단일 delivery, 단일 handler invocation, 단일 side effect 보장</li>
+<li>producer global deduplication 또는 전체 shard/version을 가로지르는 동일 <code>eventId</code> deduplication</li>
+<li>여러 비즈니스 side effect와 Redis Stream ACK를 원자적으로 묶는 transaction protocol</li>
+<li>같은 stream version 안에서 shard count만 바꾸는 in-place resharding</li>
+<li>member startup, local YAML, producer, consumer가 직접 shard count나 server-side consumer <code>maxConcurrency</code>를 변경하는 방식</li>
+<li>기본 consumer mode의 retry와 DLQ 구현</li>
+<li>coordinator server HA/election protocol 설계</li>
 </ul>
-<h2 id="http-api-versioning">HTTP API Versioning</h2>
-<p>The base path includes a version:</p>
-<pre><code class="language-text">/coord/v1
-</code></pre>
-<p>Breaking HTTP API changes require a new path prefix such as <code>/coord/v2</code>.</p>
-<p>Backward-compatible additions are allowed in the same API version:</p>
+<h2 id="assumptions">Assumptions</h2>
 <ul>
-<li>optional request fields,</li>
-<li>additive response fields,</li>
-<li>new enum values only when old clients ignore unknown values safely,</li>
-<li>new monitoring endpoints.</li>
-</ul>
-<h2 id="heartbeat-protocol-version">Heartbeat Protocol Version</h2>
-<p>Heartbeat requests include <code>protocolVersion</code>.</p>
-<p>The coordinator configuration defines an accepted range, for example:</p>
-<pre><code class="language-yaml">coordinator:
-  protocol:
-    min-supported-version: &quot;1.0&quot;
-    max-supported-version: &quot;1.1&quot;
-</code></pre>
-<p>Policy:</p>
-<ul>
-<li>A coordinator must reject unsupported protocol versions with a clear error.</li>
-<li>Minor protocol additions must be optional.</li>
-<li>Required field changes require a major version.</li>
-<li>Rolling upgrades should support N/N-1 client and server coexistence.</li>
-</ul>
-<h2 id="redis-metadata-schema-version">Redis Metadata Schema Version</h2>
-<p>Redis aggregate state includes <code>schemaVersion</code>.</p>
-<p>Policy:</p>
-<ul>
-<li>The coordinator validates schema version before reading or writing.</li>
-<li>Incompatible schema changes require migration notes.</li>
-<li>Compatible additive fields require default handling for older state.</li>
-<li>Tests must cover reading old schema fixtures where support is promised.</li>
-</ul>
-<h2 id="docker-image-tags">Docker Image Tags</h2>
-<p>Recommended tags:</p>
-<ul>
-<li>immutable version tag, for example <code>v0.1.0</code>,</li>
-<li>commit SHA tag,</li>
-<li>optional moving tag such as <code>unstable</code> for pre-release builds.</li>
-</ul>
-<p><code>latest</code> should be avoided until the first public release policy is stable.</p>
-<h2 id="redis-version-compatibility">Redis Version Compatibility</h2>
-<p>The modules should check Redis server version before using version-specific commands.</p>
-<p>Documentation must state:</p>
-<ul>
-<li>minimum supported Redis version,</li>
-<li>tested Redis versions,</li>
-<li>command compatibility notes,</li>
-<li>fallback behavior for unsupported commands.</li>
-</ul>
-<h2 id="upgrade-policy">Upgrade Policy</h2>
-<p>Recommended rolling upgrade order:</p>
-<ol>
-<li>Upgrade coordinator server to a version that supports both old and new heartbeat protocols.</li>
-<li>Upgrade consumer applications.</li>
-<li>Upgrade producer applications.</li>
-<li>Remove old protocol support only in a later major release.</li>
-</ol>
-<p>Rollback should be possible while Redis metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.</p>
-<h2 id="compatibility-test-matrix">Compatibility Test Matrix</h2>
-<p>Required tests:</p>
-<ul>
-<li>old client heartbeat against new coordinator,</li>
-<li>new client heartbeat against old supported coordinator where applicable,</li>
-<li>old producer routing response parsing,</li>
-<li>schema fixture read tests,</li>
-<li>Docker smoke test for published image,</li>
-<li>Redis command compatibility tests for configured ACK and publish modes.</li>
-</ul>
-<h2 id="deprecation-policy">Deprecation Policy</h2>
-<p>Deprecations must include:</p>
-<ul>
-<li>replacement behavior,</li>
-<li>first version where deprecation appears,</li>
-<li>earliest removal version,</li>
-<li>migration notes,</li>
-<li>warning logs or metrics where practical.</li>
+<li>Redis는 stream data plane과 coordinator metadata store로 사용한다.</li>
+<li>coordinator metadata key는 Redis persistence 또는 운영 백업 정책으로 보호한다.</li>
+<li>각 member는 runtime 시작 시 UUID <code>memberId</code>를 직접 생성한다.</li>
+<li>producer와 consumer는 metadata store의 active stream version을 source of truth로 사용한다.</li>
+<li>producer retry, network failure, consumer pending recovery, shard migration은 중복 message 또는 중복 처리 시도를 만들 수 있다.</li>
+<li>동일 partition key는 같은 routing metadata 안에서만 같은 shard로 route된다. shard count나 active stream version이 바뀌면 다른 shard로 route될 수 있다.</li>
+<li>한 <code>streamPrefix + consumerGroup</code>에는 동시에 하나의 active migration만 허용한다.</li>
+<li><code>streamPrefix</code>와 <code>consumerGroup</code>은 coordinator API 호출의 group identifier이며, coordinator/member local YAML에 고정된 shard control 설정으로 두지 않는다.</li>
+<li>member startup은 shard count 변경을 시작하지 않는다. startup은 coordinator API heartbeat join과 metadata 조회만 수행한다.</li>
+<li>member heartbeat는 runtime이 감당 가능한 consumer worker 수를 보고할 수 있지만, 실제 허용되는 <code>maxConcurrency</code>는 coordinator metadata가 결정한다.</li>
 </ul>
       </main>
     </div>

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Versioning and Compatibility Policy</title>
+    <title>Member Data-Plane Boundary</title>
     <style>
       * {
         box-sizing: border-box;
@@ -291,8 +291,8 @@
     <script>
       (() => {
         const targetLanguage = new URLSearchParams(window.location.search).get("tl");
-        if (targetLanguage === "ko") {
-          const target = new URL("../../ko/docs/prd/11-versioning-compatibility.html", window.location.href);
+        if (targetLanguage === "en") {
+          const target = new URL("../../../docs/prd/05-processing-reliability.html", window.location.href);
           target.hash = window.location.hash;
           window.location.replace(target);
         }
@@ -306,7 +306,7 @@
           <div class="site-title">Redis Stream Coordinator</div>
           <div class="site-subtitle">Design docs</div>
         </div>
-        <div class="language-switch" aria-label="Language switch"><a href="11-versioning-compatibility.html" aria-current="true">English</a><span aria-hidden="true">/</span><a href="../../ko/docs/prd/11-versioning-compatibility.html">한국어</a></div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/05-processing-reliability.html">English</a><span aria-hidden="true">/</span><a href="05-processing-reliability.html" aria-current="true">한국어</a></div>
       </div>
     </header>
     <div class="layout">
@@ -318,117 +318,72 @@
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
           <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
-          <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+          <a href="05-processing-reliability.html" aria-current="page">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
           <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
-          <a href="11-versioning-compatibility.html" aria-current="page">Versioning and Compatibility Policy</a>
-          <a href="../implementation-status.html">Implementation Status</a>
-          <a href="../operations-runbook.html">Operations Runbook</a>
-          <a href="../testing.html">Testing Guide</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="../implementation-status.html">구현 상태</a>
+          <a href="../operations-runbook.html">운영 Runbook</a>
+          <a href="../testing.html">테스트 가이드</a>
         </nav>
       </aside>
       <main>
-<h1 id="versioning-and-compatibility-policy">Versioning and Compatibility Policy</h1>
-<h2 id="why-versioning-matters">Why Versioning Matters</h2>
-<p>This project is intended for open source use. Users can run different versions of the coordinator server, consumer starter, producer starter, Docker image, and Redis server. Compatibility must be explicit so upgrades can be planned safely.</p>
-<h2 id="artifact-versioning">Artifact Versioning</h2>
-<p>Artifacts follow Semantic Versioning:</p>
+<h1 id="member-data-plane-boundary">Member Data-Plane Boundary</h1>
+<p>Redis Stream Coordinator는 message processor가 아니다. 이 문서는 coordinator와 member data-plane의 경계만 정의한다.</p>
+<h2 id="coordinator-owns">Coordinator Owns</h2>
 <ul>
-<li><code>MAJOR</code>: incompatible API, protocol, or metadata changes,</li>
-<li><code>MINOR</code>: backward-compatible features,</li>
-<li><code>PATCH</code>: bug fixes and documentation updates.</li>
+<li>group metadata</li>
+<li>member liveness</li>
+<li>target assignment</li>
+<li>current assignment report</li>
+<li>assigned/pending shard assignment</li>
+<li>member epoch fencing status</li>
+<li>stream version migration state</li>
+<li>assignment epoch과 member epoch 기반 stale owner fencing</li>
 </ul>
-<p>Artifacts:</p>
+<h2 id="member-data-plane-owns">Member Data-Plane Owns</h2>
 <ul>
-<li><code>coordinator-server</code>,</li>
-<li><code>redisstream-spring-boot-starter</code>,</li>
-<li>sample Docker images,</li>
-<li>published coordinator Docker image.</li>
+<li>Redis Stream <code>XREADGROUP</code> / <code>XACK</code></li>
+<li>pending recovery</li>
+<li>handler execution</li>
+<li>retry / DLQ</li>
+<li>idempotency marker</li>
+<li>key ordering</li>
+<li>read batch, block timeout, worker thread tuning</li>
 </ul>
-<h2 id="http-api-versioning">HTTP API Versioning</h2>
-<p>The base path includes a version:</p>
-<pre><code class="language-text">/coord/v1
+<h2 id="at-least-once-processing-model">At-Least-Once Processing Model</h2>
+<p>이 프로젝트의 기본 처리 모델은 at-least-once이다. Redis Stream consumer group delivery는 <code>XREADGROUP</code>/<code>XACK</code> 기준으로 중복 전달될 수 있고, consumer handler도 장애, pending recovery, rebalance 이후 다시 실행될 수 있다.</p>
+<p>단일 처리 보장은 제공하지 않는다. 실제 application handler는 하나의 message를 처리하면서 DB update, Redis write, HTTP call, external API call, local cache update 등 여러 비즈니스 side effect를 함께 수행할 수 있다. 이 프로젝트는 그런 side effect들과 Redis Stream ACK를 하나의 원자적 transaction으로 묶는 protocol을 제공하지 않는다.</p>
+<p>Application 책임:</p>
+<ul>
+<li>handler는 중복 호출될 수 있다고 가정한다.</li>
+<li>business side effect는 domain-level idempotency, unique constraint, deduplication table, compensation 등으로 보호한다.</li>
+<li>Redis ACK는 application이 선택한 처리 정책에 따라 수행한다. ACK 전 crash는 재전달을 만들 수 있고, ACK 후 crash는 처리 유실을 만들 수 있으므로 application risk profile에 맞게 선택한다.</li>
+<li>coordinator가 내려준 <code>memberEpoch</code>, <code>assignmentEpoch</code>, shard ownership 정보는 stale owner fencing에 사용하지만, business side effect 중복 방지를 대신하지 않는다.</li>
+</ul>
+<p>권장 처리 흐름:</p>
+<pre><code class="language-text">XREADGROUP
+  -&gt; memberEpoch / assignmentEpoch / shard ownership 확인
+  -&gt; business handler 실행
+  -&gt; application-level duplicate guard 또는 retry policy 적용
+  -&gt; XACKDEL 또는 XACK
 </code></pre>
-<p>Breaking HTTP API changes require a new path prefix such as <code>/coord/v2</code>.</p>
-<p>Backward-compatible additions are allowed in the same API version:</p>
+<p>보장 경계:</p>
 <ul>
-<li>optional request fields,</li>
-<li>additive response fields,</li>
-<li>new enum values only when old clients ignore unknown values safely,</li>
-<li>new monitoring endpoints.</li>
+<li>Redis Stream delivery는 at-least-once이다.</li>
+<li>consumer handler execution은 at-least-once이다.</li>
+<li>producer publish는 retry와 migration 상황에서 duplicate를 만들 수 있다.</li>
+<li>전체 shard/version을 가로지르는 동일 event id produce 중복 방지는 제공하지 않는다.</li>
+<li>외부 side effect의 단일 반영은 제공하지 않는다.</li>
 </ul>
-<h2 id="heartbeat-protocol-version">Heartbeat Protocol Version</h2>
-<p>Heartbeat requests include <code>protocolVersion</code>.</p>
-<p>The coordinator configuration defines an accepted range, for example:</p>
-<pre><code class="language-yaml">coordinator:
-  protocol:
-    min-supported-version: &quot;1.0&quot;
-    max-supported-version: &quot;1.1&quot;
-</code></pre>
-<p>Policy:</p>
-<ul>
-<li>A coordinator must reject unsupported protocol versions with a clear error.</li>
-<li>Minor protocol additions must be optional.</li>
-<li>Required field changes require a major version.</li>
-<li>Rolling upgrades should support N/N-1 client and server coexistence.</li>
-</ul>
-<h2 id="redis-metadata-schema-version">Redis Metadata Schema Version</h2>
-<p>Redis aggregate state includes <code>schemaVersion</code>.</p>
-<p>Policy:</p>
-<ul>
-<li>The coordinator validates schema version before reading or writing.</li>
-<li>Incompatible schema changes require migration notes.</li>
-<li>Compatible additive fields require default handling for older state.</li>
-<li>Tests must cover reading old schema fixtures where support is promised.</li>
-</ul>
-<h2 id="docker-image-tags">Docker Image Tags</h2>
-<p>Recommended tags:</p>
-<ul>
-<li>immutable version tag, for example <code>v0.1.0</code>,</li>
-<li>commit SHA tag,</li>
-<li>optional moving tag such as <code>unstable</code> for pre-release builds.</li>
-</ul>
-<p><code>latest</code> should be avoided until the first public release policy is stable.</p>
-<h2 id="redis-version-compatibility">Redis Version Compatibility</h2>
-<p>The modules should check Redis server version before using version-specific commands.</p>
-<p>Documentation must state:</p>
-<ul>
-<li>minimum supported Redis version,</li>
-<li>tested Redis versions,</li>
-<li>command compatibility notes,</li>
-<li>fallback behavior for unsupported commands.</li>
-</ul>
-<h2 id="upgrade-policy">Upgrade Policy</h2>
-<p>Recommended rolling upgrade order:</p>
-<ol>
-<li>Upgrade coordinator server to a version that supports both old and new heartbeat protocols.</li>
-<li>Upgrade consumer applications.</li>
-<li>Upgrade producer applications.</li>
-<li>Remove old protocol support only in a later major release.</li>
-</ol>
-<p>Rollback should be possible while Redis metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.</p>
-<h2 id="compatibility-test-matrix">Compatibility Test Matrix</h2>
-<p>Required tests:</p>
-<ul>
-<li>old client heartbeat against new coordinator,</li>
-<li>new client heartbeat against old supported coordinator where applicable,</li>
-<li>old producer routing response parsing,</li>
-<li>schema fixture read tests,</li>
-<li>Docker smoke test for published image,</li>
-<li>Redis command compatibility tests for configured ACK and publish modes.</li>
-</ul>
-<h2 id="deprecation-policy">Deprecation Policy</h2>
-<p>Deprecations must include:</p>
-<ul>
-<li>replacement behavior,</li>
-<li>first version where deprecation appears,</li>
-<li>earliest removal version,</li>
-<li>migration notes,</li>
-<li>warning logs or metrics where practical.</li>
-</ul>
+<h2 id="contract">Contract</h2>
+<p>Coordinator heartbeat response의 <code>assignment.assignedShards</code>에서 기존 owned shard가 빠지면 member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 된 뒤 heartbeat의 <code>revokingShards.state=REVOKED</code>로 보고한다.</p>
+<p>Coordinator heartbeat response의 <code>assignment.assignedShards</code>에 새 shard가 포함되면 member는 shard를 <code>ownedShards</code>에 반영하고, 실제 Redis Stream read/recovery는 member data-plane 정책에 따라 수행한다.</p>
+<p>Coordinator가 <code>FENCED_MEMBER_EPOCH</code>을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 <code>memberEpoch=0</code> full heartbeat로 rejoin한다.</p>
+<p>Coordinator는 member가 보고한 <code>ownedShards</code>/<code>revokingShards</code>를 server-side target assignment와 이전에 수락한 current assignment 기준으로 검증한다. 아직 pending인 shard, 다른 live member가 소유 중인 shard, 또는 더 이상 허용되지 않는 shard를 owned로 보고하면 stale ownership으로 보고 fencing한다. 이미 처리된 terminal <code>REVOKED</code> duplicate report는 fencing하지 않고 무시한다.</p>
       </main>
     </div>
   </body>

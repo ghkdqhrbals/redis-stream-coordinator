@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RedisStream Spring Boot Starter and Integration Contract</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+        --sidebar: #fbfcfd;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .topbar {
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: 12px clamp(14px, 2.2vw, 24px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .site-title {
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .site-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+      .language-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+      .language-switch a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .language-switch a[aria-current="true"] {
+        color: var(--fg);
+        font-weight: 700;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
+      }
+      .sidebar {
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }
+      .doc-index {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
+      }
+      .doc-index a {
+        color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {
+        background: var(--code);
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+        padding-bottom: 56px;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .responsive-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .layout {
+          display: block;
+        }
+        .topbar {
+          display: block;
+        }
+        .language-switch {
+          margin-top: 8px;
+        }
+        .sidebar {
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }
+        .doc-index {
+          max-height: 220px;
+          overflow: auto;
+        }
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+      </style>
+
+    <script>
+      (() => {
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "en") {
+          const target = new URL("../../../docs/prd/10-redisstream-spring-boot-starter.html", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <div>
+          <div class="site-title">Redis Stream Coordinator</div>
+          <div class="site-subtitle">Design docs</div>
+        </div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/10-redisstream-spring-boot-starter.html">English</a><span aria-hidden="true">/</span><a href="10-redisstream-spring-boot-starter.html" aria-current="true">한국어</a></div>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+          <a href="../PRD.html">Redis Stream Coordinator Design</a>
+          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+          <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+          <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+          <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+          <a href="10-redisstream-spring-boot-starter.html" aria-current="page">RedisStream Spring Boot Starter and Integration Contract</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="../implementation-status.html">구현 상태</a>
+          <a href="../operations-runbook.html">운영 Runbook</a>
+          <a href="../testing.html">테스트 가이드</a>
+        </nav>
+      </aside>
+      <main>
+<h1 id="redisstream-spring-boot-starter-and-integration-contract">RedisStream Spring Boot Starter and Integration Contract</h1>
+<h2 id="goal">Goal</h2>
+<p>The coordinator server is only the control plane. Applications still need a runtime integration layer that joins a coordinator group, sends heartbeats, receives shard assignments, starts or stops local shard workers, and reports revoke/drain progress.</p>
+<p>This project provides that integration as a Spring Boot starter:</p>
+<pre><code class="language-text">com.redisstream:redisstream-spring-boot-starter
+</code></pre>
+<p>Public Kotlin APIs live under <code>com.redisstream.consumer</code> and <code>com.redisstream.producer</code>.</p>
+<p>The starter must be usable by any application without forcing a specific Redis Stream processing framework. Applications can either implement shard lifecycle callbacks directly, or opt into the built-in Redis Stream polling adapter. Application code still owns business handler execution, retries, DLQ, idempotency, and transaction boundaries. The starter provides at-least-once processing semantics by default and does not claim a single-processing guarantee.</p>
+<h2 id="public-contract">Public Contract</h2>
+<p>Application code implements one interface:</p>
+<pre><code class="language-kotlin">interface CoordinatorShardLifecycle {
+    fun onAssigned(shards: Set&lt;CoordinatorShard&gt;, context: CoordinatorConsumerContext)
+
+    fun onRevoked(shards: Set&lt;CoordinatorShard&gt;, context: CoordinatorConsumerContext): Set&lt;CoordinatorShard&gt;
+
+    fun onPending(shards: Set&lt;CoordinatorShard&gt;, context: CoordinatorConsumerContext) {
+    }
+
+    fun onFenced(context: CoordinatorConsumerContext) {
+    }
+}
+</code></pre>
+<p>Applications with custom worker pools may also implement <code>CoordinatorRuntimeCapacityProvider</code> on the same lifecycle bean:</p>
+<pre><code class="language-kotlin">interface CoordinatorRuntimeCapacityProvider {
+    fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity
+}
+</code></pre>
+<p>If provided, the managed consumer reports this runtime capacity in heartbeat requests. If not provided, it reports <code>runtime-max-concurrency</code> as fully available. The built-in Redis Stream polling lifecycle implements this provider and subtracts current in-flight handler calls from available capacity.</p>
+<p>The built-in Redis Stream polling lifecycle also reports shard consumption progress to the coordinator heartbeat. This is protocol data, not the public metrics surface. The coordinator validates the reported shard against assigned or revoking shards and exposes group-level consumption progress through its monitoring API and Micrometer metrics.</p>
+<p>Rules:</p>
+<ul>
+<li><code>onAssigned</code> starts or resumes local workers for assigned shards.</li>
+<li><code>onPending</code> exposes shards that are targeted for this member but blocked by revoke-before-assign.</li>
+<li><code>onRevoked</code> stops new reads for revoked shards, drains local in-flight work, and returns the shards that are fully revoked.</li>
+<li>If <code>onRevoked</code> returns only part of the requested set, the starter keeps reporting the remaining shards as <code>DRAINING</code> and calls <code>onRevoked</code> again on later heartbeat cycles.</li>
+<li><code>onFenced</code> stops all local workers and allows the starter to rejoin with <code>memberEpoch=0</code>.</li>
+<li>When <code>graceful-leave-on-stop=true</code>, the managed consumer sends a final <code>memberEpoch=-1</code> heartbeat during shutdown and reports revoked or draining shards.</li>
+</ul>
+<h2 id="starter-responsibilities">Starter Responsibilities</h2>
+<p>The starter owns:</p>
+<ul>
+<li>stable <code>memberId</code> and <code>memberName</code> configuration</li>
+<li>heartbeat scheduling</li>
+<li>coordinator HTTP calls</li>
+<li><code>memberEpoch</code> and <code>metadataVersion</code> tracking</li>
+<li><code>ownedShards</code> reporting</li>
+<li><code>revokingShards</code> reporting</li>
+<li>assignment diffing</li>
+<li>listener callbacks for assign, pending, revoke, and fenced states</li>
+<li>optional runtime capacity reporting through <code>CoordinatorRuntimeCapacityProvider</code></li>
+<li>optional shard progress reporting through <code>CoordinatorShardProgressProvider</code></li>
+</ul>
+<p>In direct lifecycle mode, the starter does not own:</p>
+<ul>
+<li>Redis Stream polling</li>
+<li>payload deserialization</li>
+<li>user handler execution</li>
+<li><code>XACK</code></li>
+<li>retry and DLQ</li>
+<li>idempotency markers</li>
+<li>business transaction boundaries</li>
+</ul>
+<p>In built-in Redis polling mode, the starter owns:</p>
+<ul>
+<li>shard-key derivation from coordinator assignments</li>
+<li><code>XREADGROUP</code></li>
+<li>handler invocation through <code>RedisStreamMessageHandler</code></li>
+<li>successful-message <code>XACK</code></li>
+<li>last delivered and last acked Redis Stream id tracking for coordinator progress reporting</li>
+<li>stopping shard pollers during revoke/fencing</li>
+</ul>
+<p>The built-in polling mode still does not own retries, DLQ, idempotency, or business transaction boundaries.</p>
+<h2 id="processing-guarantee">Processing Guarantee</h2>
+<p>The starter provides at-least-once processing semantics.</p>
+<p>Duplicate attempts can happen when:</p>
+<ul>
+<li>Redis returns a message and the process crashes before <code>XACK</code></li>
+<li>pending entries are reclaimed by another consumer</li>
+<li>producer retries after an uncertain <code>XADD</code> result</li>
+<li>shard scale-out/in changes routing metadata while publish attempts are still in flight</li>
+<li>a handler succeeds in one external system and fails before all other side effects are complete</li>
+</ul>
+<p>The starter must not claim a single-processing guarantee. Application handlers can involve multiple business side effects that cannot be atomically committed with Redis Stream ACKs. Applications that cannot tolerate duplicate effects must implement their own domain-level idempotency, deduplication, unique constraints, or compensation logic.</p>
+<h2 id="metrics">Metrics</h2>
+<p>Coordinator metrics are the public operational surface for open-source users. The starter does not auto-register consumer or producer Micrometer meters and does not expose <code>redis-stream-coordinator.consumer.metrics</code> or <code>redis-stream-coordinator.producer.metrics</code> settings. Consumer progress is sent to the coordinator heartbeat and published from the coordinator only.</p>
+<h2 id="spring-boot-configuration">Spring Boot Configuration</h2>
+<pre><code class="language-yaml">redis-stream-coordinator:
+  consumer:
+    enabled: true
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    member-id: ${HOSTNAME:${random.uuid}}
+    member-name: orders-worker
+    runtime-max-concurrency: 4
+    heartbeat-interval: 3s
+    rebalance-timeout: 60s
+    graceful-leave-on-stop: true
+    username: member
+    password: member-password
+</code></pre>
+<p>If a <code>CoordinatorShardLifecycle</code> bean exists, auto-configuration creates a <code>CoordinatorManagedConsumer</code> bean. Applications can override <code>CoordinatorClient</code> or <code>CoordinatorManagedConsumer</code> with their own beans.</p>
+<p>Alternatively, applications can enable the built-in Redis Stream consumer adapter by providing a <code>RedisStreamMessageHandler</code> bean and enabling <code>redis-stream-coordinator.consumer.redis.enabled</code>.</p>
+<pre><code class="language-yaml">redis-stream-coordinator:
+  consumer:
+    enabled: true
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    member-name: orders-worker
+    redis:
+      enabled: true
+      poll-batch-size: 10
+      poll-timeout: 1s
+      ack:
+        # AUTO uses XACKDEL when the connected Redis server supports it, otherwise XACK.
+        mode: AUTO
+        xackdel-reference-policy: ACKED
+      failure:
+        # XNACK is available on Redis 8.8+. The default keeps failed records pending.
+        mode: LEAVE_PENDING
+        xnack-mode: FAIL
+</code></pre>
+<h2 id="runtime-flow">Runtime Flow</h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant App as Application Shard Lifecycle
+    participant Starter as Consumer Starter
+    participant C as Coordinator
+
+    Starter-&gt;&gt;C: heartbeat memberEpoch=0 ownedShards=[]
+    C--&gt;&gt;Starter: assignedShards, pendingShards, memberEpoch
+    Starter-&gt;&gt;App: onAssigned(assignedShards)
+    Starter-&gt;&gt;C: heartbeat memberEpoch=N ownedShards=assigned
+    C--&gt;&gt;Starter: new assigned/pending after rebalance
+    Starter-&gt;&gt;App: onPending(pending)
+    Starter-&gt;&gt;App: onRevoked(removedShards)
+    Starter-&gt;&gt;C: heartbeat revokingShards=DRAINING or REVOKED
+    C--&gt;&gt;Starter: assignment converged
+</code></pre>
+<h2 id="producer-routing-client">Producer Routing Client</h2>
+<p>The RedisStream starter includes a <code>CoordinatorClient.producerRouting</code> method so applications can share the same coordinator HTTP client for producer routing metadata. Producer-side local caches must invalidate when <code>metadataVersion</code> changes.</p>
+<p>The starter also provides a <code>ProducerRoutingCache</code> component under <code>com.redisstream.producer</code>. It fetches <code>/producer-routing</code>, caches the response for <code>redis-stream-coordinator.producer.routing-refresh-interval</code>, and replaces the cached metadata when a refreshed response has a newer <code>metadataVersion</code>.</p>
+<pre><code class="language-yaml">redis-stream-coordinator:
+  producer:
+    enabled: true
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    routing-refresh-interval: 30s
+    # Default 1 avoids extra duplicate attempts after uncertain XADD failures.
+    publish-max-attempts: 1
+    xadd:
+      max-len: 10000000
+      approximate-trimming: true
+</code></pre>
+<p>Application producers can call <code>ProducerRoutingCache.route(partitionKey)</code> and write to the returned <code>streamKey</code>, or inject <code>RedisStreamPublisher</code> to route and <code>XADD</code> in one call. The built-in hasher uses the v1 routing contract; applications do not configure a per-group hash algorithm or seed.</p>
+<p>The v1 routing contract uses 32-bit Murmur3 with deterministic rejection sampling instead of a direct <code>% shardCount</code> mapping. This removes modulo bias while keeping routing deterministic for the same partition key and shard count. Future incompatible routing changes must use a new producer-routing protocol/API version.</p>
+<p><code>RedisStreamPublisher</code> supports single-message field maps, a convenience payload method that writes the <code>payload</code> field, and ordered best-effort batch publishing through <code>publishAll</code>. It writes with <code>XADD MAXLEN</code> by default using a large approximate cap so sample and development streams do not grow without bound; applications can override the global <code>xadd.max-len</code> value or pass per-message <code>RedisStreamPublishOptions</code>. A failed write invalidates the routing cache so the next publish refreshes metadata. <code>publish-max-attempts</code> can opt into same-call retry after refreshing metadata, but the default is <code>1</code> because retrying after an uncertain Redis write can duplicate messages.</p>
+<p>The producer path does not provide global event id deduplication. It does not prevent the same event id from being published to a different shard or stream version after shard scale-out/in changes routing metadata.</p>
+<p>Operational constraint:</p>
+<ul>
+<li>Do not execute shard scale-out/in while producers have in-flight publish calls or retry windows if the workload is sensitive to duplicate messages.</li>
+<li>Pause producers, let in-flight XADD and retries drain, call the scale API, refresh producer routing metadata, then resume producing.</li>
+<li>If producers must remain online during scale, treat producer delivery as at-least-once and rely on application-level deduplication or compensation to suppress duplicate side effects.</li>
+</ul>
+<p>The built-in consumer checks the connected Redis server version before sending newer stream commands. <code>ack.mode=AUTO</code> resolves to <code>XACKDEL</code> on Redis 8.2+ and <code>XACK</code> on older Redis. Explicit <code>ack.mode=XACKDEL</code> fails before sending the ack command if the server is too old. Failed-message <code>failure.mode=XNACK</code> is guarded by Redis 8.8+ support; the default <code>LEAVE_PENDING</code> preserves classic Redis Stream retry behavior.</p>
+<p>Redis commands issued by the built-in producer and consumer adapters go through a shared <code>RedisStreamCommandsTemplate</code>. The template owns <code>XREADGROUP</code>, <code>XACK</code>, <code>XACKDEL</code>, <code>XNACK</code>, <code>XADD</code>, and server-version lookup so command shapes stay centralized and testable.</p>
+<h2 id="mvp-acceptance-criteria">MVP Acceptance Criteria</h2>
+<ul>
+<li>A Spring Boot application can add the starter and implement <code>CoordinatorShardLifecycle</code>.</li>
+<li>The starter sends join heartbeats with <code>memberEpoch=0</code>.</li>
+<li>The starter tracks <code>memberEpoch</code> and <code>metadataVersion</code> from coordinator responses.</li>
+<li>The starter notifies newly assigned shards.</li>
+<li>The starter notifies revoked shards and reports revoke completion to the coordinator.</li>
+<li>The starter retries incomplete revoke callbacks across heartbeat cycles for long drain windows.</li>
+<li>The starter can report runtime capacity from a lifecycle provider or from the built-in Redis polling adapter.</li>
+<li>The starter resets local assignment state on fencing and rejoins.</li>
+<li>The starter can send a graceful leave heartbeat on shutdown.</li>
+<li>The starter exposes an overridable <code>CoordinatorClient</code>.</li>
+<li>The starter provides a producer routing cache that refreshes and replaces metadata by <code>metadataVersion</code>.</li>
+<li>The starter rejects producer routing metadata that belongs to a different stream/group or omits active shard indexes.</li>
+<li>The starter provides a Redis Stream publisher that routes by partition key and appends to the active shard.</li>
+<li>The starter provides convenience payload and ordered batch publish APIs.</li>
+<li>The publisher invalidates stale routing after write failures and supports opt-in bounded retry.</li>
+<li>The starter provides an opt-in Redis Stream consumer adapter that polls assigned shards and acknowledges successfully handled records.</li>
+<li>The starter reports built-in polling progress to coordinator heartbeat.</li>
+<li>The starter documents at-least-once delivery and duplicate risks around producer retry, pending recovery, and shard scaling.</li>
+</ul>
+<h2 id="future-work">Future Work</h2>
+<ul>
+<li>Backoff and circuit-breaker policy for coordinator unavailability.</li>
+</ul>
+      </main>
+    </div>
+  </body>
+</html>

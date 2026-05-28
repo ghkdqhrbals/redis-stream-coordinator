@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KIP-848 Implementation Coverage</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+        --sidebar: #fbfcfd;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .topbar {
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: 12px clamp(14px, 2.2vw, 24px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .site-title {
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .site-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+      .language-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+      .language-switch a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .language-switch a[aria-current="true"] {
+        color: var(--fg);
+        font-weight: 700;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
+      }
+      .sidebar {
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }
+      .doc-index {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
+      }
+      .doc-index a {
+        color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {
+        background: var(--code);
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+        padding-bottom: 56px;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .responsive-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .layout {
+          display: block;
+        }
+        .topbar {
+          display: block;
+        }
+        .language-switch {
+          margin-top: 8px;
+        }
+        .sidebar {
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }
+        .doc-index {
+          max-height: 220px;
+          overflow: auto;
+        }
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+      </style>
+
+    <script>
+      (() => {
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "en") {
+          const target = new URL("../../../docs/prd/08-kip848-implementation-coverage.html", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <div>
+          <div class="site-title">Redis Stream Coordinator</div>
+          <div class="site-subtitle">Design docs</div>
+        </div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/08-kip848-implementation-coverage.html">English</a><span aria-hidden="true">/</span><a href="08-kip848-implementation-coverage.html" aria-current="true">한국어</a></div>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+          <a href="../PRD.html">Redis Stream Coordinator Design</a>
+          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+          <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+          <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="08-kip848-implementation-coverage.html" aria-current="page">KIP-848 Implementation Coverage</a>
+          <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+          <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="../implementation-status.html">구현 상태</a>
+          <a href="../operations-runbook.html">운영 Runbook</a>
+          <a href="../testing.html">테스트 가이드</a>
+        </nav>
+      </aside>
+      <main>
+<h1 id="kip-848-implementation-coverage">KIP-848 Implementation Coverage</h1>
+<h2 id="purpose">Purpose</h2>
+<p>이 문서는 Redis Stream Coordinator가 KIP-848의 어떤 아이디어를 구현하고, 어떤 부분을 Redis Stream 제약에 맞게 바꾸거나 제외했는지 정리한다. 목표는 Kafka protocol 호환이 아니라 KIP-848의 coordinator-managed rebalance 모델을 Redis Stream shard ownership에 적용하는 것이다.</p>
+<h2 id="concept-mapping">Concept Mapping</h2>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>KIP-848 Concept</th>
+<th>Redis Stream Coordinator</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="KIP-848 Concept">Group Coordinator</td>
+<td data-label="Redis Stream Coordinator">Coordinator API server</td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Consumer Group</td>
+<td data-label="Redis Stream Coordinator"><code>{streamPrefix, consumerGroup}</code></td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Member</td>
+<td data-label="Redis Stream Coordinator">member runtime이 생성한 UUID <code>memberId</code></td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Topic Partition</td>
+<td data-label="Redis Stream Coordinator"><code>{streamVersion, shardIndex}</code></td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Target Assignment</td>
+<td data-label="Redis Stream Coordinator">coordinator가 저장한 desired shard ownership</td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Current Assignment</td>
+<td data-label="Redis Stream Coordinator">member가 heartbeat로 보고한 실제 적용 상태</td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">ConsumerGroupHeartbeat</td>
+<td data-label="Redis Stream Coordinator">member heartbeat request/response assignment channel</td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Group Epoch</td>
+<td data-label="Redis Stream Coordinator">group metadata 변경 세대</td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Assignment Epoch</td>
+<td data-label="Redis Stream Coordinator">target assignment 계산 기준 세대</td>
+</tr>
+<tr>
+<td data-label="KIP-848 Concept">Member Epoch</td>
+<td data-label="Redis Stream Coordinator">member fencing과 assignment 적용 세대</td>
+</tr>
+</tbody>
+</table>
+<h2 id="implemented-from-kip-848">Implemented From KIP-848</h2>
+<ul>
+<li>Coordinator-driven rebalance: member가 owner를 최종 결정하지 않고 coordinator가 target assignment를 계산한다.</li>
+<li>Declarative target assignment: coordinator는 group이 수렴해야 할 desired shard ownership을 저장한다.</li>
+<li>Current assignment reporting: member는 heartbeat마다 실제 owned/revoking shard 상태를 보고한다.</li>
+<li>Current assignment validation: coordinator는 target assignment와 이전에 수락한 current assignment 기준으로 stale ownership report를 fencing한다.</li>
+<li>Heartbeat assignment channel: coordinator는 heartbeat response로 assigned/pending shard assignment와 fencing status를 전달한다.</li>
+<li>Incremental reconciliation: group-wide stop-the-world barrier 없이 변경된 member/shard만 revoke/assign한다.</li>
+<li>Revoke-before-assign dependency: 기존 owner의 revoke ack 또는 member expiration 확인 전 새 owner에게 assign하지 않는다.</li>
+<li>Epoch model: <code>groupEpoch</code>, <code>assignmentEpoch</code>, <code>memberEpoch</code>으로 group metadata, target assignment, member fencing을 구분한다.</li>
+<li>Coordinator event loop: heartbeat, metadata change, member lease expiration을 coordinator loop에서 순차적으로 평가한다.</li>
+<li>Session timeout and fencing: <code>member-lease-ttl</code> 동안 heartbeat가 없는 member를 fencing하고 shard를 재할당한다.</li>
+<li>Sticky movement minimization: assignment는 sticky partition 전제로 기존 owner를 최대한 유지한다.</li>
+</ul>
+<h2 id="redis-specific-adaptations">Redis-Specific Adaptations</h2>
+<ul>
+<li>Kafka broker coordinator 대신 Coordinator API server가 group metadata와 assignment를 관리한다.</li>
+<li>Kafka broker wire protocol 대신 custom HTTP Admin/Heartbeat/Monitoring API를 사용한다.</li>
+<li>Kafka topic partition 대신 Redis Stream shard key <code>{streamVersion, shardIndex}</code>를 assignment 단위로 사용한다.</li>
+<li>Kafka offset commit fencing은 구현하지 않는다. Redis Stream read/ack fencing은 member data-plane이 coordinator의 assignment/member epoch을 기준으로 적용한다.</li>
+<li>Kafka partition expansion 대신 stream version migration으로 shard scale-out/in을 처리한다.</li>
+<li>Kafka <code>ConsumerGroupHeartbeat</code> RPC는 internal coordinator API 또는 Redis mailbox request/response로 구현한다.</li>
+<li>member id는 member runtime이 생성하고 coordinator가 epoch/fencing 상태를 관리한다.</li>
+<li>Kafka의 <code>group.consumer.heartbeat.interval.ms</code>와 <code>group.consumer.session.timeout.ms</code>는 coordinator <code>heartbeat-interval</code>과 <code>member-lease-ttl</code>로 단순화한다.</li>
+<li>KIP-848의 server-side assignor 선택은 제공하지 않는다. sticky partition assignment는 설계 전제이다.</li>
+<li>Basic Auth, Monitoring API, Redis 접속 YAML, Admin API default 값은 Redis coordinator 운영을 위한 추가 계층이며 KIP-848 protocol 개념이 아니다.</li>
+</ul>
+<h2 id="intentional-differences-from-kip-848">Intentional Differences From KIP-848</h2>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Area</th>
+<th>KIP-848</th>
+<th>Redis Stream Coordinator</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Area">Coordinator placement</td>
+<td data-label="KIP-848">Kafka broker group coordinator가 <code>__consumer_offsets</code> 기반 state machine으로 관리한다.</td>
+<td data-label="Redis Stream Coordinator">별도 lightweight Coordinator API server가 Redis metadata store를 사용한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Wire protocol</td>
+<td data-label="KIP-848">Kafka RPC와 error code를 확장한다.</td>
+<td data-label="Redis Stream Coordinator">HTTP Admin/Heartbeat/Monitoring API를 사용하고 Kafka protocol 호환을 목표로 하지 않는다.</td>
+</tr>
+<tr>
+<td data-label="Area">Member ID</td>
+<td data-label="KIP-848">KIP-848 원문은 server-generated member id를 설명하고, 이후 KIP-1082로 client-generated id가 반영됐다.</td>
+<td data-label="Redis Stream Coordinator">member runtime이 UUID <code>memberId</code>를 만들고 coordinator가 등록/epoch/fencing을 관리한다. <code>memberId</code> 자체가 runtime incarnation id이다.</td>
+</tr>
+<tr>
+<td data-label="Area">Heartbeat payload</td>
+<td data-label="KIP-848">첫 heartbeat나 error 이후에는 전체 필드를 보내고, 이후에는 변경된 subscription/assignor/owned partition field만 보낼 수 있다.</td>
+<td data-label="Redis Stream Coordinator">MVP heartbeat는 owned shards, revoking shards, runtime consumer capacity를 명시적으로 보고하는 custom schema를 사용한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Heartbeat/session</td>
+<td data-label="KIP-848">server-side heartbeat interval과 session timeout을 member에게 전달한다.</td>
+<td data-label="Redis Stream Coordinator"><code>heartbeatIntervalMs</code>로 다음 heartbeat 주기를 전달하고, <code>member-lease-ttl</code> 초과 member를 <code>EXPIRED/FENCED</code> 처리한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Rebalance timeout</td>
+<td data-label="KIP-848">revoke 완료를 기다리는 rebalance timeout이 있고, 초과하면 member를 group에서 제거할 수 있다.</td>
+<td data-label="Redis Stream Coordinator"><code>rebalanceTimeoutMs</code>를 heartbeat field로 받는다. coordinator global config가 아니라 member revoke deadline으로만 사용한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Assignor model</td>
+<td data-label="KIP-848">server-side assignor 선택, assignor negotiation, client-side assignor delegation을 모델링한다.</td>
+<td data-label="Redis Stream Coordinator">sticky partition assignment만 전제로 하며 선택/협상/위임을 제공하지 않는다.</td>
+</tr>
+<tr>
+<td data-label="Area">Subscription model</td>
+<td data-label="KIP-848">topic name, topic id, regex subscription, partition metadata 변경을 group metadata로 다룬다.</td>
+<td data-label="Redis Stream Coordinator"><code>{streamPrefix, consumerGroup}</code> Admin API 대상과 Redis Stream version metadata를 사용한다. regex subscription은 없다.</td>
+</tr>
+<tr>
+<td data-label="Area">Member metadata</td>
+<td data-label="KIP-848">instance id, rack id, client id, client host, subscribed topics, assignor metadata를 group assignment input으로 다룬다.</td>
+<td data-label="Redis Stream Coordinator">member lifecycle, heartbeat time, assignment epoch, runtime/assigned concurrency만 coordinator state로 둔다.</td>
+</tr>
+<tr>
+<td data-label="Area">Partition scaling</td>
+<td data-label="KIP-848">Kafka topic partition metadata 변경이 group epoch 증가 trigger가 된다.</td>
+<td data-label="Redis Stream Coordinator">shard count 변경은 Coordinator Admin API만 가능하고 next stream version migration으로 처리한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Static membership</td>
+<td data-label="KIP-848">instance id 기반 static membership과 temporary leave를 지원한다.</td>
+<td data-label="Redis Stream Coordinator">MVP에서는 static membership을 구현하지 않는다. restart는 새 runtime incarnation으로 본다.</td>
+</tr>
+<tr>
+<td data-label="Area">Offset APIs</td>
+<td data-label="KIP-848">offset commit/fetch가 member epoch으로 fencing된다.</td>
+<td data-label="Redis Stream Coordinator">Redis Stream <code>XREADGROUP</code>/<code>XACK</code>는 at-least-once이다. Coordinator는 stale owner fencing과 assignment visibility를 제공하지만 단일 처리 보장은 제공하지 않는다.</td>
+</tr>
+<tr>
+<td data-label="Area">Error model</td>
+<td data-label="KIP-848">Kafka protocol error code(<code>UNKNOWN_MEMBER_ID</code>, <code>FENCED_MEMBER_EPOCH</code>, <code>UNSUPPORTED_ASSIGNOR</code> 등)를 사용한다.</td>
+<td data-label="Redis Stream Coordinator">Redis coordinator는 sticky assignment 전제라 assignor error를 제외하고 <code>HeartbeatStatus</code> enum을 custom API contract로 정의한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Admin/describe APIs</td>
+<td data-label="KIP-848">Kafka group/offset describe APIs와 Kafka ACL을 사용한다.</td>
+<td data-label="Redis Stream Coordinator">custom Admin API, Monitoring API, Basic Auth를 사용한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Config model</td>
+<td data-label="KIP-848">Kafka broker/group config에 consumer assignors, heartbeat/session, group size 등을 둔다.</td>
+<td data-label="Redis Stream Coordinator">coordinator YAML은 Redis 접속, Basic Auth, loop timing, request default만 가진다. stream/group별 shard count와 consumer <code>maxConcurrency</code>는 Admin API metadata에 저장한다.</td>
+</tr>
+<tr>
+<td data-label="Area">Metadata retention</td>
+<td data-label="KIP-848">Kafka coordinator log compacted state와 group cleanup 정책을 따른다.</td>
+<td data-label="Redis Stream Coordinator"><code>EXPIRED</code> member와 migration metadata는 운영 디버깅을 위해 장기간 유지한다.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="not-implemented">Not Implemented</h2>
+<ul>
+<li>Kafka wire protocol compatibility.</li>
+<li>Kafka <code>ConsumerGroupPrepareAssignment</code> / <code>ConsumerGroupInstallAssignment</code> client-side assignment delegation.</li>
+<li>assignor negotiation, assignor version probing, assignor metadata compatibility handling.</li>
+<li>regex topic subscription and server-side topic metadata resolution.</li>
+<li>Kafka static membership semantics such as temporary leave with instance id replacement.</li>
+<li>Kafka offset commit/fetch APIs and topic-id based offset handling.</li>
+<li>Kafka group dynamic config API. Redis Stream Coordinator uses its own Admin API for create, shard scale, consumer concurrency update, and rollback.</li>
+</ul>
+<h2 id="residual-gaps-to-decide">Residual Gaps To Decide</h2>
+<ul>
+<li>member-generated UUID만으로 충분한지, 첫 heartbeat에서 coordinator registration ack를 별도 contract로 강제할지.</li>
+<li>Monitoring API response를 Kafka <code>ConsumerGroupDescribe</code>와 유사한 형태로 맞출지, Redis 운영에 필요한 custom summary로 고정할지.</li>
+</ul>
+<h2 id="coverage-notes">Coverage Notes</h2>
+<p>KIP-848 says the new protocol moves complexity from clients to the group coordinator, removes a global synchronization barrier, stores target/current assignment, and uses heartbeat to carry member state and assignment. This design implements those parts directly, then replaces Kafka-specific broker, partition, offset, and protocol concerns with Redis metadata keys, stream version migration, and member data-plane boundaries.</p>
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Versioning and Compatibility Policy</title>
+    <title>구현 상태</title>
     <style>
       * {
         box-sizing: border-box;
@@ -291,8 +291,8 @@
     <script>
       (() => {
         const targetLanguage = new URLSearchParams(window.location.search).get("tl");
-        if (targetLanguage === "ko") {
-          const target = new URL("../../ko/docs/prd/11-versioning-compatibility.html", window.location.href);
+        if (targetLanguage === "en") {
+          const target = new URL("../../docs/implementation-status.html", window.location.href);
           target.hash = window.location.hash;
           window.location.replace(target);
         }
@@ -306,129 +306,160 @@
           <div class="site-title">Redis Stream Coordinator</div>
           <div class="site-subtitle">Design docs</div>
         </div>
-        <div class="language-switch" aria-label="Language switch"><a href="11-versioning-compatibility.html" aria-current="true">English</a><span aria-hidden="true">/</span><a href="../../ko/docs/prd/11-versioning-compatibility.html">한국어</a></div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../docs/implementation-status.html">English</a><span aria-hidden="true">/</span><a href="implementation-status.html" aria-current="true">한국어</a></div>
       </div>
     </header>
     <div class="layout">
       <aside class="sidebar" aria-label="Design document index">
         <div class="index-title">Pages</div>
         <nav class="doc-index" aria-label="Design document navigation">
-          <a href="../PRD.html">Redis Stream Coordinator Design</a>
-          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
-          <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
-          <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
-          <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
-          <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
-          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
-          <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
-          <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
-          <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
-          <a href="11-versioning-compatibility.html" aria-current="page">Versioning and Compatibility Policy</a>
-          <a href="../implementation-status.html">Implementation Status</a>
-          <a href="../operations-runbook.html">Operations Runbook</a>
-          <a href="../testing.html">Testing Guide</a>
+          <a href="PRD.html">Redis Stream Coordinator Design</a>
+          <a href="prd/01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="prd/02-coordinator-architecture.html">Coordinator Architecture</a>
+          <a href="prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+          <a href="prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
+          <a href="prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+          <a href="prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="prd/08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+          <a href="prd/09-api-endpoints.html">Coordinator API Endpoints</a>
+          <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+          <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="implementation-status.html" aria-current="page">구현 상태</a>
+          <a href="operations-runbook.html">운영 Runbook</a>
+          <a href="testing.html">테스트 가이드</a>
         </nav>
       </aside>
       <main>
-<h1 id="versioning-and-compatibility-policy">Versioning and Compatibility Policy</h1>
-<h2 id="why-versioning-matters">Why Versioning Matters</h2>
-<p>This project is intended for open source use. Users can run different versions of the coordinator server, consumer starter, producer starter, Docker image, and Redis server. Compatibility must be explicit so upgrades can be planned safely.</p>
-<h2 id="artifact-versioning">Artifact Versioning</h2>
-<p>Artifacts follow Semantic Versioning:</p>
+<h1 id="_1">구현 상태</h1>
+<p>마지막 업데이트: 2026-05-29</p>
+<h2 id="_2">요약</h2>
+<p>현재 저장소는 두 개의 주요 Gradle 모듈을 제공한다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Module</th>
+<th>Status</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Module"><code>coordinator-server</code></td>
+<td data-label="Status">MVP 구현</td>
+<td data-label="Purpose">group metadata, heartbeat reconciliation, assignment, resharding, monitoring, ACL, audit, Redis-backed state를 담당하는 Spring Boot control plane</td>
+</tr>
+<tr>
+<td data-label="Module"><code>com.redisstream:redisstream-spring-boot-starter</code></td>
+<td data-label="Status">MVP 구현</td>
+<td data-label="Purpose">consumer heartbeat lifecycle, shard callback, Redis Stream polling, producer routing, publish, graceful leave, progress report를 제공하는 Spring Boot integration layer</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_3">구현 완료</h2>
+<h3 id="coordinator-server">Coordinator Server</h3>
 <ul>
-<li><code>MAJOR</code>: incompatible API, protocol, or metadata changes,</li>
-<li><code>MINOR</code>: backward-compatible features,</li>
-<li><code>PATCH</code>: bug fixes and documentation updates.</li>
+<li>[x] Group 생성 API</li>
+<li>[x] Group metadata 조회 API</li>
+<li>[x] Producer routing metadata API</li>
+<li>[x] Shard scale API</li>
+<li>[x] Consumer concurrency update API</li>
+<li>[x] Resharding 조회와 rollback API</li>
+<li>[x] Member heartbeat API</li>
+<li>[x] Health, group, member, assignment, resharding monitoring API</li>
+<li>[x] HTTP status, error code, default message를 enum으로 관리하는 error model</li>
+<li>[x] Member lease expiry, rebalance timeout, drain progress를 처리하는 scheduled event loop</li>
+<li>[x] 여러 coordinator pod가 떠도 state 접근을 직렬화할 수 있는 Redis-backed state mutex</li>
 </ul>
-<p>Artifacts:</p>
+<h3 id="coordination-semantics">Coordination Semantics</h3>
 <ul>
-<li><code>coordinator-server</code>,</li>
-<li><code>redisstream-spring-boot-starter</code>,</li>
-<li>sample Docker images,</li>
-<li>published coordinator Docker image.</li>
+<li>[x] <code>groupEpoch</code>, <code>metadataVersion</code>, <code>assignmentEpoch</code> 기반 group metadata model</li>
+<li>[x] Heartbeat protocol compatibility range</li>
+<li>[x] Member epoch validation</li>
+<li>[x] <code>memberEpoch=0</code> 기반 join/rejoin</li>
+<li>[x] Graceful leave</li>
+<li>[x] Member lease expiry와 fencing</li>
+<li>[x] Unauthorized <code>ownedShards</code> / invalid <code>revokingShards</code> 보고에 대한 stale ownership fencing</li>
+<li>[x] Server-side consumer concurrency policy를 반영한 sticky assignment</li>
+<li>[x] <code>assignedShards</code>와 <code>pendingShards</code> 분리</li>
+<li>[x] Revoke-before-assign handoff</li>
+<li>[x] Rebalance timeout fencing</li>
+<li>[x] Next stream version 기반 shard count migration</li>
+<li>[x] Active migration 중 old/new readable versions</li>
+<li>[x] Drain 완료 후 old version <code>DEPRECATED</code> 전환</li>
+<li>[x] Active resharding rollback</li>
 </ul>
-<h2 id="http-api-versioning">HTTP API Versioning</h2>
-<p>The base path includes a version:</p>
-<pre><code class="language-text">/coord/v1
+<h3 id="redis-integration">Redis Integration</h3>
+<ul>
+<li>[x] Local three-node Redis Cluster Docker Compose</li>
+<li>[x] Host-to-Docker Redis Cluster redirect를 위한 Lettuce node address mapping</li>
+<li>[x] Memory state store</li>
+<li>[x] Redis state store</li>
+<li>[x] Redis projection keys for members, target assignment, current assignment, migrations, active migration, revision</li>
+<li>[x] Redis state mutex key</li>
+<li>[x] Redis store revision compare-and-set</li>
+<li>[x] Redis metadata <code>schemaVersion</code> guard</li>
+<li>[x] Lua aggregate/projection update</li>
+<li>[x] Redis Cluster hash-slot-safe coordinator keys</li>
+<li>[x] Optional Redis Stream shard and consumer-group provisioning</li>
+<li>[x] Coordinator Redis command template</li>
+</ul>
+<h3 id="security-audit-observability">Security, Audit, Observability</h3>
+<ul>
+<li>[x] Basic Auth for admin and monitoring APIs</li>
+<li>[x] Optional member heartbeat authentication</li>
+<li>[x] Role ACL: <code>ADMIN</code>, <code>MONITOR</code>, <code>MEMBER</code></li>
+<li>[x] Per-caller/group admin mutation rate limiting</li>
+<li>[x] Structured admin audit logs</li>
+<li>[x] Optional Redis-backed group-scoped audit log</li>
+<li>[x] Coordinator-owned Micrometer metrics</li>
+<li>[x] Consumer shard progress gauges</li>
+</ul>
+<h3 id="spring-boot-starter">Spring Boot Starter</h3>
+<ul>
+<li>[x] <code>CoordinatorClient</code></li>
+<li>[x] RestClient 기반 coordinator client</li>
+<li>[x] <code>CoordinatorShardLifecycle</code></li>
+<li>[x] <code>CoordinatorManagedConsumer</code></li>
+<li>[x] Assignment, pending, revoke, fencing, rejoin, graceful leave 처리</li>
+<li>[x] Runtime capacity provider</li>
+<li>[x] Shard progress provider</li>
+<li>[x] Redis Stream polling adapter</li>
+<li>[x] Handler success 이후 ACK</li>
+<li>[x] Producer routing metadata cache</li>
+<li>[x] Stale routing cache invalidation</li>
+<li>[x] Bounded publish retry</li>
+<li>[x] Redis Stream publisher</li>
+<li>[x] Payload helper and batch publish</li>
+<li>[x] Shared Redis Stream command template</li>
+</ul>
+<h2 id="_4">문서화된 제약</h2>
+<ul>
+<li>[x] 동일 partition key도 shard scale-out/in 이후 다른 shard로 route될 수 있다.</li>
+<li>[x] Producer retry와 resharding은 duplicate message 또는 duplicate business-event attempt를 만들 수 있다.</li>
+<li>[x] Duplicate-sensitive workload는 scale 전 producer를 멈추고 in-flight publish retry를 drain해야 한다.</li>
+<li>[x] 기본 처리 보장은 at-least-once이다.</li>
+<li>[x] Single delivery, single handler invocation, single business side-effect application은 보장하지 않는다.</li>
+</ul>
+<h2 id="_5">검증 명령</h2>
+<pre><code class="language-bash">./gradlew :coordinator-server:test --no-daemon
+./gradlew :redisstream-spring-boot-starter:test --no-daemon
+./gradlew test build --no-daemon
+python3 .github/scripts/test_docker_distribution.py
 </code></pre>
-<p>Breaking HTTP API changes require a new path prefix such as <code>/coord/v2</code>.</p>
-<p>Backward-compatible additions are allowed in the same API version:</p>
-<ul>
-<li>optional request fields,</li>
-<li>additive response fields,</li>
-<li>new enum values only when old clients ignore unknown values safely,</li>
-<li>new monitoring endpoints.</li>
-</ul>
-<h2 id="heartbeat-protocol-version">Heartbeat Protocol Version</h2>
-<p>Heartbeat requests include <code>protocolVersion</code>.</p>
-<p>The coordinator configuration defines an accepted range, for example:</p>
-<pre><code class="language-yaml">coordinator:
-  protocol:
-    min-supported-version: &quot;1.0&quot;
-    max-supported-version: &quot;1.1&quot;
+<p>Redis integration tests:</p>
+<pre><code class="language-bash">docker compose up -d
+REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
+  --tests '*RedisCoordinatorStateStoreIntegrationTest' \
+  --tests '*RedisStreamProvisioningIntegrationTest'
 </code></pre>
-<p>Policy:</p>
-<ul>
-<li>A coordinator must reject unsupported protocol versions with a clear error.</li>
-<li>Minor protocol additions must be optional.</li>
-<li>Required field changes require a major version.</li>
-<li>Rolling upgrades should support N/N-1 client and server coexistence.</li>
-</ul>
-<h2 id="redis-metadata-schema-version">Redis Metadata Schema Version</h2>
-<p>Redis aggregate state includes <code>schemaVersion</code>.</p>
-<p>Policy:</p>
-<ul>
-<li>The coordinator validates schema version before reading or writing.</li>
-<li>Incompatible schema changes require migration notes.</li>
-<li>Compatible additive fields require default handling for older state.</li>
-<li>Tests must cover reading old schema fixtures where support is promised.</li>
-</ul>
-<h2 id="docker-image-tags">Docker Image Tags</h2>
-<p>Recommended tags:</p>
-<ul>
-<li>immutable version tag, for example <code>v0.1.0</code>,</li>
-<li>commit SHA tag,</li>
-<li>optional moving tag such as <code>unstable</code> for pre-release builds.</li>
-</ul>
-<p><code>latest</code> should be avoided until the first public release policy is stable.</p>
-<h2 id="redis-version-compatibility">Redis Version Compatibility</h2>
-<p>The modules should check Redis server version before using version-specific commands.</p>
-<p>Documentation must state:</p>
-<ul>
-<li>minimum supported Redis version,</li>
-<li>tested Redis versions,</li>
-<li>command compatibility notes,</li>
-<li>fallback behavior for unsupported commands.</li>
-</ul>
-<h2 id="upgrade-policy">Upgrade Policy</h2>
-<p>Recommended rolling upgrade order:</p>
+<h2 id="_6">남은 작업</h2>
 <ol>
-<li>Upgrade coordinator server to a version that supports both old and new heartbeat protocols.</li>
-<li>Upgrade consumer applications.</li>
-<li>Upgrade producer applications.</li>
-<li>Remove old protocol support only in a later major release.</li>
+<li>[ ] 첫 public Docker image release</li>
+<li>[ ] 외부 배포 예제와 release automation hardening</li>
+<li>[ ] Redis version compatibility guide 보강</li>
+<li>[ ] 운영 dashboard/alert 예제 보강</li>
 </ol>
-<p>Rollback should be possible while Redis metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.</p>
-<h2 id="compatibility-test-matrix">Compatibility Test Matrix</h2>
-<p>Required tests:</p>
-<ul>
-<li>old client heartbeat against new coordinator,</li>
-<li>new client heartbeat against old supported coordinator where applicable,</li>
-<li>old producer routing response parsing,</li>
-<li>schema fixture read tests,</li>
-<li>Docker smoke test for published image,</li>
-<li>Redis command compatibility tests for configured ACK and publish modes.</li>
-</ul>
-<h2 id="deprecation-policy">Deprecation Policy</h2>
-<p>Deprecations must include:</p>
-<ul>
-<li>replacement behavior,</li>
-<li>first version where deprecation appears,</li>
-<li>earliest removal version,</li>
-<li>migration notes,</li>
-<li>warning logs or metrics where practical.</li>
-</ul>
       </main>
     </div>
   </body>

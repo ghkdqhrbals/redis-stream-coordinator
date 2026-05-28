@@ -38,6 +38,10 @@
         width: min(100%, 1180px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
       }
       .site-title {
         color: var(--fg);
@@ -49,6 +53,22 @@
         color: var(--muted);
         font-size: 0.82rem;
         margin-top: 2px;
+      }
+      .language-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+      .language-switch a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .language-switch a[aria-current="true"] {
+        color: var(--fg);
+        font-weight: 700;
       }
       .layout {
         display: grid;
@@ -181,6 +201,12 @@
         .layout {
           display: block;
         }
+        .topbar {
+          display: block;
+        }
+        .language-switch {
+          margin-top: 8px;
+        }
         .sidebar {
           position: static;
           max-height: none;
@@ -260,13 +286,27 @@
           gap: 2px;
         }
       }
-    </style>
+      </style>
+
+    <script>
+      (() => {
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "ko") {
+          const target = new URL("../ko/docs/testing.html", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
   </head>
   <body>
     <header>
       <div class="topbar">
-        <div class="site-title">Redis Stream Coordinator</div>
-        <div class="site-subtitle">Design docs</div>
+        <div>
+          <div class="site-title">Redis Stream Coordinator</div>
+          <div class="site-subtitle">Design docs</div>
+        </div>
+        <div class="language-switch" aria-label="Language switch"><a href="testing.html" aria-current="true">English</a><span aria-hidden="true">/</span><a href="../ko/docs/testing.html">한국어</a></div>
       </div>
     </header>
     <div class="layout">
