@@ -1,0 +1,117 @@
+name: Docker image
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "compose.yaml"
+      - ".github/workflows/docker-image.yml"
+      - ".github/scripts/test_docker_distribution.py"
+      - "coordinator-server/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Docker image version tag, for example 0.1.0"
+        required: true
+      push_latest:
+        description: "Also publish the latest tag"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Validate Docker distribution files
+        run: python3 .github/scripts/test_docker_distribution.py
+
+      - name: Build coordinator image
+        run: docker build -t redis-stream-coordinator/coordinator-server:ci .
+
+      - name: Smoke test coordinator health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_id="$(docker run -d --tmpfs /tmp:rw,size=128m -p 18080:8080 \
+            -e COORDINATOR_STORE_TYPE=memory \
+            -e REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD=smoke-password \
+            redis-stream-coordinator/coordinator-server:ci)"
+          trap 'docker logs "$container_id" || true; docker rm -f "$container_id" || true' EXIT
+
+          for attempt in $(seq 1 60); do
+            if curl -fsS -u admin:smoke-password http://127.0.0.1:18080/coord/v1/monitoring/health | tee health.json | grep -q '"status":"UP"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Coordinator health endpoint did not become ready in time."
+          exit 1
+
+  publish:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: smoke
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image tags
+        id: tags
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}/coordinator-server
+          VERSION: ${{ inputs.version }}
+          PUSH_LATEST: ${{ inputs.push_latest }}
+        run: |
+          {
+            echo "value<<EOF"
+            echo "${IMAGE}:${VERSION}"
+            if [ "${PUSH_LATEST}" = "true" ]; then
+              echo "${IMAGE}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish coordinator image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.value }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.description=Redis Stream Coordinator server

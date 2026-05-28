@@ -34,7 +34,7 @@ Path parameters:
 | `streamPrefix` | Coordinator가 관리하는 Redis Stream logical prefix. |
 | `consumerGroup` | Redis Stream consumer group logical name. |
 | `memberId` | member runtime이 생성한 UUID. |
-| `migrationId` | Coordinator가 생성한 stream version migration id. |
+| `reshardingId` | Coordinator가 생성한 stream version resharding id. |
 
 Auth policy:
 
@@ -68,7 +68,7 @@ Common status codes:
 | `422 Unprocessable Entity` | 요청은 유효하지만 현재 group state에서 수행 불가. |
 | `429 Too Many Requests` | caller 또는 group 단위 rate limit 초과. |
 | `500 Internal Server Error` | coordinator 내부 오류. |
-| `503 Service Unavailable` | Redis store 또는 coordinator loop가 정상 동작하지 않음. |
+| `503 Service Unavailable` | Redis store 또는 coordinator loop가 정상 동작하지 않거나 Redis state mutex를 획득하지 못함. |
 
 ## Endpoint Index
 
@@ -78,8 +78,8 @@ Common status codes:
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | group metadata 조회 | no | not required |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale` | shard scale-out/in migration 시작 | yes | active migration or same target is rejected/no-op |
 | Admin | `PATCH` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` | server-side consumer `maxConcurrency` 변경 | yes | same policy returns current policy |
-| Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}` | migration 상태 조회 | no | not required |
-| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}/rollback` | migration rollback 요청 | yes | current migration state decides acceptance |
+| Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | migration 상태 조회 | no | not required |
+| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | migration rollback 요청 | yes | current migration state decides acceptance |
 | Member | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat` | member liveness/owned shard 보고 및 assignment 수신 | yes | `requestId`; effective state is `memberEpoch` + `ownedShards` |
 | Monitoring | `GET` | `/coord/v1/monitoring/health` | coordinator health 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/groups` | group 목록 조회 | no | not required |
@@ -103,8 +103,6 @@ Request body:
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `initialShardCount` | no | Initial shard count. Omitted value uses coordinator `defaults.initial-shard-count`. |
-| `hashAlgorithm` | yes | Partition key hash algorithm. |
-| `hashSeed` | no | Hash seed. |
 | `versionPolicy` | no | Stream version naming policy. MVP default is `AUTO_INCREMENT`. |
 | `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Default member consumer worker limit. Omitted value uses coordinator `defaults.consumer-max-concurrency`. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
@@ -161,9 +159,11 @@ Returns the active write metadata that producers need to route partition keys to
 Producer routing formula:
 
 ```text
-shardIndex = hash(hashAlgorithm, hashSeed, partitionKey) % shardCount
+shardIndex = routeV1(partitionKey, shardCount)
 streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 ```
+
+`routeV1` is a fixed protocol contract, not group metadata. The starter computes a 32-bit Murmur3 hash and maps it into `[0, shardCount)` using deterministic rejection sampling so `2^32 % shardCount` tail values do not create modulo bias. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.
 
 Response summary:
 
@@ -172,8 +172,6 @@ Response summary:
 | `metadataVersion` | Coordinator metadata version for producer cache invalidation. |
 | `activeWriteVersion` | Integer stream version that producers must write to. |
 | `shardCount` | Active write version shard count. |
-| `hashAlgorithm` | Partition key hash algorithm. |
-| `hashSeed` | Hash seed. |
 | `streamKeyPattern` | Redis Stream key pattern with `{streamVersion}` and `{shardIndex}` placeholders. |
 | `shards` | Active write version shard keys and Redis Cluster slots. |
 
@@ -199,7 +197,7 @@ Response summary:
 
 | Field | Meaning |
 | --- | --- |
-| `migrationId` | Created migration id. |
+| `reshardingId` | Created resharding id. |
 | `fromVersion` / `toVersion` | Old/new integer stream versions. |
 | `fromShardCount` / `toShardCount` | Old/new shard counts. |
 | `state` | Initial migration state, usually `PREPARING`. |
@@ -244,7 +242,7 @@ Duplicate request behavior:
 ### Get Migration
 
 ```http
-GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}
+GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
 ```
 
 Returns one migration state and drain progress.
@@ -253,7 +251,7 @@ Response summary:
 
 | Field | Meaning |
 | --- | --- |
-| `migrationId` | Migration id. |
+| `reshardingId` | Resharding id. |
 | `fromVersion` / `toVersion` | Old/new integer stream versions. |
 | `fromShardCount` / `toShardCount` | Old/new shard counts. |
 | `state` | `PREPARING`, `ACTIVE`, `DRAINING`, `DEPRECATED`, or rollback state. |
@@ -264,7 +262,7 @@ Response summary:
 ### Rollback Migration
 
 ```http
-POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}/rollback
+POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
 ```
 
 Requests rollback inside the supported rollback window. Already-written messages in the new version are handled by the operational drain/replay policy.
@@ -280,7 +278,7 @@ Response summary:
 
 | Field | Meaning |
 | --- | --- |
-| `migrationId` | Migration id. |
+| `reshardingId` | Resharding id. |
 | `state` | Rollback state. |
 | `activeWriteVersion` | Active write version after rollback decision. |
 | `readableVersions` | Readable versions after rollback decision. |
@@ -373,7 +371,7 @@ Response summary:
 | --- | --- |
 | `status` | `UP`, `DEGRADED`, or `DOWN`. |
 | `coordinatorId` | Coordinator server identity. |
-| `redis` | Redis metadata store health. |
+| `redis` | Redis dependency health. Redis is checked only when Redis-backed store, Redis audit, or stream provisioning is enabled. |
 | `loop` | Coordinator loop health and last tick time. |
 
 ### List Groups
@@ -443,7 +441,7 @@ Response summary:
 | Field | Meaning |
 | --- | --- |
 | `migrations` | Active and historical migration summaries. |
-| `activeMigration` | Active migration id or null. |
+| `activeReshardingId` | Active resharding id or null. |
 | `drainProgress` | Old readable version drain state. |
 
 ## Explicitly Unsupported Endpoints

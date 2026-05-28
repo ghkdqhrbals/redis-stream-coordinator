@@ -31,6 +31,12 @@ enum class CoordinatorError(
         "REDIS_STREAM_PROVISIONING_FAILED",
         "Failed to provision Redis Stream consumer group",
     ),
+    COORDINATOR_STATE_MUTEX_UNAVAILABLE(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "COORDINATOR_STATE_MUTEX_UNAVAILABLE",
+        "Coordinator state mutex is unavailable",
+    ),
+    RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", "Coordinator API rate limit exceeded"),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Invalid request"),
 }
 

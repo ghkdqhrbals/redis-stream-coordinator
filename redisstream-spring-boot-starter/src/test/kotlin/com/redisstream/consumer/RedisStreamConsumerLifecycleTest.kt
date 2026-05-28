@@ -1,8 +1,10 @@
 package com.redisstream.consumer
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class RedisStreamConsumerLifecycleTest {
@@ -35,6 +37,72 @@ class RedisStreamConsumerLifecycleTest {
     }
 
     @Test
+    fun `consumer lifecycle records message success and ack metrics`() {
+        val shard = CoordinatorShard(1, 0)
+        val registry = SimpleMeterRegistry()
+        val reader = ScriptedRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        val lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RecordingRedisStreamMessageHandler(),
+            startPollersOnAssignment = false,
+            metrics = MicrometerCoordinatorConsumerMetrics(registry, "orders", "orders-consumer", "member-a"),
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+        lifecycle.pollOnce(shard)
+
+        assertEquals(1.0, registry.get("redis_stream_consumer_messages_total").tag("status", "SUCCESS").counter().count())
+        assertEquals(1.0, registry.get("redis_stream_consumer_ack_total").counter().count())
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_consumer_ack_status_total").tag("status", "SUCCESS").counter().count(),
+        )
+    }
+
+    @Test
+    fun `ack failure records error without message success metric`() {
+        val shard = CoordinatorShard(1, 0)
+        val registry = SimpleMeterRegistry()
+        val reader = FailingAckRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        val lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RecordingRedisStreamMessageHandler(),
+            startPollersOnAssignment = false,
+            metrics = MicrometerCoordinatorConsumerMetrics(registry, "orders", "orders-consumer", "member-a"),
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+
+        assertFailsWith<IllegalStateException> {
+            lifecycle.pollOnce(shard)
+        }
+
+        assertEquals(
+            0.0,
+            registry.find("redis_stream_consumer_messages_total").tag("status", "SUCCESS").counter()?.count() ?: 0.0,
+        )
+        assertEquals(1.0, registry.get("redis_stream_consumer_messages_total").tag("status", "ERROR").counter().count())
+        assertEquals(1.0, registry.get("redis_stream_consumer_ack_status_total").tag("status", "ERROR").counter().count())
+        assertEquals(0.0, registry.find("redis_stream_consumer_ack_total").counter()?.count() ?: 0.0)
+    }
+
+    @Test
     fun `revoked assigned shard stops polling and reports revoke completion`() {
         val shard = CoordinatorShard(1, 0)
         val reader = ScriptedRedisStreamReader()
@@ -54,12 +122,72 @@ class RedisStreamConsumerLifecycleTest {
         assertTrue(reader.reads.isEmpty())
     }
 
+    @Test
+    fun `handler failure leaves message unacked for Redis Stream retry policy`() {
+        val shard = CoordinatorShard(1, 0)
+        val reader = ScriptedRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        val lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RedisStreamMessageHandler { error("handler failed") },
+            startPollersOnAssignment = false,
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+
+        assertFailsWith<IllegalStateException> {
+            lifecycle.pollOnce(shard)
+        }
+        assertTrue(reader.acks.isEmpty())
+        assertEquals(setOf(shard), lifecycle.onRevoked(setOf(shard), context()))
+    }
+
+    @Test
+    fun `runtime capacity reflects messages currently handled by redis poller`() {
+        val shard = CoordinatorShard(1, 0)
+        lateinit var lifecycle: RedisStreamConsumerLifecycle
+        val observedCapacity = mutableListOf<RuntimeConsumerCapacity>()
+        val reader = ScriptedRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties(),
+            reader = reader,
+            handler = RedisStreamMessageHandler {
+                observedCapacity += lifecycle.runtimeCapacity(context())
+            },
+            startPollersOnAssignment = false,
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+        lifecycle.pollOnce(shard)
+
+        assertEquals(
+            listOf(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 3)),
+            observedCapacity,
+        )
+        assertEquals(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 4), lifecycle.runtimeCapacity(context()))
+    }
+
     private fun properties(): CoordinatorConsumerProperties =
         CoordinatorConsumerProperties().apply {
             streamPrefix = "orders"
             consumerGroup = "orders-consumer"
             memberId = "member-a"
             memberName = "member-a"
+            runtimeMaxConcurrency = 4
             redis.pollBatchSize = 2
             redis.pollTimeout = Duration.ofMillis(10)
         }
@@ -111,6 +239,24 @@ private class ScriptedRedisStreamReader(
         val consumerGroup: String,
         val recordId: String,
     )
+}
+
+private class FailingAckRedisStreamReader(
+    private vararg val messages: ConsumedRedisStreamMessage,
+) : RedisStreamReader {
+    override fun read(
+        streamKey: String,
+        shard: CoordinatorShard,
+        consumerGroup: String,
+        consumerName: String,
+        count: Long,
+        block: Duration,
+    ): List<ConsumedRedisStreamMessage> =
+        messages.toList()
+
+    override fun ack(streamKey: String, consumerGroup: String, recordId: String) {
+        error("ack failed")
+    }
 }
 
 private class RecordingRedisStreamMessageHandler : RedisStreamMessageHandler {

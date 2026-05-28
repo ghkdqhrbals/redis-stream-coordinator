@@ -86,6 +86,8 @@ steps:
   7. metrics publish
 ```
 
+Redis-backed deployment에서는 event loop와 state 접근 API가 먼저 Redis state mutex를 획득한다. 같은 Redis state store를 바라보는 coordinator pod가 여러 개 있어도 한 순간에 하나의 request 또는 tick만 state를 읽고 처리하고 저장한다. Mutex를 획득하지 못한 tick은 skip되고, request는 짧게 대기한 뒤 계속 실패하면 retry 가능한 `503`을 반환한다.
+
 ## Heartbeat Reconciliation Plane
 
 Member와 coordinator 사이의 제어면은 heartbeat 하나로 통일한다. KIP-848의 `ConsumerGroupHeartbeat`처럼 heartbeat는 단순 liveness ping이 아니라 join/leave, owned shard 보고, revoke ack, assignment 전달을 모두 처리하는 reconciliation RPC이다.

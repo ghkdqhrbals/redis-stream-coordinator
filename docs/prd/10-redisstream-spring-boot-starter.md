@@ -32,6 +32,16 @@ interface CoordinatorShardLifecycle {
 }
 ```
 
+Applications with custom worker pools may also implement `CoordinatorRuntimeCapacityProvider` on the same lifecycle bean:
+
+```kotlin
+interface CoordinatorRuntimeCapacityProvider {
+    fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity
+}
+```
+
+If provided, the managed consumer reports this runtime capacity in heartbeat requests. If not provided, it reports `runtime-max-concurrency` as fully available. The built-in Redis Stream polling lifecycle implements this provider and subtracts current in-flight handler calls from available capacity.
+
 Rules:
 
 * `onAssigned` starts or resumes local workers for assigned shards.
@@ -39,6 +49,7 @@ Rules:
 * `onRevoked` stops new reads for revoked shards, drains local in-flight work, and returns the shards that are fully revoked.
 * If `onRevoked` returns only part of the requested set, the starter keeps reporting the remaining shards as `DRAINING` and calls `onRevoked` again on later heartbeat cycles.
 * `onFenced` stops all local workers and allows the starter to rejoin with `memberEpoch=0`.
+* When `graceful-leave-on-stop=true`, the managed consumer sends a final `memberEpoch=-1` heartbeat during shutdown and reports revoked or draining shards.
 
 ## Starter Responsibilities
 
@@ -52,6 +63,7 @@ The starter owns:
 * `revokingShards` reporting
 * assignment diffing
 * listener callbacks for assign, pending, revoke, and fenced states
+* optional runtime capacity reporting through `CoordinatorRuntimeCapacityProvider`
 
 In direct lifecycle mode, the starter does not own:
 
@@ -73,6 +85,40 @@ In built-in Redis polling mode, the starter owns:
 
 The built-in polling mode still does not own retries, DLQ, idempotency markers, or business transaction boundaries.
 
+## Metrics
+
+When a Micrometer `MeterRegistry` bean is available, the starter records runtime metrics with `stream`, `group`, and where applicable `member` tags.
+
+Consumer metrics:
+
+* `redis_stream_consumer_heartbeat_total`
+* `redis_stream_consumer_heartbeat_duration`
+* `redis_stream_consumer_leave_total`
+* `redis_stream_consumer_leave_duration`
+* `redis_stream_consumer_assigned_shards`
+* `redis_stream_consumer_pending_shards`
+* `redis_stream_consumer_revoking_shards`
+* `redis_stream_consumer_runtime_max_concurrency`
+* `redis_stream_consumer_available_concurrency`
+* `redis_stream_consumer_in_flight_messages`
+* `redis_stream_consumer_revoked_shards_total`
+* `redis_stream_consumer_fenced_total`
+* `redis_stream_consumer_messages_total`
+* `redis_stream_consumer_message_duration`
+* `redis_stream_consumer_ack_total`
+* `redis_stream_consumer_ack_status_total`
+
+Producer metrics:
+
+* `redis_stream_producer_routing_cache_hit_total`
+* `redis_stream_producer_routing_cache_invalidated_total`
+* `redis_stream_producer_routing_refresh_total`
+* `redis_stream_producer_routing_refresh_duration`
+* `redis_stream_producer_publish_attempt_total`
+* `redis_stream_producer_publish_attempt_duration`
+* `redis_stream_producer_publish_total`
+* `redis_stream_producer_publish_duration`
+
 ## Spring Boot Configuration
 
 ```yaml
@@ -87,6 +133,7 @@ redis-stream-coordinator:
     runtime-max-concurrency: 4
     heartbeat-interval: 3s
     rebalance-timeout: 60s
+    graceful-leave-on-stop: true
     username: member
     password: member-password
 ```
@@ -143,9 +190,15 @@ redis-stream-coordinator:
     stream-prefix: orders
     consumer-group: orders-consumer
     routing-refresh-interval: 30s
+    # Default 1 avoids duplicate risk after uncertain XADD failures. Increase only with an idempotent publish strategy.
+    publish-max-attempts: 1
 ```
 
-Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher currently supports `murmur3`, `murmur3_32`, and `murmur3-32` names.
+Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher uses the v1 routing contract; applications do not configure a per-group hash algorithm or seed.
+
+The v1 routing contract uses 32-bit Murmur3 with deterministic rejection sampling instead of a direct `% shardCount` mapping. This removes modulo bias while keeping routing deterministic for the same partition key and shard count. Future incompatible routing changes must use a new producer-routing protocol/API version.
+
+`RedisStreamPublisher` supports single-message field maps, a convenience payload method that writes the `payload` field, and ordered best-effort batch publishing through `publishAll`. A failed write invalidates the routing cache so the next publish refreshes metadata. `publish-max-attempts` can opt into same-call retry after refreshing metadata, but the default is `1` because retrying after an uncertain Redis write can duplicate messages unless the application has an idempotent publish key or duplicate-tolerant consumer.
 
 ## MVP Acceptance Criteria
 
@@ -155,13 +208,18 @@ Application producers can call `ProducerRoutingCache.route(partitionKey)` and wr
 * The starter notifies newly assigned shards.
 * The starter notifies revoked shards and reports revoke completion to the coordinator.
 * The starter retries incomplete revoke callbacks across heartbeat cycles for long drain windows.
+* The starter can report runtime capacity from a lifecycle provider or from the built-in Redis polling adapter.
 * The starter resets local assignment state on fencing and rejoins.
+* The starter can send a graceful leave heartbeat on shutdown.
 * The starter exposes an overridable `CoordinatorClient`.
 * The starter provides a producer routing cache that refreshes and replaces metadata by `metadataVersion`.
+* The starter rejects producer routing metadata that belongs to a different stream/group or omits active shard indexes.
 * The starter provides a Redis Stream publisher that routes by partition key and appends to the active shard.
+* The starter provides convenience payload and ordered batch publish APIs.
+* The publisher invalidates stale routing after write failures and supports opt-in bounded retry.
 * The starter provides an opt-in Redis Stream consumer adapter that polls assigned shards and acknowledges successfully handled records.
+* The starter records Micrometer metrics when a `MeterRegistry` is available.
 
 ## Future Work
 
-* Micrometer metrics for heartbeat latency, assignment lag, pending shards, and revoke duration.
 * Backoff and circuit-breaker policy for coordinator unavailability.

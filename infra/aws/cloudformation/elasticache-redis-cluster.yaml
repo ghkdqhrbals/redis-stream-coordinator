@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Redis Stream Coordinator development ElastiCache Redis OSS cluster."
+
+Parameters:
+  ReplicationGroupId:
+    Type: String
+    Default: redis-stream-coordinator-dev
+    MinLength: 1
+    MaxLength: 40
+    AllowedPattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  AllowedCidr:
+    Type: String
+    Default: "172.31.0.0/16"
+    Description: "CIDR allowed to connect to Redis. Use the VPC CIDR for development, or a narrower application subnet CIDR."
+  AllowedSecurityGroupId:
+    Type: String
+    Default: ""
+    Description: "Optional application security group allowed to connect to Redis. When set, AllowedCidr is ignored."
+  CacheNodeType:
+    Type: String
+    Default: cache.t4g.micro
+  ShardCount:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 90
+  ReplicasPerShard:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 5
+
+Conditions:
+  HasReplicas: !Not [!Equals [!Ref ReplicasPerShard, 0]]
+  UseAllowedSecurityGroup: !Not [!Equals [!Ref AllowedSecurityGroupId, ""]]
+  UseAllowedCidr: !Equals [!Ref AllowedSecurityGroupId, ""]
+
+Resources:
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Redis Stream Coordinator ElastiCache access"
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ReplicationGroupId}-redis"
+        - Key: Project
+          Value: redis-stream-coordinator
+
+  RedisIngressFromCidr:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: UseAllowedCidr
+    Properties:
+      GroupId: !Ref RedisSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      CidrIp: !Ref AllowedCidr
+      Description: "Redis access from development VPC CIDR"
+
+  RedisIngressFromSecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: UseAllowedSecurityGroup
+    Properties:
+      GroupId: !Ref RedisSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref AllowedSecurityGroupId
+      Description: "Redis access from application security group"
+
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: "Redis Stream Coordinator ElastiCache subnets"
+      SubnetIds: !Ref SubnetIds
+      Tags:
+        - Key: Project
+          Value: redis-stream-coordinator
+
+  RedisReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupId: !Ref ReplicationGroupId
+      ReplicationGroupDescription: "Redis Stream Coordinator Redis OSS cluster mode group"
+      Engine: redis
+      CacheNodeType: !Ref CacheNodeType
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      NumNodeGroups: !Ref ShardCount
+      ReplicasPerNodeGroup: !Ref ReplicasPerShard
+      AutomaticFailoverEnabled: !If [HasReplicas, true, false]
+      MultiAZEnabled: !If [HasReplicas, true, false]
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: false
+      Port: 6379
+      Tags:
+        - Key: Project
+          Value: redis-stream-coordinator
+
+Outputs:
+  ReplicationGroupId:
+    Value: !Ref RedisReplicationGroup
+  ConfigurationEndpoint:
+    Value: !Sub
+      - "${Host}:${Port}"
+      - Host: !GetAtt RedisReplicationGroup.ConfigurationEndPoint.Address
+        Port: !GetAtt RedisReplicationGroup.ConfigurationEndPoint.Port
+  RedisSecurityGroupId:
+    Value: !Ref RedisSecurityGroup
+  RedisSubnetGroupName:
+    Value: !Ref RedisSubnetGroup

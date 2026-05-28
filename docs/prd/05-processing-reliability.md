@@ -29,3 +29,5 @@ Coordinator heartbeat response의 `assignment.assignedShards`에서 기존 owned
 Coordinator heartbeat response의 `assignment.assignedShards`에 새 shard가 포함되면 member는 shard를 `ownedShards`에 반영하고, 실제 Redis Stream read/recovery는 member data-plane 정책에 따라 수행한다.
 
 Coordinator가 `FENCED_MEMBER_EPOCH`을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 `memberEpoch=0` full heartbeat로 rejoin한다.
+
+Coordinator는 member가 보고한 `ownedShards`/`revokingShards`를 server-side target assignment와 이전에 수락한 current assignment 기준으로 검증한다. 아직 pending인 shard, 다른 live member가 소유 중인 shard, 또는 더 이상 허용되지 않는 shard를 owned로 보고하면 stale ownership으로 보고 fencing한다. 이미 처리된 terminal `REVOKED` duplicate report는 fencing하지 않고 무시한다.

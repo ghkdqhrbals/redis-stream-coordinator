@@ -20,6 +20,8 @@ Included:
 * revoke before assign dependency handling
 * stream version migration
 * coordinator/member metrics
+* coordinator Docker image path and local Compose deployment
+* open source contribution, testing, security, release, and operations documentation
 
 Excluded:
 
@@ -65,11 +67,12 @@ Costs:
 
 ## Risks
 
-* target assignment write와 member current assignment 처리 순서가 꼬이면 stale member가 잘못된 owner로 남을 수 있다.
+* target assignment write와 member current assignment 처리 순서가 꼬이면 stale member가 잘못된 owner로 남을 수 있다. Coordinator는 heartbeat ownership report를 target/current assignment 기준으로 검증하고 unauthorized ownership report를 fencing한다.
 * member lease TTL이 너무 짧으면 일시적 네트워크 지연에도 EXPIRED 처리가 발생할 수 있다.
 * Redis outage 시 coordinator와 data plane이 함께 영향받는다.
 * assignment state가 손상되면 수동 복구 runbook이 필요하다.
 * shard count migration 중 old/new key ordering이 깨질 수 있다.
+* public Docker image release에는 version tag, compatibility note, and smoke result가 함께 공개되어야 한다.
 
 ## Maintainability Improvements
 
@@ -78,7 +81,7 @@ Costs:
 * `EXPIRED` member와 migration metadata는 삭제하지 않고 장기간 유지한다. 정리가 필요하면 별도 운영 작업으로 다룬다.
 * Admin API mutation은 audit log를 필수로 남긴다. 운영자가 누가 언제 group metadata를 바꿨는지 추적할 수 있어야 한다.
 * state transition, sticky assignment, heartbeat assignment deduplication은 table-driven test와 golden JSON fixture로 관리한다.
-* runbook은 최소 세 가지를 제공한다: coordinator API unavailable, migration drain 지연, assignment invariant violation.
+* runbook은 최소 세 가지를 제공한다: coordinator API unavailable, migration drain 지연, assignment invariant violation. Current runbook lives at [`../operations-runbook.md`](../operations-runbook.md).
 
 ## Open Questions
 
@@ -97,3 +100,4 @@ Costs:
 * MVP rebalance style: coordinator-driven incremental reconciliation
 * MVP shard count source of truth: Coordinator Admin API로 생성/변경된 coordinator metadata
 * MVP consumer `maxConcurrency` source of truth: Coordinator Admin API로 변경된 consumer concurrency policy
+* MVP coordinator deployment artifact: Java 24 Docker image plus Spring Boot jar

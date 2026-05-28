@@ -22,7 +22,9 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 ## Modules
 
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
-* `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, receive assignment changes, and implement shard lifecycle callbacks.
+* `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
+* `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
+* `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
 
 ## Versioning
 
@@ -126,11 +128,42 @@ redis-stream-coordinator:
 ## Documentation
 
 * [Implementation Status](docs/implementation-status.md)
+* [Docker Guide](docs/docker.md)
+* [Testing Guide](docs/testing.md)
+* [Operations Runbook](docs/operations-runbook.md)
 * [IntelliJ Setup](docs/intellij-setup.md)
+* [Contributing](CONTRIBUTING.md)
+* [Security Policy](SECURITY.md)
+* [Changelog](CHANGELOG.md)
+
+## Docker Quick Start
+
+```bash
+docker compose --profile coordinator up --build
+curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
+```
+
+Run a full local pod smoke stack with Redis Cluster, coordinator, two consumer pods, and one auto-publishing pod:
+
+```bash
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+curl -sS http://localhost:18090/sample/status
+curl -sS http://localhost:18081/sample/events
+curl -sS http://localhost:18082/sample/events
+```
+
+Swagger UI is available for interactive local testing:
+
+* Coordinator: `http://localhost:8080/swagger-ui.html`
+* Consumer pod 1: `http://localhost:18081/swagger-ui.html`
+* Consumer pod 2: `http://localhost:18082/swagger-ui.html`
+* Publisher pod: `http://localhost:18090/swagger-ui.html`
+
+Use `admin` / `password` in the coordinator Swagger Authorize dialog for protected coordinator endpoints.
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, consumer heartbeat integration, and a Codex review workflow.
+This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
 
 ## License
 

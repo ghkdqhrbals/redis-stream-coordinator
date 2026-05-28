@@ -20,3 +20,5 @@ rootProject.name = "redis-stream-coordinator"
 
 include("coordinator-server")
 include("redisstream-spring-boot-starter")
+include("samples:consumer-pod")
+include("samples:publisher-pod")

@@ -24,6 +24,7 @@
 * Coordinator-driven rebalance: member가 owner를 최종 결정하지 않고 coordinator가 target assignment를 계산한다.
 * Declarative target assignment: coordinator는 group이 수렴해야 할 desired shard ownership을 저장한다.
 * Current assignment reporting: member는 heartbeat마다 실제 owned/revoking shard 상태를 보고한다.
+* Current assignment validation: coordinator는 target assignment와 이전에 수락한 current assignment 기준으로 stale ownership report를 fencing한다.
 * Heartbeat assignment channel: coordinator는 heartbeat response로 assigned/pending shard assignment와 fencing status를 전달한다.
 * Incremental reconciliation: group-wide stop-the-world barrier 없이 변경된 member/shard만 revoke/assign한다.
 * Revoke-before-assign dependency: 기존 owner의 revoke ack 또는 member expiration 확인 전 새 owner에게 assign하지 않는다.

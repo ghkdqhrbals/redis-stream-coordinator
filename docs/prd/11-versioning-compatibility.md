@@ -76,7 +76,7 @@ Rules:
 
 ## Redis Metadata Schema Version
 
-Redis-backed state must eventually include explicit schema version metadata.
+Redis-backed state includes explicit schema version metadata.
 
 Rules:
 
@@ -88,7 +88,10 @@ Rules:
 Current MVP status:
 
 * Redis store uses aggregate/projection keys and `storeRevision` CAS.
-* Explicit `schemaVersion` is still planned.
+* Redis-backed coordinator state access is serialized through a Redis state mutex so open source deployments do not depend on user-managed single-active rollout rules.
+* Group aggregate metadata includes `schemaVersion=1`.
+* Coordinator rejects unsupported future schema versions instead of overwriting them.
+* Legacy group aggregate metadata without `schemaVersion` is treated as version `1`.
 
 ## Deprecation Policy
 
@@ -116,6 +119,7 @@ Every release should update:
 * migration notes for Redis schema changes
 * deprecation list
 * test result summary for coordinator and RedisStream starter modules
+* Docker image smoke result and published GHCR image tag, when releasing the coordinator image
 
 ## Required Tests
 

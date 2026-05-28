@@ -57,12 +57,33 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `openapi docs and swagger ui are exposed for interactive tests`() {
+        mockMvc.perform(get("/v3/api-docs"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.info.title").value("Redis Stream Coordinator API"))
+            .andExpect(jsonPath("$.components.securitySchemes.basicAuth.type").value("http"))
+            .andExpect(jsonPath("$.components.securitySchemes.basicAuth.scheme").value("basic"))
+
+        mockMvc.perform(get("/swagger-ui.html"))
+            .andExpect(status().is3xxRedirection)
+    }
+
+    @Test
+    fun `basic auth scheme is parsed case insensitively`() {
+        mockMvc.perform(
+            get("/coord/v1/monitoring/groups")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth().replaceFirst("Basic ", "basic ")),
+        )
+            .andExpect(status().isOk)
+    }
+
+    @Test
     fun `admin api validates create group body`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-validation/groups/orders-consumer")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"initialShardCount":0,"hashAlgorithm":"","requestedBy":""}"""),
+                .content("""{"initialShardCount":0,"requestedBy":""}"""),
         )
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.errorCode").value(CoordinatorError.INVALID_REQUEST.code))
@@ -118,8 +139,6 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.metadataVersion").value(1))
             .andExpect(jsonPath("$.activeWriteVersion").value(1))
             .andExpect(jsonPath("$.shardCount").value(2))
-            .andExpect(jsonPath("$.hashAlgorithm").value("murmur3"))
-            .andExpect(jsonPath("$.hashSeed").value("default"))
             .andExpect(jsonPath("$.streamKeyPattern").value("http-routing:v{streamVersion}:shard:{shardIndex}"))
             .andExpect(jsonPath("$.shards.length()").value(2))
             .andExpect(jsonPath("$.shards[0].streamKey").value("http-routing:v1:shard:0"))
@@ -151,6 +170,7 @@ class CoordinatorHttpIntegrationTest {
                 ),
         )
             .andExpect(status().isAccepted)
+            .andExpect(jsonPath("$.reshardingId").exists())
             .andExpect(jsonPath("$.fromVersion").value(1))
             .andExpect(jsonPath("$.toVersion").value(2))
             .andExpect(jsonPath("$.toShardCount").value(4))
@@ -173,7 +193,8 @@ class CoordinatorHttpIntegrationTest {
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.migrations.length()").value(1))
-            .andExpect(jsonPath("$.activeMigration").exists())
+            .andExpect(jsonPath("$.migrations[0].reshardingId").exists())
+            .andExpect(jsonPath("$.activeReshardingId").exists())
     }
 
     @Test
@@ -245,7 +266,6 @@ class CoordinatorHttpIntegrationTest {
     private fun createGroupRequest(initialShardCount: Int? = null): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 
@@ -329,7 +349,6 @@ class CoordinatorAuthenticatedMemberHttpIntegrationTest {
     private fun createGroupRequest(initialShardCount: Int? = null): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 
