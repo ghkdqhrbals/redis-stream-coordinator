@@ -26,7 +26,7 @@ data class CoordinatorAuditEvent(
     val path: String,
     val streamPrefix: String?,
     val consumerGroup: String?,
-    val migrationId: String? = null,
+    val reshardingId: String? = null,
 )
 
 interface CoordinatorAuditLogSink {
@@ -40,7 +40,7 @@ class StructuredCoordinatorAuditLogSink : CoordinatorAuditLogSink {
 
     override fun append(event: CoordinatorAuditEvent) {
         logger.info(
-            "audit action={} outcome={} status={} principal={} coordinatorId={} streamPrefix={} consumerGroup={} migrationId={} method={} path={}",
+            "audit action={} outcome={} status={} principal={} coordinatorId={} streamPrefix={} consumerGroup={} reshardingId={} method={} path={}",
             event.action,
             event.outcome,
             event.status,
@@ -48,7 +48,7 @@ class StructuredCoordinatorAuditLogSink : CoordinatorAuditLogSink {
             event.coordinatorId,
             event.streamPrefix ?: "",
             event.consumerGroup ?: "",
-            event.migrationId ?: "",
+            event.reshardingId ?: "",
             event.method,
             event.path,
         )
@@ -91,7 +91,7 @@ class CoordinatorAuditLogger(
         path: String,
         streamPrefix: String?,
         consumerGroup: String?,
-        migrationId: String? = null,
+        reshardingId: String? = null,
     ) {
         sink.append(
             CoordinatorAuditEvent(
@@ -105,7 +105,7 @@ class CoordinatorAuditLogger(
                 path = path,
                 streamPrefix = streamPrefix,
                 consumerGroup = consumerGroup,
-                migrationId = migrationId,
+                reshardingId = reshardingId,
             ),
         )
     }

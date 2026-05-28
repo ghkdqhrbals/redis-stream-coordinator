@@ -37,23 +37,6 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `group create rejects unsupported hash algorithm before state is written`() {
-        val error = kotlin.runCatching {
-            service.createGroup(
-                "bad-hash",
-                "orders-consumer",
-                createGroupRequest().copy(hashAlgorithm = "sha256"),
-            )
-        }.exceptionOrNull() as CoordinatorException
-
-        assertEquals(CoordinatorError.INVALID_REQUEST, error.error)
-        assertEquals(CoordinatorError.INVALID_REQUEST.code, error.errorCode)
-        assertEquals(CoordinatorError.GROUP_NOT_FOUND, kotlin.runCatching {
-            service.getGroup("bad-hash", "orders-consumer")
-        }.exceptionOrNull().let { it as CoordinatorException }.error)
-    }
-
-    @Test
     fun `heartbeat rejects member id mismatch`() {
         val response = service.heartbeat(
             streamPrefix = "orders",
@@ -361,7 +344,7 @@ class CoordinatorServiceTest {
         val rolledBack = service.rollbackMigration(
             "metrics",
             "metrics-consumer",
-            migration.migrationId,
+            migration.reshardingId,
         )
         val group = service.getGroup("metrics", "metrics-consumer")
 
@@ -376,7 +359,7 @@ class CoordinatorServiceTest {
         service.createGroup("metrics", "metrics-consumer", createGroupRequest(initialShardCount = 2))
 
         val error = kotlin.runCatching {
-            service.rollbackMigration("metrics", "metrics-consumer", "mig-missing")
+            service.rollbackMigration("metrics", "metrics-consumer", "reshard-missing")
         }.exceptionOrNull() as CoordinatorException
 
         assertEquals(CoordinatorError.MIGRATION_NOT_FOUND, error.error)
@@ -989,7 +972,7 @@ class CoordinatorServiceTest {
             heartbeat("member-a", memberEpoch = oldAndNew.memberEpoch, ownedShards = oldAndNew.assignment.assignedShards),
         )
         val drainingGroup = service.getGroup("drain", "orders-consumer")
-        val drainingMigration = service.getMigration("drain", "orders-consumer", migration.migrationId)
+        val drainingMigration = service.getMigration("drain", "orders-consumer", migration.reshardingId)
 
         assertEquals(MigrationState.DRAINING, drainingMigration.state)
         assertEquals(setOf(2), drainingGroup.readableVersions)
@@ -1010,7 +993,7 @@ class CoordinatorServiceTest {
                 ),
             ),
         )
-        assertEquals(MigrationState.DRAINING, service.getMigration("drain", "orders-consumer", migration.migrationId).state)
+        assertEquals(MigrationState.DRAINING, service.getMigration("drain", "orders-consumer", migration.reshardingId).state)
 
         val completed = service.heartbeat(
             "drain",
@@ -1027,7 +1010,7 @@ class CoordinatorServiceTest {
             ),
         )
         val completedGroup = service.getGroup("drain", "orders-consumer")
-        val completedMigration = service.getMigration("drain", "orders-consumer", migration.migrationId)
+        val completedMigration = service.getMigration("drain", "orders-consumer", migration.reshardingId)
 
         assertEquals(MigrationState.DEPRECATED, completedMigration.state)
         assertEquals(null, completedGroup.activeMigration)
@@ -1090,8 +1073,6 @@ class CoordinatorServiceTest {
             "orders-consumer",
             CreateGroupRequest(
                 initialShardCount = 2,
-                hashAlgorithm = "murmur3",
-                hashSeed = "tenant-a",
                 requestedBy = "test",
             ),
         )
@@ -1106,8 +1087,6 @@ class CoordinatorServiceTest {
 
         assertEquals(1, beforeScale.activeWriteVersion)
         assertEquals(2, beforeScale.shardCount)
-        assertEquals(RoutingHashAlgorithms.MURMUR3_32, beforeScale.hashAlgorithm)
-        assertEquals("tenant-a", beforeScale.hashSeed)
         assertEquals("route-orders:v{streamVersion}:shard:{shardIndex}", beforeScale.streamKeyPattern)
         assertEquals(listOf("route-orders:v1:shard:0", "route-orders:v1:shard:1"), beforeScale.shards.map { it.streamKey })
         assertEquals(2, afterScale.activeWriteVersion)
@@ -1289,7 +1268,6 @@ class CoordinatorServiceTest {
     private fun createGroupRequest(initialShardCount: Int? = null): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 

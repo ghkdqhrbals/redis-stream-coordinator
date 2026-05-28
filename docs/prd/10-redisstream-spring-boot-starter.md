@@ -194,9 +194,9 @@ redis-stream-coordinator:
     publish-max-attempts: 1
 ```
 
-Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher supports `murmur3_32_unbiased` as the default coordinator algorithm, plus the legacy `murmur3`, `murmur3_32`, and `murmur3-32` names.
+Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher uses the v1 routing contract; applications do not configure a per-group hash algorithm or seed.
 
-`murmur3_32_unbiased` uses deterministic rejection sampling instead of a direct `% shardCount` mapping. This removes modulo bias while keeping routing deterministic for the same `hashSeed`, partition key, and shard count. Legacy algorithm names keep the previous modulo mapping for compatibility, because changing the stored hash algorithm for an existing group would move partition keys.
+The v1 routing contract uses 32-bit Murmur3 with deterministic rejection sampling instead of a direct `% shardCount` mapping. This removes modulo bias while keeping routing deterministic for the same partition key and shard count. Future incompatible routing changes must use a new producer-routing protocol/API version.
 
 `RedisStreamPublisher` supports single-message field maps, a convenience payload method that writes the `payload` field, and ordered best-effort batch publishing through `publishAll`. A failed write invalidates the routing cache so the next publish refreshes metadata. `publish-max-attempts` can opt into same-call retry after refreshing metadata, but the default is `1` because retrying after an uncertain Redis write can duplicate messages unless the application has an idempotent publish key or duplicate-tolerant consumer.
 

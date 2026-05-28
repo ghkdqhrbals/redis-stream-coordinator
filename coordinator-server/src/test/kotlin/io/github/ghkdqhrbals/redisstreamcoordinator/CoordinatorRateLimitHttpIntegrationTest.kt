@@ -100,7 +100,6 @@ class CoordinatorRateLimitHttpIntegrationTest {
     private fun createGroupRequest(initialShardCount: Int? = null): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 

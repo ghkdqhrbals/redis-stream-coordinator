@@ -99,7 +99,7 @@ class AuditLogInterceptor(
             path = request.requestURI,
             streamPrefix = target.streamPrefix,
             consumerGroup = target.consumerGroup,
-            migrationId = target.migrationId,
+            reshardingId = target.reshardingId,
         )
     }
 }
@@ -120,7 +120,7 @@ private data class AuditTarget(
     val action: CoordinatorAuditAction,
     val streamPrefix: String,
     val consumerGroup: String,
-    val migrationId: String? = null,
+    val reshardingId: String? = null,
 )
 
 private fun HttpServletRequest.authenticate(properties: CoordinatorProperties): AuthenticatedPrincipal? {
@@ -177,7 +177,7 @@ private fun HttpServletRequest.auditTarget(): AuditTarget? {
         method.equals("PATCH", ignoreCase = true) && tail == listOf("consumer-concurrency") ->
             AuditTarget(CoordinatorAuditAction.UPDATE_CONSUMER_CONCURRENCY, streamPrefix, consumerGroup)
         method.equals("POST", ignoreCase = true) && tail.size == 3 && tail[0] == "migrations" && tail[2] == "rollback" ->
-            AuditTarget(CoordinatorAuditAction.ROLLBACK_MIGRATION, streamPrefix, consumerGroup, migrationId = tail[1])
+            AuditTarget(CoordinatorAuditAction.ROLLBACK_MIGRATION, streamPrefix, consumerGroup, reshardingId = tail[1])
         else -> null
     }
 }

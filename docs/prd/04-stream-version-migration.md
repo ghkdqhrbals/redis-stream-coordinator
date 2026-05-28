@@ -16,13 +16,13 @@ GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 
 ```text
 metadata = metadataCache.activeWrite(streamPrefix, consumerGroup)
-shardIndex = route(metadata.hashAlgorithm, metadata.hashSeed, partitionKey, metadata.shardCount)
+shardIndex = routeV1(partitionKey, metadata.shardCount)
 streamKey = format(metadata.streamKeyPattern, metadata.activeWriteVersion, shardIndex)
 ```
 
 `metadataVersion`이 바뀌면 producer는 cached routing metadata를 갱신해야 한다.
 
-New groups default to `murmur3_32_unbiased`. The producer computes a 32-bit Murmur3 hash with the stored seed, rejects values in the incomplete modulo tail, and rehashes deterministically until the value maps uniformly into `[0, shardCount)`. Legacy `murmur3`, `murmur3_32`, and `murmur3-32` metadata keeps the previous modulo mapping to avoid moving existing partition keys.
+Routing is a v1 protocol contract, not group metadata. The producer computes a 32-bit Murmur3 hash, rejects values in the incomplete modulo tail, and rehashes deterministically until the value maps uniformly into `[0, shardCount)`. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.
 
 ## Coordinator Admin Scale Request
 
@@ -46,7 +46,7 @@ sequenceDiagram
     C->>Store: active write를 next version으로 전환
     C->>Store: old ACTIVE를 DRAINING, new를 ACTIVE로 저장
     C->>Store: groupEpoch 증가와 target assignment 재계산
-    C-->>Admin: migrationId와 old/new version 반환
+    C-->>Admin: reshardingId와 old/new version 반환
     M->>C: 다음 heartbeat에서 metadataVersion 확인
     C-->>M: readable versions와 assignment assigned/pending 전달
 ```
@@ -81,7 +81,6 @@ POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 ```json
 {
   "initialShardCount": 12,
-  "hashSeed": "default",
   "versionPolicy": "AUTO_INCREMENT",
   "consumerConcurrencyPolicy": {
     "defaultMaxConcurrency": 12
@@ -126,7 +125,6 @@ Coordinator는 다음 조건을 만족할 때만 요청을 수락한다.
 * 같은 group에 active migration이 없다.
 * `targetShardCount`가 현재 active shard count와 다르다.
 * `targetShardCount`가 양수이다.
-* 현재 active stream metadata의 hash algorithm과 hash seed가 요청 정책과 호환된다.
 
 `consumerConcurrencyPolicy`를 함께 보낸 scale 요청은 migration metadata와 consumer concurrency policy를 하나의 coordinator metadata update로 반영한다.
 같은 group에 active migration이 있거나 이미 같은 shard count이면 새 migration을 만들지 않고 conflict 또는 no-op response로 처리한다.
@@ -135,7 +133,7 @@ Response:
 
 ```json
 {
-  "migrationId": "mig-018f8d27",
+  "reshardingId": "reshard-018f8d27",
   "fromVersion": 1,
   "toVersion": 2,
   "fromShardCount": 12,
@@ -182,7 +180,7 @@ GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 ### Get Migration
 
 ```http
-GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}
+GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
 ```
 
 반환 값에는 old/new version, member-reported drain progress, revoke progress가 포함된다.
@@ -190,7 +188,7 @@ GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migratio
 ### Rollback Migration
 
 ```http
-POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{migrationId}/rollback
+POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
 ```
 
 Rollback은 cutover 직후 rollback window 안에서만 허용한다. 이미 new version에 write된 message는 운영 정책에 따라 drain 또는 replay 대상이 된다.

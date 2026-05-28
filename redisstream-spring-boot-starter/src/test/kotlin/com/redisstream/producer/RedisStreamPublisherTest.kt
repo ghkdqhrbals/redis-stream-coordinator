@@ -209,8 +209,6 @@ class RedisStreamPublisherTest {
             metadataVersion = version,
             activeWriteVersion = activeWriteVersion,
             shardCount = 2,
-            hashAlgorithm = "murmur3",
-            hashSeed = "default",
             streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
             shards = (0 until 2).map { shardIndex ->
                 ProducerRoutingShard(

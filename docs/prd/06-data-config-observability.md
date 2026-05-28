@@ -22,7 +22,7 @@ redis-stream:coord:{streamPrefix:consumerGroup}:member:{memberId}
 redis-stream:coord:{streamPrefix:consumerGroup}:target-assignment
 redis-stream:coord:{streamPrefix:consumerGroup}:current-assignment:{memberId}
 redis-stream:coord:{streamPrefix:consumerGroup}:migration:active
-redis-stream:coord:{streamPrefix:consumerGroup}:migration:{migrationId}
+redis-stream:coord:{streamPrefix:consumerGroup}:migration:{reshardingId}
 redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
 ```
 
@@ -208,7 +208,7 @@ Structured log fields:
 * `eventType`
 * `reason`
 * `requestedBy`
-* `migrationId`
+* `reshardingId`
 
 Admin audit events are emitted for create, scale, consumer concurrency update, and rollback. The default sink is structured application logs. When `coordinator.audit.sink=redis`, the coordinator writes JSON audit events to:
 

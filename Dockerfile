@@ -3,7 +3,6 @@
 FROM eclipse-temurin:24-jdk AS build
 
 WORKDIR /workspace
-ARG APP_TASK=:coordinator-server:bootJar
 ARG APP_LIB_DIR=coordinator-server/build/libs
 
 COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts gradle.properties ./
@@ -13,7 +12,7 @@ COPY coordinator-server ./coordinator-server
 COPY redisstream-spring-boot-starter ./redisstream-spring-boot-starter
 COPY samples ./samples
 
-RUN --mount=type=cache,target=/root/.gradle ./gradlew "$APP_TASK" --no-daemon \
+RUN --mount=type=cache,target=/root/.gradle ./gradlew :coordinator-server:bootJar --no-daemon \
     && find "$APP_LIB_DIR" -maxdepth 1 -type f -name "*.jar" ! -name "*-plain.jar" \
       -exec cp {} /workspace/application.jar \;
 

@@ -120,7 +120,6 @@ class RedisStreamProvisioningIntegrationTest {
     private fun createGroupRequest(initialShardCount: Int): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 

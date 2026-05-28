@@ -104,7 +104,7 @@ class RedisCoordinatorStateStoreIntegrationTest {
             ?.let { objectMapper.readValue<Set<ShardId>>(it) }
         val currentAssignment = redisTemplate.opsForHash<String, String>().get(keys.currentAssignments, "member-a")
             ?.let { objectMapper.readValue<Set<ShardId>>(it) }
-        val storedMigration = redisTemplate.opsForHash<String, String>().get(keys.migrations, migration.migrationId)
+        val storedMigration = redisTemplate.opsForHash<String, String>().get(keys.migrations, migration.reshardingId)
             ?.let { objectMapper.readValue<Migration>(it) }
 
         assertNotNull(storedGroup)
@@ -113,7 +113,7 @@ class RedisCoordinatorStateStoreIntegrationTest {
         assertTrue(assertNotNull(targetAssignment).containsAll(setOf(ShardId(1, 0), ShardId(1, 1))))
         assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), currentAssignment)
         assertEquals(MigrationState.ACTIVE, assertNotNull(storedMigration).state)
-        assertEquals(migration.migrationId, redisTemplate.opsForValue().get(keys.activeMigration))
+        assertEquals(migration.reshardingId, redisTemplate.opsForValue().get(keys.activeMigration))
     }
 
     @Test
@@ -176,7 +176,6 @@ class RedisCoordinatorStateStoreIntegrationTest {
     private fun createGroupRequest(initialShardCount: Int): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 

@@ -139,7 +139,7 @@ class RedisCoordinatorStateStore(
             previousRevision.toString(),
             nextRevision.toString(),
             objectMapper.writeValueAsString(group),
-            projection.activeMigrationId.orEmpty(),
+            projection.activeReshardingId.orEmpty(),
         )
         appendHashArgs(args, projection.members)
         appendHashArgs(args, projection.targetAssignments)
@@ -261,7 +261,7 @@ data class RedisCoordinatorStateProjection(
     val targetAssignments: Map<String, Set<ShardId>>,
     val currentAssignments: Map<String, Set<ShardId>>,
     val migrations: Map<String, Migration>,
-    val activeMigrationId: String?,
+    val activeReshardingId: String?,
 )
 
 fun GroupMetadata.toRedisStateProjection(): RedisCoordinatorStateProjection =
@@ -274,7 +274,7 @@ fun GroupMetadata.toRedisStateProjection(): RedisCoordinatorStateProjection =
             .mapValues { (_, member) -> member.currentAssignment.toSortedSet() }
             .toSortedMap(),
         migrations = migrations.toSortedMap(),
-        activeMigrationId = activeMigrationId,
+        activeReshardingId = activeReshardingId,
     )
 
 class RedisCoordinatorStateKeys(

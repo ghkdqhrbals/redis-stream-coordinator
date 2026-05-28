@@ -50,11 +50,6 @@ class CoordinatorService(
         val shardCount = request.initialShardCount ?: properties.defaults.initialShardCount
         val policy = request.consumerConcurrencyPolicy
             ?: ConsumerConcurrencyPolicy(properties.defaults.consumerMaxConcurrency)
-        val hashAlgorithm = try {
-            RoutingHashAlgorithms.normalize(request.hashAlgorithm)
-        } catch (error: IllegalArgumentException) {
-            throw CoordinatorException(CoordinatorError.INVALID_REQUEST, error.message ?: CoordinatorError.INVALID_REQUEST.defaultMessage)
-        }
         val group = GroupMetadata(
             streamPrefix = streamPrefix,
             consumerGroup = consumerGroup,
@@ -65,8 +60,6 @@ class CoordinatorService(
             activeWriteVersion = 1,
             readableVersions = setOf(1),
             shardCountsByVersion = linkedMapOf(1 to shardCount),
-            hashAlgorithm = hashAlgorithm,
-            hashSeed = request.hashSeed,
             consumerConcurrencyPolicy = policy,
             createdAt = now,
             updatedAt = now,
@@ -123,7 +116,7 @@ class CoordinatorService(
             metrics.recordScaleRequest(
                 streamPrefix,
                 consumerGroup,
-                if (migration.migrationId == "noop") "NOOP" else "SUCCESS",
+                if (migration.reshardingId == "noop") "NOOP" else "SUCCESS",
             )
             return migration
         } catch (error: RuntimeException) {
@@ -137,7 +130,7 @@ class CoordinatorService(
         val now = Instant.now(clock)
         expireMembers(group, now)
 
-        val activeMigration = group.activeMigrationId?.let { group.migrations[it] }
+        val activeMigration = group.activeReshardingId?.let { group.migrations[it] }
         if (activeMigration != null) {
             if (activeMigration.state == MigrationState.PREPARING &&
                 activeMigration.toShardCount == request.targetShardCount
@@ -152,7 +145,7 @@ class CoordinatorService(
         if (fromShardCount == request.targetShardCount) {
             stateStore.save(group.key(), group)
             return Migration(
-                migrationId = "noop",
+                reshardingId = "noop",
                 fromVersion = fromVersion,
                 toVersion = fromVersion,
                 fromShardCount = fromShardCount,
@@ -165,7 +158,7 @@ class CoordinatorService(
 
         val toVersion = group.shardCountsByVersion.keys.maxOrNull()!! + 1
         val migration = Migration(
-            migrationId = newMigrationId(),
+            reshardingId = newReshardingId(),
             fromVersion = fromVersion,
             toVersion = toVersion,
             fromShardCount = fromShardCount,
@@ -175,8 +168,8 @@ class CoordinatorService(
             updatedAt = now,
         )
 
-        group.migrations[migration.migrationId] = migration
-        group.activeMigrationId = migration.migrationId
+        group.migrations[migration.reshardingId] = migration
+        group.activeReshardingId = migration.reshardingId
         group.updatedAt = now
         stateStore.save(group.key(), group)
         return provisionAndActivatePreparedMigration(group, migration, request, now)
@@ -269,34 +262,34 @@ class CoordinatorService(
     }
 
     @Synchronized
-    fun getMigration(streamPrefix: String, consumerGroup: String, migrationId: String): Migration =
+    fun getMigration(streamPrefix: String, consumerGroup: String, reshardingId: String): Migration =
         stateMutex.withCriticalSection("get-migration") {
-            requireGroup(streamPrefix, consumerGroup).migrations[migrationId]
+            requireGroup(streamPrefix, consumerGroup).migrations[reshardingId]
                 ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
         }
 
     @Synchronized
-    fun rollbackMigration(streamPrefix: String, consumerGroup: String, migrationId: String): Migration =
+    fun rollbackMigration(streamPrefix: String, consumerGroup: String, reshardingId: String): Migration =
         stateMutex.withCriticalSection("rollback-migration") {
-            withStateConflictRetry("rollback-migration") { rollbackMigrationOnce(streamPrefix, consumerGroup, migrationId) }
+            withStateConflictRetry("rollback-migration") { rollbackMigrationOnce(streamPrefix, consumerGroup, reshardingId) }
         }
 
-    private fun rollbackMigrationOnce(streamPrefix: String, consumerGroup: String, migrationId: String): Migration {
+    private fun rollbackMigrationOnce(streamPrefix: String, consumerGroup: String, reshardingId: String): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
-        val migration = group.migrations[migrationId]
+        val migration = group.migrations[reshardingId]
             ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
 
         if (migration.state == MigrationState.ROLLED_BACK || migration.state == MigrationState.ROLLING_BACK) {
             return migration
         }
-        if (group.activeMigrationId != migrationId || migration.state != MigrationState.ACTIVE) {
+        if (group.activeReshardingId != reshardingId || migration.state != MigrationState.ACTIVE) {
             throw CoordinatorException(CoordinatorError.ROLLBACK_NOT_ALLOWED)
         }
 
         val now = Instant.now(clock)
         migration.state = MigrationState.ROLLED_BACK
         migration.updatedAt = now
-        group.activeMigrationId = null
+        group.activeReshardingId = null
         group.activeWriteVersion = migration.fromVersion
         group.readableVersions = setOf(migration.fromVersion)
         group.shardCountsByVersion.remove(migration.toVersion)
@@ -550,7 +543,7 @@ class CoordinatorService(
             val group = requireGroup(streamPrefix, consumerGroup)
             MigrationsResponse(
                 migrations = group.migrations.values.sortedBy { it.createdAt },
-                activeMigration = group.activeMigrationId,
+                activeReshardingId = group.activeReshardingId,
             )
         }
     }
@@ -789,7 +782,7 @@ class CoordinatorService(
     }
 
     private fun advanceMigrationDrainState(group: GroupMetadata, now: Instant): Boolean {
-        val migration = group.activeMigrationId?.let { group.migrations[it] } ?: return false
+        val migration = group.activeReshardingId?.let { group.migrations[it] } ?: return false
         return when (migration.state) {
             MigrationState.ACTIVE -> startMigrationDrainIfReady(group, migration, now)
             MigrationState.DRAINING -> completeMigrationDrainIfReady(group, migration, now)
@@ -833,7 +826,7 @@ class CoordinatorService(
 
         migration.state = MigrationState.DEPRECATED
         migration.updatedAt = now
-        group.activeMigrationId = null
+        group.activeReshardingId = null
         group.readableVersions = setOf(migration.toVersion)
         bumpMetadata(group, now, bumpGroupEpoch = false)
         reconcile(group, now)
@@ -1011,7 +1004,7 @@ class CoordinatorService(
             readableVersions = readableVersions,
             shardCount = shardCountsByVersion.getValue(activeWriteVersion),
             consumerConcurrencyPolicy = consumerConcurrencyPolicy,
-            activeMigration = activeMigrationId?.let { migrations[it] },
+            activeMigration = activeReshardingId?.let { migrations[it] },
             targetAssignmentSummary = targetAssignments.mapValues { it.value.size },
             currentAssignmentSummary = members.mapValues { it.value.currentAssignment.size },
         )
@@ -1024,8 +1017,6 @@ class CoordinatorService(
             metadataVersion = metadataVersion,
             activeWriteVersion = activeWriteVersion,
             shardCount = shardCountsByVersion.getValue(activeWriteVersion),
-            hashAlgorithm = hashAlgorithm,
-            hashSeed = hashSeed,
             streamKeyPattern = RedisStreamShardKeys.keyPattern(streamPrefix),
             shards = activeShardKeys.map { shardKey ->
                 ProducerRoutingShard(

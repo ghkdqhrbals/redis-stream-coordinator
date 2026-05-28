@@ -67,8 +67,6 @@ class RedisStreamShardKeysTest {
             activeWriteVersion = 2,
             readableVersions = setOf(1, 2),
             shardCountsByVersion = linkedMapOf(1 to 2, 2 to 4),
-            hashAlgorithm = "murmur3",
-            hashSeed = "default",
             consumerConcurrencyPolicy = ConsumerConcurrencyPolicy(defaultMaxConcurrency = 4),
             createdAt = Instant.parse("2026-05-22T00:00:00Z"),
             updatedAt = Instant.parse("2026-05-22T00:00:00Z"),

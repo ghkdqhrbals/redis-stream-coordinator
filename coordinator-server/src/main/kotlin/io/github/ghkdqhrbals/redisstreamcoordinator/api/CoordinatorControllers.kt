@@ -60,23 +60,23 @@ class AdminController(
     ): ConsumerConcurrencyResponse =
         coordinator.updateConsumerConcurrency(streamPrefix, consumerGroup, request)
 
-    @GetMapping("/migrations/{migrationId}")
+    @GetMapping("/migrations/{reshardingId}")
     fun getMigration(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
-        @PathVariable migrationId: String,
+        @PathVariable reshardingId: String,
     ): Migration =
-        coordinator.getMigration(streamPrefix, consumerGroup, migrationId)
+        coordinator.getMigration(streamPrefix, consumerGroup, reshardingId)
 
-    @PostMapping("/migrations/{migrationId}/rollback")
+    @PostMapping("/migrations/{reshardingId}/rollback")
     fun rollbackMigration(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
-        @PathVariable migrationId: String,
+        @PathVariable reshardingId: String,
         @Valid @RequestBody request: RollbackMigrationRequest,
     ): ResponseEntity<Migration> =
         ResponseEntity.status(HttpStatus.ACCEPTED).body(
-            coordinator.rollbackMigration(streamPrefix, consumerGroup, migrationId),
+            coordinator.rollbackMigration(streamPrefix, consumerGroup, reshardingId),
         )
 }
 

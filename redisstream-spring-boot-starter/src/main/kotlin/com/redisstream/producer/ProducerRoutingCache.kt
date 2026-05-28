@@ -121,20 +121,6 @@ class ProducerRoutingCache(
     )
 }
 
-object RedisStreamHashAlgorithms {
-    const val MURMUR3_32 = "murmur3_32"
-    const val MURMUR3_32_UNBIASED = "murmur3_32_unbiased"
-    const val DEFAULT = MURMUR3_32_UNBIASED
-
-    internal fun normalize(value: String): String =
-        when (value.trim().lowercase()) {
-            "murmur3", "murmur3_32", "murmur3-32" -> MURMUR3_32
-            "murmur3_32_unbiased", "murmur3-32-unbiased", "murmur3_unbiased", "murmur3-unbiased" ->
-                MURMUR3_32_UNBIASED
-            else -> throw IllegalArgumentException("Unsupported producer routing hash algorithm $value")
-        }
-}
-
 object RedisStreamPartitionHasher {
     private const val HASH_SPACE_SIZE = 4_294_967_296L
 
@@ -143,29 +129,17 @@ object RedisStreamPartitionHasher {
 
     fun shardIndex(metadata: ProducerRoutingResponse, partitionKey: ByteArray): Int {
         require(metadata.shardCount > 0) { "producer routing shardCount must be positive" }
-        val seed = Murmur3.hash32(metadata.hashSeed.toByteArray(Charsets.UTF_8))
-        return when (RedisStreamHashAlgorithms.normalize(metadata.hashAlgorithm)) {
-            RedisStreamHashAlgorithms.MURMUR3_32 ->
-                legacyModuloShardIndex(partitionKey, seed, metadata.shardCount)
-            RedisStreamHashAlgorithms.MURMUR3_32_UNBIASED ->
-                unbiasedShardIndex(partitionKey, seed, metadata.shardCount)
-            else -> error("unreachable hash algorithm ${metadata.hashAlgorithm}")
-        }
+        return unbiasedShardIndex(partitionKey, metadata.shardCount)
     }
 
-    private fun legacyModuloShardIndex(partitionKey: ByteArray, seed: Int, shardCount: Int): Int {
-        val hash = unsignedHash(partitionKey, seed)
-        return (hash % shardCount).toInt()
-    }
-
-    private fun unbiasedShardIndex(partitionKey: ByteArray, seed: Int, shardCount: Int): Int {
+    private fun unbiasedShardIndex(partitionKey: ByteArray, shardCount: Int): Int {
         val limit = HASH_SPACE_SIZE - (HASH_SPACE_SIZE % shardCount.toLong())
         var attempt = 0
         while (true) {
             val hash = if (attempt == 0) {
-                unsignedHash(partitionKey, seed)
+                unsignedHash(partitionKey, 0)
             } else {
-                unsignedHash(partitionKey, Murmur3.hash32(attempt.toLittleEndianBytes(), seed))
+                unsignedHash(partitionKey, Murmur3.hash32(attempt.toLittleEndianBytes()))
             }
             if (hash < limit) {
                 return (hash % shardCount).toInt()

@@ -151,7 +151,7 @@ class MicrometerCoordinatorMetrics(
         meters.membersTotal.set(group.members.size.toLong())
         meters.membersActive.set(group.members.values.count { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }.toLong())
         meters.membersExpired.set(group.members.values.count { it.state == MemberState.EXPIRED }.toLong())
-        meters.migrationActive.set(if (group.activeMigrationId != null) 1 else 0)
+        meters.migrationActive.set(if (group.activeReshardingId != null) 1 else 0)
         meters.activeMigrationAgeSeconds.set(group.activeMigrationAgeSeconds())
         meters.revokePending.set(group.members.values.sumOf { it.revoking.size }.toLong())
         meters.invariantViolations.set(invariantViolationCount.toLong())
@@ -183,7 +183,7 @@ class MicrometerCoordinatorMetrics(
     }
 
     private fun GroupMetadata.activeMigrationAgeSeconds(): Long {
-        val migration = activeMigrationId?.let { migrations[it] } ?: return 0
+        val migration = activeReshardingId?.let { migrations[it] } ?: return 0
         if (migration.state == MigrationState.DEPRECATED || migration.state == MigrationState.ROLLED_BACK) {
             return 0
         }
