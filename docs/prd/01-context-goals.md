@@ -2,43 +2,62 @@
 
 ## Context
 
-Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을 Redis-backed coordinator로 구현해야 한다.
+Redis Stream stores messages under stream keys. A single hot stream key can grow into a BigKey and, in Redis Cluster, belongs to exactly one hash slot. That limits write distribution, read distribution, and operational isolation unless the application splits traffic across multiple stream keys.
+
+Application-level sharding solves the storage and distribution problem, but it creates a coordination problem:
+
+* producers need deterministic routing metadata,
+* consumers need shard ownership assignment,
+* shard owners need a safe revoke/assign protocol,
+* shard count changes need a versioned migration path,
+* operators need observability and rollback points.
+
+Redis Stream Coordinator fills this gap by adapting the coordinator-managed rebalance model from KIP-848 to Redis Stream shard ownership.
 
 ## Goals
 
-* coordinator가 group metadata, target assignment, current assignment를 source of truth로 관리한다.
-* group 식별자는 coordinator API의 `{streamPrefix, consumerGroup}` path/body에서 받는다.
-* member join/leave, metadata change, Coordinator Admin API로 요청된 shard count change를 group epoch 증가로 모델링한다.
-* topic partition에 해당하는 Redis Stream shard count는 Coordinator Admin API 요청으로만 생성/증감한다.
-* consumer `maxConcurrency`는 partition/shard 개수가 아니라 member 안에서 사용할 consumer worker 수이며, coordinator의 server-side consumer concurrency policy로 설정한다.
-* target assignment는 coordinator가 계산하고 assignment epoch으로 versioning한다.
-* member는 heartbeat/reconciliation loop로 target assignment에 수렴한다.
-* coordinator는 `tick-interval`마다 heartbeat가 `member-lease-ttl`을 넘긴 member를 `EXPIRED`로 표시하고 shard를 재할당한다.
-* revoke 완료 전 같은 shard를 다른 member에게 assign하지 않는다.
-* 영향 없는 member는 rebalance 중에도 기존 shard를 계속 consume한다.
-* shard count 변경은 next stream version migration으로 처리하고 producer write를 중단하지 않는다.
-* actual read authority는 coordinator가 내려준 assignment epoch과 member epoch으로 fence한다.
-* operator가 group epoch, assignment epoch, member epoch, target/current assignment, revoke progress를 볼 수 있게 한다.
+* Reduce Redis Stream BigKey risk by splitting traffic into multiple shard stream keys.
+* Support Redis Cluster-friendly key distribution.
+* Provide a dedicated coordinator server as the source of truth for group metadata, stream versions, and shard assignment.
+* Provide Spring Boot modules for consumer integration and producer routing/publishing.
+* Preserve sticky shard ownership when possible so rebalances move only the shards that need to move.
+* Enforce revoke-before-assign for live members.
+* Support member join, graceful leave, expiration, and rejoin.
+* Support shard count changes through versioned stream migration.
+* Provide monitoring APIs and metrics for ownership, epochs, member liveness, consumer progress, producer routing, and resharding.
+* Make open source operation practical with Docker, sample pods, security defaults, tests, and compatibility policy.
 
 ## Non-Goals
 
-* Kafka broker protocol을 그대로 재구현
-* Redis Cluster resharding 자동 대응
-* hot shard 자동 split
-* shard 전체 serial ordering
-* 외부 side effect까지 포함한 절대적 exactly-once
-* 같은 stream version 안에서 shard count만 바꾸는 in-place resharding
-* member startup, local YAML, producer, consumer가 직접 shard count나 server-side consumer `maxConcurrency`를 변경하는 방식
-* Redis Stream message read, handler execution, `XACK`, retry, DLQ, idempotency marker storage 구현
-* coordinator server HA/election protocol 설계
+* Kafka protocol compatibility.
+* A Redis replacement for Kafka broker storage.
+* Global message ordering across shards.
+* Exactly-once processing or exactly-once business side effects.
+* Distributed transactions across Redis Stream ACK and arbitrary application databases or APIs.
+* Automatic global event-id deduplication across all stream versions and shards.
+* Running the coordinator as embedded application logic inside every consumer.
+* Letting member startup YAML mutate server-side shard count or group metadata.
 
 ## Assumptions
 
-* Redis는 stream data plane과 coordinator metadata store로 사용한다.
-* coordinator metadata key는 Redis persistence 또는 운영 백업 정책으로 보호한다.
-* 각 member는 runtime 시작 시 UUID `memberId`를 직접 생성한다.
-* producer와 consumer는 metadata store의 active stream version을 source of truth로 사용한다.
-* 한 `streamPrefix + consumerGroup`에는 동시에 하나의 active migration만 허용한다.
-* `streamPrefix`와 `consumerGroup`은 coordinator API 호출의 group identifier이며, coordinator/member local YAML에 고정된 shard control 설정으로 두지 않는다.
-* member startup은 shard count 변경을 시작하지 않는다. startup은 coordinator API heartbeat join과 metadata 조회만 수행한다.
-* member heartbeat는 runtime이 감당 가능한 consumer worker 수를 보고할 수 있지만, 실제 허용되는 `maxConcurrency`는 coordinator metadata가 결정한다.
+* Applications can choose a stable partition key for producer routing.
+* Duplicate delivery is acceptable at the infrastructure layer and must be handled by application idempotency where needed.
+* Operators can run the coordinator server with access to the Redis metadata store.
+* Redis Cluster deployments should use hash-tagged coordinator metadata keys so related metadata lives in one slot.
+* Redis Stream data-plane reads, handler retries, DLQ policy, and ACK policy remain application-owned unless the optional starter polling adapter is enabled.
+
+## User-Facing Modules
+
+* `coordinator-server`: dedicated control-plane server.
+* `redisstream-spring-boot-starter`: Spring Boot integration for consumers and producers.
+* `samples:consumer-pod`: runnable consumer pod sample.
+* `samples:publisher-pod`: runnable publisher pod sample.
+
+## Operating Model
+
+1. An operator creates a group through the Coordinator Admin API.
+2. Producers fetch routing metadata and publish to the active shard stream.
+3. Consumers join through heartbeat and report current ownership.
+4. The coordinator calculates target assignment and returns it in heartbeat responses.
+5. Consumers revoke removed shards, start newly assigned shards, and keep heartbeating progress.
+6. Operators monitor group state and trigger shard count migration when needed.

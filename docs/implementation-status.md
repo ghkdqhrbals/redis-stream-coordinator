@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-05-25
+Last updated: 2026-05-29
 
 ## Snapshot
 
@@ -8,8 +8,8 @@ The repository currently contains two Gradle modules:
 
 | Module | Status | Purpose |
 | --- | --- | --- |
-| `coordinator-server` | MVP implemented | Spring Boot control plane for group metadata, heartbeat reconciliation, assignment, migration, monitoring, ACL, audit, metrics, and Redis-backed state. |
-| `com.redisstream:redisstream-spring-boot-starter` | MVP implemented | Spring Boot integration layer for consumer heartbeat lifecycle, shard callbacks, Redis Stream polling, producer routing, publishing, graceful leave, and metrics. |
+| `coordinator-server` | MVP implemented | Spring Boot control plane for group metadata, heartbeat reconciliation, assignment, migration, monitoring, ACL, audit, centralized metrics, and Redis-backed state. |
+| `com.redisstream:redisstream-spring-boot-starter` | MVP implemented | Spring Boot integration layer for consumer heartbeat lifecycle, shard callbacks, Redis Stream polling, producer routing, publishing, graceful leave, and coordinator progress reporting. |
 
 Overall status:
 
@@ -21,9 +21,10 @@ Overall status:
 | Redis state store | Done | Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua aggregate/projection updates. |
 | Redis Stream shard provisioning | Done | Optional initial and next-version stream/consumer-group provisioning is implemented and gated by config. Idempotent retry and partial failure behavior are covered. |
 | Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
-| Observability | Done for MVP | Coordinator and starter Micrometer metrics are implemented. Monitoring APIs are implemented. |
-| Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity reporting, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
-| Producer starter | Done for MVP | Producer routing cache, routing validation, stale-cache invalidation after write failure, opt-in publish retry, Redis Stream publisher, payload helper, batch publish, and metrics are implemented. |
+| Observability | Done for MVP | Coordinator Micrometer metrics and monitoring APIs are implemented, including consumer shard progress. Starter modules do not publish their own Micrometer meters. |
+| Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity/progress reporting, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
+| Producer starter | Done for MVP | Producer routing cache, routing validation, stale-cache invalidation after write failure, opt-in publish retry, Redis Stream publisher, payload helper, and batch publish are implemented. |
+| Processing guarantee | Done for MVP | Public guarantee is at-least-once. Single-processing guarantees are not provided because application business side effects cannot be atomically committed with Redis Stream ACKs. |
 | Local Redis Cluster | Done | `compose.yaml` starts three Redis Cluster masters and supports host access through `localhost:7001..7003`. |
 | Docker distribution | Ready for MVP | Dockerfile, local Compose coordinator profile, PR smoke test, manual GHCR publish workflow, and user guide are implemented. First public image release remains. |
 | Open source operations | Ready for MVP | Contributing guide, security policy, changelog, testing guide, Docker guide, and operations runbook are available. |
@@ -35,6 +36,7 @@ The current implementation has been verified with:
 ```bash
 ./gradlew :coordinator-server:test --tests '*CoordinatorMetricsTest' --tests '*CoordinatorServiceTest' --no-daemon
 ./gradlew :redisstream-spring-boot-starter:test --no-daemon
+./gradlew :redisstream-spring-boot-starter:test :coordinator-server:test --no-daemon
 ./gradlew test build --no-daemon
 python3 .github/scripts/test_docker_distribution.py
 ```
@@ -60,6 +62,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Migration rollback API.
 * [x] Member heartbeat API.
 * [x] Monitoring health, group, member, assignment, and migration APIs.
+* [x] Monitoring consumption progress API.
 * [x] Shared error enum for HTTP status, error code, and default message.
 * [x] Scheduled coordinator event loop for lease expiry, rebalance timeout, and migration drain progress.
 * [x] Redis-backed distributed state mutex so multiple coordinator pods can be deployed without user-managed single-active rollout rules.
@@ -100,6 +103,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Redis Stream shard key helper and hash-slot distribution helper.
 * [x] Optional Redis Stream shard and consumer-group provisioning.
 * [x] Redis Stream provisioning idempotent retry coverage after partial Redis failure.
+* [x] Centralized coordinator Redis command template for state, mutex, audit, health, and stream provisioning commands.
 
 ### Security, Audit, And Observability
 
@@ -114,6 +118,14 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * `redis_stream_coord_group_epoch`
   * `redis_stream_coord_assignment_epoch`
   * `redis_stream_coord_members`
+  * `redis_stream_coord_member_active`
+  * `redis_stream_coord_member_heartbeat_age_seconds`
+  * `redis_stream_coord_member_lease_remaining_seconds`
+  * `redis_stream_coord_member_assigned_max_concurrency`
+  * `redis_stream_coord_member_runtime_max_concurrency`
+  * `redis_stream_coord_member_active_workers`
+  * `redis_stream_coord_member_current_shards`
+  * `redis_stream_coord_member_revoking_shards`
   * `redis_stream_coord_heartbeat_total`
   * `redis_stream_coord_member_expired_total`
   * `redis_stream_coord_rebalance_total`
@@ -121,6 +133,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * `redis_stream_coord_scale_request_total`
   * `redis_stream_coord_scale_request_failed_total`
   * `redis_stream_coord_consumer_concurrency_update_total`
+  * `redis_stream_coord_producer_routing_request_total`
   * `redis_stream_coord_migration_active`
   * `redis_stream_coord_migration_active_age_seconds`
   * `redis_stream_coord_revoke_pending`
@@ -129,6 +142,13 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * `redis_stream_coord_tick_total`
   * `redis_stream_coord_tick_duration`
   * `redis_stream_coord_state_conflict_total`
+  * `redis_stream_coord_consumer_shard_last_delivered_ms`
+  * `redis_stream_coord_consumer_shard_last_delivered_seq`
+  * `redis_stream_coord_consumer_shard_last_acked_ms`
+  * `redis_stream_coord_consumer_shard_last_acked_seq`
+  * `redis_stream_coord_consumer_shard_pending`
+  * `redis_stream_coord_consumer_shard_progress_updated_at_seconds`
+  * `redis_stream_coord_consumer_shard_progress_age_seconds`
 
 ### RedisStream Spring Boot Starter
 
@@ -140,7 +160,9 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Repeated revoke callback support for long drain windows.
 * [x] Preservation of earlier draining revoke reports when additional revokes occur.
 * [x] Optional `CoordinatorRuntimeCapacityProvider` for application-reported runtime capacity.
+* [x] Optional `CoordinatorShardProgressProvider` for coordinator-reported shard progress.
 * [x] Built-in Redis Stream polling lifecycle reports in-flight handler capacity.
+* [x] Built-in Redis Stream polling lifecycle reports last delivered and last acked Redis Stream ids.
 * [x] Consumer-side heartbeat protocol validation.
 * [x] Spring Boot auto-configuration.
 * [x] Opt-in Redis Stream polling adapter.
@@ -152,7 +174,15 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Redis Stream publisher.
 * [x] Convenience payload publish API.
 * [x] Ordered best-effort batch publish API.
-* [x] Consumer and producer Micrometer metrics.
+* [x] Shared Redis Stream command template for producer and consumer Redis commands.
+* [x] Starter modules report progress to the coordinator instead of publishing separate Micrometer meters.
+
+## Documented Constraints
+
+* [x] Same partition key can route to a different Redis Stream shard after shard scale-out/in because routing is scoped to the active stream version and shard count.
+* [x] Producer retry and shard migration can create duplicate messages or duplicate business-event attempts.
+* [x] Duplicate-sensitive workloads must quiesce producers and drain in-flight publish retries before shard scale-out/in.
+* [x] Processing guarantee is at-least-once. Single delivery, single handler invocation, or single business side-effect application is not guaranteed.
 
 ### Docker, CI, And Open Source Docs
 
@@ -186,7 +216,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * ACL enforcement and admin audit events.
 * Admin mutation rate limiting.
 * Monitoring refresh conflict retry.
-* Coordinator Micrometer metrics.
+* Coordinator Micrometer metrics, including consumer shard progress gauges.
 
 ### Starter
 
@@ -199,8 +229,9 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Graceful leave heartbeat on shutdown.
 * Redis polling adapter reads, invokes handler, and acknowledges only successful messages.
 * Runtime capacity reports available concurrency while handlers are in flight.
+* Shard progress reports last delivered and last acked Redis Stream ids through heartbeat.
 * Producer routing cache refresh, invalidation, validation, and unsupported hash rejection.
-* Redis Stream publisher routing, stale-cache invalidation, opt-in retry, payload helper, batch publish, and metrics.
+* Redis Stream publisher routing, stale-cache invalidation, opt-in retry, payload helper, and batch publish.
 
 ### Docker And Docs
 
@@ -216,6 +247,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 | HTTP API and errors | `CoordinatorControllers.kt`, `CoordinatorErrors.kt` |
 | Config, auth, audit | `CoordinatorProperties.kt`, `CoordinatorAuth.kt`, `CoordinatorAudit.kt`, `RedisClientConfig.kt` |
 | State store | `CoordinatorStateStore.kt` |
+| Coordinator Redis commands | `coordinator-server/src/main/kotlin/io/github/ghkdqhrbals/redisstreamcoordinator/redis/CoordinatorRedisCommands.kt` |
 | Stream provisioning | `RedisStreamProvisioning.kt`, `RedisStreamShardKeys.kt` |
 | Consumer starter | `redisstream-spring-boot-starter/src/main/kotlin/com/redisstream/consumer/*` |
 | Producer starter | `redisstream-spring-boot-starter/src/main/kotlin/com/redisstream/producer/*` |

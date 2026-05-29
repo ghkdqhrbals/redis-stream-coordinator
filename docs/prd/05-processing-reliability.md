@@ -1,33 +1,94 @@
 # Member Data-Plane Boundary
 
-Redis Stream Coordinator는 message processor가 아니다. 이 문서는 coordinator와 member data-plane의 경계만 정의한다.
+Redis Stream Coordinator is not a message processor. It coordinates shard ownership. The application remains responsible for reading Redis Stream records, executing business logic, handling retries, and acknowledging records.
 
-## Coordinator Owns
+## Coordinator Guarantees
 
-* group metadata
-* member liveness
-* target assignment
-* current assignment report
-* assigned/pending shard assignment
-* member epoch fencing status
-* stream version migration state
+The coordinator provides:
 
-## Member Data-Plane Owns
+* target shard assignment,
+* revoke-before-assign sequencing,
+* member lease expiration,
+* stale owner fencing,
+* member epoch and assignment epoch validation,
+* monitoring of member-reported progress.
 
-* Redis Stream `XREADGROUP` / `XACK`
-* pending recovery
-* handler execution
-* retry / DLQ
-* idempotency marker
-* key ordering
-* read batch, block timeout, worker thread tuning
+The coordinator does not provide:
 
-## Contract
+* exactly-once business processing,
+* atomic commit between Redis Stream ACK and an external database,
+* global event-id deduplication,
+* application retry policy,
+* DLQ policy,
+* handler transaction management.
 
-Coordinator heartbeat response의 `assignment.assignedShards`에서 기존 owned shard가 빠지면 member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 된 뒤 heartbeat의 `revokingShards.state=REVOKED`로 보고한다.
+## Processing Guarantee
 
-Coordinator heartbeat response의 `assignment.assignedShards`에 새 shard가 포함되면 member는 shard를 `ownedShards`에 반영하고, 실제 Redis Stream read/recovery는 member data-plane 정책에 따라 수행한다.
+The baseline processing model is at-least-once.
 
-Coordinator가 `FENCED_MEMBER_EPOCH`을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 `memberEpoch=0` full heartbeat로 rejoin한다.
+Redis Stream consumer group delivery can redeliver records through pending recovery. A consumer can crash after the handler runs but before ACK. A producer can retry after a lost response. Resharding can also create duplicate publish attempts when producer traffic is not quiesced.
 
-Coordinator는 member가 보고한 `ownedShards`/`revokingShards`를 server-side target assignment와 이전에 수락한 current assignment 기준으로 검증한다. 아직 pending인 shard, 다른 live member가 소유 중인 shard, 또는 더 이상 허용되지 않는 shard를 owned로 보고하면 stale ownership으로 보고 fencing한다. 이미 처리된 terminal `REVOKED` duplicate report는 fencing하지 않고 무시한다.
+Applications must assume that handlers can be invoked more than once for the same business event.
+
+## Application Responsibilities
+
+Applications must decide:
+
+* whether to ACK before or after business processing,
+* whether to use `XACK`, `XACKDEL`, or a custom NACK/retry flow,
+* how to handle pending messages,
+* how to detect duplicate business events,
+* how to protect external side effects,
+* when to send failed records to a DLQ.
+
+Recommended protections:
+
+* domain-level idempotency keys,
+* database unique constraints,
+* deduplication tables,
+* optimistic locking,
+* compensating actions,
+* explicit retry and DLQ policy.
+
+## Recommended Handler Flow
+
+```text
+XREADGROUP
+  -> verify memberEpoch / assignmentEpoch / shard ownership
+  -> execute business handler
+  -> apply application-level duplicate guard or retry policy
+  -> XACKDEL or XACK
+```
+
+If the member is fenced or loses ownership, it should stop reads for that shard and avoid ACKing records it no longer owns unless the application explicitly accepts that risk.
+
+## Revoke Flow
+
+When a shard disappears from `assignment.assignedShards` in a heartbeat response:
+
+1. stop new reads for the shard,
+2. wait for local in-flight work to drain or hit the application timeout,
+3. report the shard in `revokingShards` with `state=REVOKED`,
+4. remove the shard from local active workers.
+
+The coordinator accepts the revoke acknowledgement and can assign the shard to the next target member.
+
+## Fencing Flow
+
+If the coordinator returns a fencing status or rejects stale ownership:
+
+1. stop reads and ACKs for affected shards,
+2. clear local ownership state,
+3. send a full heartbeat with `memberEpoch=0` or rejoin according to the client policy,
+4. start only the shards returned by the coordinator after rejoin.
+
+## Guarantee Boundary Summary
+
+| Area | Guarantee |
+| --- | --- |
+| Shard ownership | Coordinator-managed with revoke-before-assign for live members |
+| Member liveness | Lease-based expiration |
+| Handler execution | At-least-once |
+| Producer publish | At-least-once under retry and resharding |
+| External side effects | Application-owned |
+| Global duplicate event prevention | Not provided |

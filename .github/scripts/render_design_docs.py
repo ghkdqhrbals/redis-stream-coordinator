@@ -7,11 +7,27 @@ import argparse
 import html
 import os
 import re
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import markdown
+
+
+DESIGN_DOC_EXTRA_NAMES = (
+    "implementation-status.md",
+    "operations-runbook.md",
+    "testing.md",
+)
+
+
+@dataclass(frozen=True)
+class Page:
+    markdown_path: Path
+    title: str
+    output_path: Path
+    language: str
 
 
 def title_for(markdown_text: str, fallback: str) -> str:
@@ -23,6 +39,10 @@ def title_for(markdown_text: str, fallback: str) -> str:
 
 def output_path(source: Path, markdown_path: Path) -> Path:
     return markdown_path.relative_to(source).with_suffix(".html")
+
+
+def localized_output_path(docs_root: Path, output_root: Path, markdown_path: Path) -> Path:
+    return output_root / markdown_path.relative_to(docs_root).with_suffix(".html")
 
 
 def relative_href(from_output: Path, to_output: Path) -> str:
@@ -175,10 +195,118 @@ def make_tables_responsive(body: str) -> str:
     return "".join(parser.output)
 
 
-def render_page(title: str, body: str, nav: str) -> str:
+def discover_localized_pages(
+    docs_root: Path,
+    output_root: Path,
+    language: str,
+) -> list[Page]:
+    primary = docs_root / "PRD.md"
+    if not primary.exists():
+        return []
+
+    ordered = [primary]
+    ordered.extend(sorted((docs_root / "prd").glob("*.md")))
+    ordered.extend(docs_root / name for name in DESIGN_DOC_EXTRA_NAMES)
+
+    pages: list[Page] = []
+    seen: set[Path] = set()
+    for path in ordered:
+        if not path.exists() or path in seen:
+            continue
+        seen.add(path)
+        text = path.read_text(encoding="utf-8")
+        title = title_for(text, path.stem.replace("-", " ").title())
+        pages.append(Page(path, title, localized_output_path(docs_root, output_root, path), language))
+    return pages
+
+
+def discover_pages(source: Path) -> list[Page]:
+    english_pages = discover_localized_pages(source / "docs", Path("docs"), "en")
+    if english_pages:
+        return [
+            *english_pages,
+            *discover_localized_pages(source / "docs" / "ko", Path("ko") / "docs", "ko"),
+        ]
+
+    return [
+        Page(
+            path,
+            title_for(path.read_text(encoding="utf-8"), path.stem.replace("-", " ").title()),
+            output_path(source, path),
+            "en",
+        )
+        for path in sorted(source.rglob("*.md"))
+        if ".git" not in path.parts
+    ]
+
+
+def counterpart_output(output: Path, language: str) -> Path:
+    if language == "en":
+        return Path("ko") / output
+    parts = output.parts
+    if parts and parts[0] == "ko":
+        return Path(*parts[1:])
+    return output
+
+
+def language_redirect_script(language: str, alternate_href: str | None) -> str:
+    if not alternate_href:
+        return ""
+
+    target_language = "ko" if language == "en" else "en"
+    escaped_target_language = html.escape(target_language, quote=True)
+    escaped_alternate_href = html.escape(alternate_href, quote=True)
+    return f"""
+    <script>
+      (() => {{
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "{escaped_target_language}") {{
+          const target = new URL("{escaped_alternate_href}", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }}
+      }})();
+    </script>"""
+
+
+def language_switch(current_href: str, alternate_href: str | None, language: str) -> str:
+    if not alternate_href:
+        return ""
+
+    if language == "en":
+        english_href = current_href
+        korean_href = alternate_href
+        english_current = ' aria-current="true"'
+        korean_current = ""
+    else:
+        english_href = alternate_href
+        korean_href = current_href
+        english_current = ""
+        korean_current = ' aria-current="true"'
+
+    return (
+        '<div class="language-switch" aria-label="Language switch">'
+        f'<a href="{html.escape(english_href, quote=True)}"{english_current}>English</a>'
+        '<span aria-hidden="true">/</span>'
+        f'<a href="{html.escape(korean_href, quote=True)}"{korean_current}>한국어</a>'
+        '</div>'
+    )
+
+
+def render_page(
+    title: str,
+    body: str,
+    nav: str,
+    language: str = "en",
+    current_href: str = "index.html",
+    alternate_href: str | None = None,
+) -> str:
     escaped_title = html.escape(title)
+    escaped_language = html.escape(language, quote=True)
+    redirect_script = language_redirect_script(language, alternate_href)
+    switch = language_switch(current_href, alternate_href, language)
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{escaped_language}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -199,6 +327,7 @@ def render_page(title: str, body: str, nav: str) -> str:
         --panel: #f7f9fb;
         --accent: #1428a0;
         --code: #eef3f7;
+        --sidebar: #fbfcfd;
       }}
       body {{
         margin: 0;
@@ -212,21 +341,78 @@ def render_page(title: str, body: str, nav: str) -> str:
         border-bottom: 1px solid var(--border);
         background: var(--panel);
       }}
-      .wrap {{
-        width: min(100%, 980px);
+      .topbar {{
+        width: min(100%, 1180px);
         margin: 0 auto;
-        padding: clamp(14px, 2.6vw, 24px);
-      }}
-      nav {{
+        padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
-        flex-wrap: wrap;
-        gap: 4px 14px;
-        margin-top: 6px;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
       }}
-      nav a {{
+      .site-title {{
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }}
+      .site-subtitle {{
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }}
+      .language-switch {{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }}
+      .language-switch a {{
         color: var(--accent);
         text-decoration: none;
+      }}
+      .language-switch a[aria-current="true"] {{
+        color: var(--fg);
+        font-weight: 700;
+      }}
+      .layout {{
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
+      }}
+      .sidebar {{
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }}
+      .doc-index {{
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
+      }}
+      .doc-index a {{
+        color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-decoration: none;
         overflow-wrap: anywhere;
+      }}
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {{
+        background: var(--code);
       }}
       .index-title {{
         color: var(--muted);
@@ -238,6 +424,7 @@ def render_page(title: str, body: str, nav: str) -> str:
       main {{
         min-width: 0;
         max-width: 100%;
+        padding-bottom: 56px;
       }}
       h1, h2, h3, h4 {{
         line-height: 1.25;
@@ -318,6 +505,27 @@ def render_page(title: str, body: str, nav: str) -> str:
         height: auto;
       }}
       @media (max-width: 720px) {{
+        .layout {{
+          display: block;
+        }}
+        .topbar {{
+          display: block;
+        }}
+        .language-switch {{
+          margin-top: 8px;
+        }}
+        .sidebar {{
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }}
+        .doc-index {{
+          max-height: 220px;
+          overflow: auto;
+        }}
         .responsive-table,
         .responsive-table thead,
         .responsive-table tbody,
@@ -385,18 +593,26 @@ def render_page(title: str, body: str, nav: str) -> str:
           gap: 2px;
         }}
       }}
-    </style>
+      </style>
+{redirect_script}
   </head>
   <body>
     <header>
-      <div class="wrap">
-        <div class="index-title">Index</div>
-        <nav aria-label="Design document navigation">
-{nav}
-        </nav>
+      <div class="topbar">
+        <div>
+          <div class="site-title">Redis Stream Coordinator</div>
+          <div class="site-subtitle">Design docs</div>
+        </div>
+        {switch}
       </div>
     </header>
-    <div class="wrap">
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+{nav}
+        </nav>
+      </aside>
       <main>
 {body}
       </main>
@@ -416,50 +632,118 @@ def main() -> None:
     destination = args.destination
     destination.mkdir(parents=True, exist_ok=True)
 
-    markdown_files = sorted(
-        path for path in source.rglob("*.md")
-        if ".git" not in path.parts
-    )
-    if not markdown_files:
+    pages = discover_pages(source)
+    if not pages:
         raise SystemExit(f"No Markdown design documents found in {source}")
 
-    pages = []
-    output_paths = {}
-    for markdown_path in markdown_files:
-        text = markdown_path.read_text(encoding="utf-8")
-        title = title_for(text, markdown_path.stem.replace("-", " ").title())
-        resolved_markdown_path = markdown_path.resolve()
-        rendered_path = output_path(source, markdown_path)
-        output_paths[resolved_markdown_path] = rendered_path
-        pages.append((markdown_path, title, rendered_path))
+    output_paths = {page.markdown_path.resolve(): page.output_path for page in pages}
+    output_set = {page.output_path for page in pages}
+    pages_by_language: dict[str, list[Page]] = {}
+    for page in pages:
+        pages_by_language.setdefault(page.language, []).append(page)
 
-    def nav_for(current_output: Path) -> str:
-        return "\n".join(
-            f'        <a href="{html.escape(relative_href(current_output, file_name))}">{html.escape(title)}</a>'
-            for _, title, file_name in pages
-        )
+    def alternate_for(current_output: Path, language: str) -> Path | None:
+        candidate = counterpart_output(current_output, language)
+        return candidate if candidate in output_set else None
+
+    def render_href_pair(current_output: Path, language: str) -> tuple[str, str | None]:
+        current_href = relative_href(current_output, current_output)
+        alternate_output = alternate_for(current_output, language)
+        alternate_href = relative_href(current_output, alternate_output) if alternate_output else None
+        return current_href, alternate_href
+
+    def nav_for(current_output: Path, language: str, active_output: Path | None = None) -> str:
+        active = active_output or current_output
+        links = []
+        for page in pages_by_language.get(language, []):
+            current = page.output_path == active
+            attrs = ' aria-current="page"' if current else ""
+            links.append(
+                f'          <a href="{html.escape(relative_href(current_output, page.output_path))}"{attrs}>'
+                f'{html.escape(page.title)}</a>'
+            )
+        return "\n".join(links)
 
     renderer = markdown.Markdown(extensions=["extra", "tables", "toc", "fenced_code", "sane_lists"])
-    for markdown_path, title, file_name in pages:
-        text = markdown_path.read_text(encoding="utf-8")
+    for page in pages:
+        text = page.markdown_path.read_text(encoding="utf-8")
         body = rewrite_markdown_links(
             renderer.reset().convert(text),
-            markdown_path.resolve(),
-            file_name,
+            page.markdown_path.resolve(),
+            page.output_path,
             output_paths,
         )
         body = make_tables_responsive(body)
-        target = destination / file_name
+        target = destination / page.output_path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(render_page(title, body, nav_for(file_name)), encoding="utf-8")
+        current_href, alternate_href = render_href_pair(page.output_path, page.language)
+        target.write_text(
+            render_page(
+                page.title,
+                body,
+                nav_for(page.output_path, page.language),
+                page.language,
+                current_href,
+                alternate_href,
+            ),
+            encoding="utf-8",
+        )
 
     if not (destination / "index.html").exists():
-        first_page = pages[0][2]
-        (destination / "index.html").write_text(
+        primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "PRD.md"), None)
+        korean_primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "ko" / "PRD.md"), None)
+        if primary_page is not None:
+            text = primary_page.markdown_path.read_text(encoding="utf-8")
+            body = rewrite_markdown_links(
+                renderer.reset().convert(text),
+                primary_page.markdown_path.resolve(),
+                Path("index.html"),
+                output_paths,
+            )
+            body = make_tables_responsive(body)
+            (destination / "index.html").write_text(
+                render_page(
+                    primary_page.title,
+                    body,
+                    nav_for(Path("index.html"), primary_page.language, active_output=primary_page.output_path),
+                    primary_page.language,
+                    "index.html",
+                    "ko/index.html" if korean_primary_page is not None else None,
+                ),
+                encoding="utf-8",
+            )
+        else:
+            first_page = pages[0].output_path
+            (destination / "index.html").write_text(
+                render_page(
+                    "Redis Stream Coordinator Design Docs",
+                    f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page.as_posix())}">Open the design document</a>.</p>',
+                    nav_for(Path("index.html"), "en"),
+                ),
+                encoding="utf-8",
+            )
+
+    korean_primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "ko" / "PRD.md"), None)
+    if korean_primary_page is not None:
+        korean_index = Path("ko") / "index.html"
+        text = korean_primary_page.markdown_path.read_text(encoding="utf-8")
+        body = rewrite_markdown_links(
+            renderer.reset().convert(text),
+            korean_primary_page.markdown_path.resolve(),
+            korean_index,
+            output_paths,
+        )
+        body = make_tables_responsive(body)
+        target = destination / korean_index
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
             render_page(
-                "Redis Stream Coordinator Design Docs",
-                f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page.as_posix())}">Open the design document</a>.</p>',
-                nav_for(Path("index.html")),
+                korean_primary_page.title,
+                body,
+                nav_for(korean_index, "ko", active_output=korean_primary_page.output_path),
+                "ko",
+                "index.html",
+                "../index.html",
             ),
             encoding="utf-8",
         )
