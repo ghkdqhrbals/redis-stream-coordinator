@@ -20,6 +20,7 @@ class ProducerRoutingCache(
     private val client: CoordinatorClient,
     private val refreshInterval: Duration = Duration.ofSeconds(30),
     private val clock: Clock = Clock.systemUTC(),
+    private val metrics: RedisStreamProducerMetrics = NoopRedisStreamProducerMetrics,
 ) {
     private var cached: CachedRouting? = null
 
@@ -56,7 +57,13 @@ class ProducerRoutingCache(
 
     @Synchronized
     fun invalidate() {
+        invalidate("manual")
+    }
+
+    @Synchronized
+    internal fun invalidate(reason: String) {
         cached = null
+        metrics.recordRoutingCacheInvalidated(reason)
     }
 
     @Synchronized
@@ -70,10 +77,17 @@ class ProducerRoutingCache(
         val now = Instant.now(clock)
         val snapshot = cached
         if (!forceRefresh && snapshot != null && now.isBefore(snapshot.expiresAt)) {
+            metrics.recordRoutingCacheHit()
             return snapshot.metadata
         }
 
-        val fetched = client.producerRouting(streamPrefix, consumerGroup).also(::validate)
+        val fetched = try {
+            client.producerRouting(streamPrefix, consumerGroup).also(::validate)
+        } catch (error: RuntimeException) {
+            metrics.recordRoutingRefresh("ERROR", Duration.between(now, Instant.now(clock)))
+            throw error
+        }
+        metrics.recordRoutingRefresh("SUCCESS", Duration.between(now, Instant.now(clock)))
         cached = when {
             snapshot == null -> CachedRouting(fetched, now.plus(refreshInterval))
             snapshot.metadata.metadataVersion == fetched.metadataVersion ->
@@ -84,9 +98,19 @@ class ProducerRoutingCache(
     }
 
     private fun validate(metadata: ProducerRoutingResponse) {
+        require(metadata.streamPrefix == streamPrefix) {
+            "producer routing streamPrefix ${metadata.streamPrefix} does not match configured $streamPrefix"
+        }
+        require(metadata.consumerGroup == consumerGroup) {
+            "producer routing consumerGroup ${metadata.consumerGroup} does not match configured $consumerGroup"
+        }
         require(metadata.shardCount > 0) { "producer routing shardCount must be positive" }
         require(metadata.shards.isNotEmpty()) { "producer routing must include active shards" }
-        require(metadata.shards.count { it.streamVersion == metadata.activeWriteVersion } == metadata.shardCount) {
+        val activeShardIndexes = metadata.shards
+            .filter { it.streamVersion == metadata.activeWriteVersion }
+            .map { it.shardIndex }
+            .toSortedSet()
+        require(activeShardIndexes == (0 until metadata.shardCount).toSortedSet()) {
             "producer routing active shard list does not match shardCount"
         }
     }
@@ -98,18 +122,42 @@ class ProducerRoutingCache(
 }
 
 object RedisStreamPartitionHasher {
+    private const val HASH_SPACE_SIZE = 4_294_967_296L
+
     fun shardIndex(metadata: ProducerRoutingResponse, partitionKey: String): Int =
         shardIndex(metadata, partitionKey.toByteArray(Charsets.UTF_8))
 
     fun shardIndex(metadata: ProducerRoutingResponse, partitionKey: ByteArray): Int {
         require(metadata.shardCount > 0) { "producer routing shardCount must be positive" }
-        val hash = when (metadata.hashAlgorithm.lowercase()) {
-            "murmur3", "murmur3_32", "murmur3-32" ->
-                Murmur3.hash32(partitionKey, Murmur3.hash32(metadata.hashSeed.toByteArray(Charsets.UTF_8)))
-            else -> throw IllegalArgumentException("Unsupported producer routing hash algorithm ${metadata.hashAlgorithm}")
-        }
-        return ((hash.toLong() and 0xffffffffL) % metadata.shardCount).toInt()
+        return unbiasedShardIndex(partitionKey, metadata.shardCount)
     }
+
+    private fun unbiasedShardIndex(partitionKey: ByteArray, shardCount: Int): Int {
+        val limit = HASH_SPACE_SIZE - (HASH_SPACE_SIZE % shardCount.toLong())
+        var attempt = 0
+        while (true) {
+            val hash = if (attempt == 0) {
+                unsignedHash(partitionKey, 0)
+            } else {
+                unsignedHash(partitionKey, Murmur3.hash32(attempt.toLittleEndianBytes()))
+            }
+            if (hash < limit) {
+                return (hash % shardCount).toInt()
+            }
+            attempt++
+        }
+    }
+
+    private fun unsignedHash(partitionKey: ByteArray, seed: Int): Long =
+        Murmur3.hash32(partitionKey, seed).toLong() and 0xffffffffL
+
+    private fun Int.toLittleEndianBytes(): ByteArray =
+        byteArrayOf(
+            (this and 0xff).toByte(),
+            ((this ushr 8) and 0xff).toByte(),
+            ((this ushr 16) and 0xff).toByte(),
+            ((this ushr 24) and 0xff).toByte(),
+        )
 }
 
 private object Murmur3 {

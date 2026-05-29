@@ -184,7 +184,6 @@ private class RebalanceFlowHarness(
             consumerGroup,
             CreateGroupRequest(
                 initialShardCount = initialShardCount,
-                hashAlgorithm = "murmur3",
                 requestedBy = "rebalance-flow-test",
             ),
         )

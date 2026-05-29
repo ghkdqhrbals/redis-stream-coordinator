@@ -6,6 +6,7 @@ import com.redisstream.consumer.HeartbeatRequest
 import com.redisstream.consumer.HeartbeatResponse
 import com.redisstream.consumer.ProducerRoutingResponse
 import com.redisstream.consumer.ProducerRoutingShard
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -13,6 +14,7 @@ import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class ProducerRoutingCacheTest {
     @Test
@@ -85,12 +87,66 @@ class ProducerRoutingCacheTest {
     }
 
     @Test
-    fun `unsupported producer hash algorithm is rejected`() {
+    fun `routing cache records refresh and cache hit metrics`() {
+        val registry = SimpleMeterRegistry()
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            client = ScriptedRoutingClient(routing(version = 1, activeWriteVersion = 1, shardCount = 2)),
+            refreshInterval = Duration.ofMinutes(5),
+            metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer"),
+        )
+
+        cache.route("order-1")
+        cache.route("order-2")
+
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_producer_routing_refresh_total").tag("status", "SUCCESS").counter().count(),
+        )
+        assertEquals(1.0, registry.get("redis_stream_producer_routing_cache_hit_total").counter().count())
+    }
+
+    @Test
+    fun `producer partition hasher is deterministic and bounded by shard count`() {
+        val shardCount = 1_500_000_001
+        val metadata = hashOnlyRouting(shardCount = shardCount)
+
+        val first = RedisStreamPartitionHasher.shardIndex(metadata, "order-1")
+        val second = RedisStreamPartitionHasher.shardIndex(metadata, "order-1")
+
+        assertEquals(first, second)
+        assertTrue(first in 0 until shardCount)
+    }
+
+    @Test
+    fun `routing metadata for a different group is rejected`() {
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
             consumerGroup = "orders-consumer",
             client = ScriptedRoutingClient(
-                routing(version = 1, activeWriteVersion = 1, shardCount = 2, hashAlgorithm = "sha256"),
+                routing(version = 1, activeWriteVersion = 1, shardCount = 2, consumerGroup = "other-consumer"),
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            cache.route("order-1")
+        }
+    }
+
+    @Test
+    fun `routing metadata must include each active shard index exactly once`() {
+        val metadata = routing(version = 1, activeWriteVersion = 1, shardCount = 2)
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            client = ScriptedRoutingClient(
+                metadata.copy(
+                    shards = listOf(
+                        ProducerRoutingShard(1, 0, "orders:v1:shard:0", 0),
+                        ProducerRoutingShard(1, 0, "orders:v1:shard:0", 0),
+                    ),
+                ),
             ),
         )
 
@@ -103,25 +159,35 @@ class ProducerRoutingCacheTest {
         version: Long,
         activeWriteVersion: Int,
         shardCount: Int,
-        hashAlgorithm: String = "murmur3",
+        streamPrefix: String = "orders",
+        consumerGroup: String = "orders-consumer",
     ): ProducerRoutingResponse =
         ProducerRoutingResponse(
-            streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            streamPrefix = streamPrefix,
+            consumerGroup = consumerGroup,
             metadataVersion = version,
             activeWriteVersion = activeWriteVersion,
             shardCount = shardCount,
-            hashAlgorithm = hashAlgorithm,
-            hashSeed = "default",
-            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+            streamKeyPattern = "$streamPrefix:v{streamVersion}:shard:{shardIndex}",
             shards = (0 until shardCount).map { shardIndex ->
                 ProducerRoutingShard(
                     streamVersion = activeWriteVersion,
                     shardIndex = shardIndex,
-                    streamKey = "orders:v$activeWriteVersion:shard:$shardIndex",
+                    streamKey = "$streamPrefix:v$activeWriteVersion:shard:$shardIndex",
                     redisSlot = shardIndex,
                 )
             },
+        )
+
+    private fun hashOnlyRouting(shardCount: Int): ProducerRoutingResponse =
+        ProducerRoutingResponse(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            metadataVersion = 1,
+            activeWriteVersion = 1,
+            shardCount = shardCount,
+            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+            shards = emptyList(),
         )
 }
 

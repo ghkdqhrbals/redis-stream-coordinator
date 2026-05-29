@@ -73,8 +73,6 @@ data class ProducerRoutingResponse(
     val metadataVersion: Long,
     val activeWriteVersion: Int,
     val shardCount: Int,
-    val hashAlgorithm: String,
-    val hashSeed: String,
     val streamKeyPattern: String,
     val shards: List<ProducerRoutingShard>,
 )

@@ -8,18 +8,45 @@ data class CoordinatorProperties(
     val id: String = "local-coordinator",
     val heartbeatInterval: Duration = Duration.ofSeconds(5),
     val memberLeaseTtl: Duration = Duration.ofSeconds(15),
+    val loop: Loop = Loop(),
     val api: Api = Api(),
     val protocol: Protocol = Protocol(),
     val redisCluster: RedisCluster = RedisCluster(),
     val store: Store = Store(),
+    val coordination: Coordination = Coordination(),
     val streams: Streams = Streams(),
+    val audit: Audit = Audit(),
     val defaults: Defaults = Defaults(),
 ) {
+    data class Loop(
+        val enabled: Boolean = true,
+        val tickInterval: Duration = Duration.ofSeconds(1),
+    )
+
     data class Api(
         val adminUsername: String = "admin",
         val adminPassword: String = "password",
         val authenticateMemberApi: Boolean = false,
+        val users: List<ApiUser> = emptyList(),
+        val rateLimit: RateLimit = RateLimit(),
     )
+
+    data class RateLimit(
+        val enabled: Boolean = false,
+        val adminMutationsPerMinute: Int = 60,
+    )
+
+    data class ApiUser(
+        val username: String = "",
+        val password: String = "",
+        val roles: Set<ApiRole> = emptySet(),
+    )
+
+    enum class ApiRole {
+        ADMIN,
+        MONITOR,
+        MEMBER,
+    }
 
     data class Protocol(
         val minHeartbeatVersion: Int = 1,
@@ -38,12 +65,33 @@ data class CoordinatorProperties(
         val keyPrefix: String = "redis-stream:coord",
     )
 
+    data class Coordination(
+        val stateMutex: StateMutex = StateMutex(),
+    )
+
+    data class StateMutex(
+        val enabled: Boolean = true,
+        val ttl: Duration = Duration.ofSeconds(30),
+        val acquireTimeout: Duration = Duration.ofSeconds(5),
+        val retryInterval: Duration = Duration.ofMillis(100),
+    )
+
     data class Streams(
         val provisioningEnabled: Boolean = false,
     )
 
+    data class Audit(
+        val sink: AuditSink = AuditSink.LOG,
+        val redisMaxEntries: Long = 1_000,
+    )
+
     enum class StoreType {
         MEMORY,
+        REDIS,
+    }
+
+    enum class AuditSink {
+        LOG,
         REDIS,
     }
 

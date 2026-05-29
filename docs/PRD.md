@@ -1,15 +1,8 @@
-# Redis Stream Coordinator PRD
+# Redis Stream Coordinator Design
 
-이 문서는 Redis Stream sharding을 KIP-848 스타일의 coordinator-managed protocol로 관리하기 위한 PRD entrypoint이다. 전체 요구사항은 lazy loading 방식으로 나누어 관리한다.
+This document describes a Redis Stream sharding system that adapts the coordinator role from KIP-848 to Redis Stream consumer ownership. The project provides a dedicated coordinator server, a Spring Boot consumer integration module, and a Spring Boot producer routing/publishing module.
 
-## Source
-
-* KIP-848: [The Next Generation of the Consumer Rebalance Protocol](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)
-* 사용자 정리 글: [Kafka KIP-848 는 왜 등장했는가](https://ghkdqhrbals.github.io/portfolios/docs/Java/51/)
-* 기존 coordinatorless 설계: [`../redis-stream-sharding/PRD.md`](../redis-stream-sharding/PRD.md)
-* 폴더 작업 지침: [`AGENTS.md`](AGENTS.md)
-
-## Lazy Loading Index
+## Design Index
 
 1. [Context, Goals, Non-Goals](prd/01-context-goals.md)
 2. [Coordinator Architecture](prd/02-coordinator-architecture.md)
@@ -25,31 +18,66 @@
 
 ## Product Summary
 
-Coordinator API control plane이 Redis Stream shard ownership을 중앙에서 관리한다. 각 runtime member는 coordinator API로 heartbeat를 보내 현재 상태를 보고하고, coordinator는 group metadata 변화에 따라 target assignment를 계산한다. member는 target assignment에 독립적으로 수렴하며, coordinator는 revoke가 완료되기 전 같은 shard를 다른 member에게 assign하지 않는다.
+Redis Stream Coordinator is a control-plane server that centrally manages Redis Stream shard ownership. Consumer runtime members send heartbeats to the coordinator API, report their current ownership, and receive the target assignment they should converge to. The coordinator recalculates target assignment when membership, capacity, shard count, or stream version metadata changes.
+
+The consumer module connects Spring Boot applications to coordinator heartbeat, assignment, revocation, fencing, and optional Redis Stream polling. The producer module resolves coordinator-managed routing metadata and publishes records to the active Redis Stream shard.
+
+The system is designed for Redis Stream workloads that need to avoid single-stream BigKey growth and distribute traffic across Redis Cluster hash slots while retaining a Kafka-like coordinator-managed rebalance model.
 
 ## Core Decisions
 
-* 중앙 Group Coordinator를 둔다.
-* coordinator는 API 요청의 `{streamPrefix, consumerGroup}`으로 group을 식별하고, application YAML에 group을 고정 설정하지 않는다.
-* coordinator는 tick마다 member heartbeat를 확인하고, `member-lease-ttl`을 넘긴 member를 `EXPIRED`로 fencing한 뒤 target assignment를 다시 계산한다.
-* member identity는 member runtime이 직접 만든 UUID를 사용하되, coordinator가 등록/epoch/fencing 상태를 관리한다.
-* shard assignment는 sticky partition 방식으로 계산하고 target assignment로 저장한다.
-* member는 heartbeat request로 owned shard와 revoke ack를 보고하고, coordinator는 heartbeat response로 assigned/pending shard assignment와 fencing status를 내려보낸다.
-* rebalance는 group-wide stop-the-world barrier가 아니라 member별 reconciliation loop로 진행한다.
-* shard count 변경은 member startup YAML sync가 아니라 Coordinator Admin API로만 요청하고, coordinator가 next stream version migration으로 처리한다.
-* consumer `maxConcurrency`는 partition/shard 수가 아니라 member 내부 consumer worker 수이며, Coordinator Admin API가 저장한 server-side consumer concurrency policy로 결정한다.
-* coordinator config는 Redis 접속 정보, Basic Auth admin 계정, control-plane default만 가진다.
-* stream/group별 shard count와 consumer concurrency 개별 설정은 Admin API로 저장한다.
-* consumer runtime integration은 Spring Boot starter로 제공하되, 실제 message 처리와 Redis Stream read/ack 정책은 application이 구현하는 shard lifecycle interface 뒤에 둔다.
-* 공개 API, heartbeat protocol, Redis metadata schema는 명시적으로 versioning하고, coordinator는 rolling upgrade를 위해 구버전과 신규 버전 protocol을 범위 기반으로 동시에 수용한다.
+* Use a central Group Coordinator.
+* Identify a group from `{streamPrefix, consumerGroup}` in the API path instead of hard-coding group identity in coordinator YAML.
+* Let the coordinator expire members whose heartbeat age exceeds `member-lease-ttl`, fence stale owners, and recalculate target assignment.
+* Let member runtimes create their own UUID member IDs while the coordinator owns registration state, epochs, and fencing.
+* Store shard ownership as coordinator-calculated target assignment and member-reported current assignment.
+* Require revoke-before-assign: a shard is not assigned to a new live member until the previous owner has acknowledged revocation or expired.
+* Run rebalance as member-level reconciliation, not a group-wide stop-the-world barrier.
+* Change shard count only through the Coordinator Admin API.
+* Treat consumer `maxConcurrency` as local worker capacity, not as shard count.
+* Keep coordinator YAML limited to Redis connectivity, security, event-loop defaults, and operational defaults.
+* Store per-group shard count and consumer concurrency policy in coordinator metadata.
+* Provide Spring Boot integration while leaving business message processing and Redis Stream acknowledgement policy under application control.
+* Use at-least-once processing as the baseline. Producer retry, consumer crash, pending recovery, and resharding can create duplicate attempts.
+* Do not claim exactly-once side effects. Business side effects cannot be committed atomically with Redis Stream ACK across arbitrary databases, Redis writes, HTTP calls, or external APIs.
+* The same partition key can route to a different Redis Stream shard after shard count or active stream version changes.
+* Version public APIs, heartbeat protocol, and Redis metadata schema explicitly.
 
 ## Success Criteria
 
-* 새 member join/leave 시 변경된 shard만 revoke/assign되고, 영향 없는 member는 계속 consume한다.
-* shard owner handoff는 `revoke ack -> target install -> assign` 순서를 지킨다.
-* shard count와 consumer worker `maxConcurrency` 변경은 coordinator를 통해서만 반영된다.
-* shard count 변경 시 producer write를 멈추지 않고 next stream version으로 전환한다.
-* old `DRAINING` version은 member가 보고한 drain progress가 완료된 뒤 `DEPRECATED`로 전환된다.
-* operator는 monitoring API로 group epoch, assignment epoch, member epoch, target/current assignment, revoke progress, migration progress를 확인할 수 있다.
-* application developer는 starter dependency와 `CoordinatorShardLifecycle` 구현만으로 coordinator heartbeat, assignment, revoke, fencing 처리를 연동할 수 있다.
-* minor 버전 업그레이드는 N/N-1 client와 server가 동시에 동작하는 rolling upgrade를 지원한다.
+* When a member joins, leaves, or expires, only affected shards move.
+* A shard ownership handoff follows `revoke ack -> target install -> assign`.
+* Coordinator monitoring APIs show group epoch, assignment epoch, member epoch, target/current assignment, revoke progress, consumer progress, and active resharding state.
+* Producer routing uses the active stream version and shard count returned by the coordinator.
+* Shard count changes use a next-version stream migration instead of in-place key rewriting.
+* Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.
+* Spring Boot applications can integrate by adding the starter and implementing `CoordinatorShardLifecycle` or the built-in Redis Stream polling handler.
+* Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.
+
+## Current Implementation Snapshot
+
+Last reviewed: 2026-05-29.
+
+Implemented:
+
+* Spring Boot 4 / Kotlin / Java 24 Gradle multi-module project.
+* `coordinator-server` with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, member expiration, resharding, rollback, monitoring APIs, Redis-backed state mutex, ACL, audit logging, admin mutation rate limiting, and coordinator-owned Micrometer metrics.
+* Memory and Redis-backed coordinator state stores with Redis Cluster-safe key layout, Redis metadata schema guards, Lua-backed aggregate/projection writes, store revision checks, and optional Redis Stream shard provisioning.
+* `com.redisstream:redisstream-spring-boot-starter` with consumer heartbeat lifecycle, shard lifecycle callbacks, runtime capacity/progress reporting, optional Redis Stream polling, producer routing cache, publisher stale-cache refresh, graceful leave, and shared Redis command templates.
+* Local Redis Cluster Docker Compose, AWS public Redis test profile, coordinator Dockerfile, sample consumer/publisher pods, Docker smoke workflow, manual GHCR publish workflow, and gated Redis integration tests.
+* Open source documentation for testing, Docker, operations, security, contribution, and versioning.
+
+Not yet complete:
+
+* First public Docker image release.
+* Production hardening around external deployment examples and release automation.
+
+Detailed progress is tracked in [Implementation Status](implementation-status.md).
+
+## Guarantee Boundaries
+
+* Routing determinism is guaranteed only for the same routing protocol, `activeWriteVersion`, `shardCount`, and partition key.
+* Shard scale-out/in changes the routing domain. The same partition key can route to different shard indexes between old and new stream versions.
+* The baseline processing model is at-least-once.
+* Single processing and exactly-once side effects are not guaranteed.
+* Applications must handle duplicate side effects through domain-level idempotency, deduplication, unique constraints, or compensation.

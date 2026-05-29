@@ -1,167 +1,175 @@
 # RedisStream Spring Boot Starter and Integration Contract
 
-## Goal
+## Purpose
 
-The coordinator server is only the control plane. Applications still need a runtime integration layer that joins a coordinator group, sends heartbeats, receives shard assignments, starts or stops local shard workers, and reports revoke/drain progress.
+`com.redisstream:redisstream-spring-boot-starter` provides the runtime pieces that application developers need to connect to Redis Stream Coordinator.
 
-This project provides that integration as a Spring Boot starter:
+The starter intentionally does not hide the processing model. Applications can use the shard lifecycle API directly or opt into the built-in Redis Stream polling adapter.
 
-```text
-com.redisstream:redisstream-spring-boot-starter
+## Consumer Integration
+
+Applications configure a coordinator endpoint and group identity:
+
+```yaml
+redis-stream-coordinator:
+  consumer:
+    coordinator-base-url: http://localhost:8080
+    stream-prefix: orders
+    consumer-group: orders-consumer
+    member-name: orders-worker
+    runtime-max-concurrency: 4
 ```
 
-Public Kotlin APIs live under `com.redisstream.consumer` and `com.redisstream.producer`.
+The starter:
 
-The starter must be usable by any application without forcing a specific Redis Stream processing framework. Applications can either implement shard lifecycle callbacks directly, or opt into the built-in Redis Stream polling adapter. Application code still owns business handler execution, retries, DLQ, idempotency, and transaction boundaries.
+* creates or loads a member ID,
+* sends heartbeats,
+* applies assignment responses,
+* calls shard lifecycle callbacks,
+* reports owned shards and revoke acknowledgements,
+* reports runtime capacity and optional progress,
+* handles fencing responses.
 
-## Public Contract
+## Shard Lifecycle API
 
-Application code implements one interface:
+Applications can implement `CoordinatorShardLifecycle`:
 
 ```kotlin
-interface CoordinatorShardLifecycle {
-    fun onAssigned(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext)
-
-    fun onRevoked(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext): Set<CoordinatorShard>
-
-    fun onPending(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext) {
+@Component
+class OrdersShardLifecycle : CoordinatorShardLifecycle {
+    override fun onAssigned(
+        shards: Set<CoordinatorShard>,
+        context: CoordinatorConsumerContext,
+    ) {
+        // Start local workers for these shards.
     }
 
-    fun onFenced(context: CoordinatorConsumerContext) {
+    override fun onRevoked(
+        shards: Set<CoordinatorShard>,
+        context: CoordinatorConsumerContext,
+    ): Set<CoordinatorShard> {
+        // Stop new reads and wait for local in-flight work to drain.
+        return shards
     }
 }
 ```
 
-Rules:
+Lifecycle callbacks should be idempotent. The same assignment can be delivered more than once after retry or reconnect.
 
-* `onAssigned` starts or resumes local workers for assigned shards.
-* `onPending` exposes shards that are targeted for this member but blocked by revoke-before-assign.
-* `onRevoked` stops new reads for revoked shards, drains local in-flight work, and returns the shards that are fully revoked.
-* If `onRevoked` returns only part of the requested set, the starter keeps reporting the remaining shards as `DRAINING` and calls `onRevoked` again on later heartbeat cycles.
-* `onFenced` stops all local workers and allows the starter to rejoin with `memberEpoch=0`.
+## Optional Redis Stream Polling Adapter
 
-## Starter Responsibilities
-
-The starter owns:
-
-* stable `memberId` and `memberName` configuration
-* heartbeat scheduling
-* coordinator HTTP calls
-* `memberEpoch` and `metadataVersion` tracking
-* `ownedShards` reporting
-* `revokingShards` reporting
-* assignment diffing
-* listener callbacks for assign, pending, revoke, and fenced states
-
-In direct lifecycle mode, the starter does not own:
-
-* Redis Stream polling
-* payload deserialization
-* user handler execution
-* `XACK`
-* retry and DLQ
-* idempotency markers
-* business transaction boundaries
-
-In built-in Redis polling mode, the starter owns:
-
-* shard-key derivation from coordinator assignments
-* `XREADGROUP`
-* handler invocation through `RedisStreamMessageHandler`
-* successful-message `XACK`
-* stopping shard pollers during revoke/fencing
-
-The built-in polling mode still does not own retries, DLQ, idempotency markers, or business transaction boundaries.
-
-## Spring Boot Configuration
+Applications that want the starter to perform Redis Stream reads can enable the polling adapter:
 
 ```yaml
 redis-stream-coordinator:
   consumer:
-    enabled: true
-    coordinator-base-url: http://localhost:8080
-    stream-prefix: orders
-    consumer-group: orders-consumer
-    member-id: ${HOSTNAME:${random.uuid}}
-    member-name: orders-worker
-    runtime-max-concurrency: 4
-    heartbeat-interval: 3s
-    rebalance-timeout: 60s
-    username: member
-    password: member-password
-```
-
-If a `CoordinatorShardLifecycle` bean exists, auto-configuration creates a `CoordinatorManagedConsumer` bean. Applications can override `CoordinatorClient` or `CoordinatorManagedConsumer` with their own beans.
-
-Alternatively, applications can enable the built-in Redis Stream consumer adapter by providing a `RedisStreamMessageHandler` bean and enabling `redis-stream-coordinator.consumer.redis.enabled`.
-
-```yaml
-redis-stream-coordinator:
-  consumer:
-    enabled: true
-    coordinator-base-url: http://localhost:8080
-    stream-prefix: orders
-    consumer-group: orders-consumer
-    member-name: orders-worker
     redis:
       enabled: true
       poll-batch-size: 10
       poll-timeout: 1s
+      ack-mode: xackdel
 ```
 
-## Runtime Flow
+Supported ACK modes:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant App as Application Shard Lifecycle
-    participant Starter as Consumer Starter
-    participant C as Coordinator
+| Mode | Behavior |
+| --- | --- |
+| `xackdel` | ACK and delete after successful handler execution |
+| `xack` | ACK after successful handler execution |
+| `xnack` | Do not ACK automatically; leave retry handling to application policy |
 
-    Starter->>C: heartbeat memberEpoch=0 ownedShards=[]
-    C-->>Starter: assignedShards, pendingShards, memberEpoch
-    Starter->>App: onAssigned(assignedShards)
-    Starter->>C: heartbeat memberEpoch=N ownedShards=assigned
-    C-->>Starter: new assigned/pending after rebalance
-    Starter->>App: onPending(pending)
-    Starter->>App: onRevoked(removedShards)
-    Starter->>C: heartbeat revokingShards=DRAINING or REVOKED
-    C-->>Starter: assignment converged
+Applications provide a handler:
+
+```kotlin
+@Component
+class OrdersMessageHandler : RedisStreamMessageHandler {
+    override fun handle(message: ConsumedRedisStreamMessage) {
+        // Execute business processing.
+        // The adapter acknowledges only after this method returns successfully.
+    }
+}
 ```
 
-## Producer Routing Client
+## Consumer Progress Reporting
 
-The RedisStream starter includes a `CoordinatorClient.producerRouting` method so applications can share the same coordinator HTTP client for producer routing metadata. Producer-side local caches must invalidate when `metadataVersion` changes.
+The consumer can report:
 
-The starter also provides a `ProducerRoutingCache` component under `com.redisstream.producer`. It fetches `/producer-routing`, caches the response for `redis-stream-coordinator.producer.routing-refresh-interval`, and replaces the cached metadata when a refreshed response has a newer `metadataVersion`.
+* last delivered Redis Stream ID,
+* last acknowledged Redis Stream ID,
+* pending count,
+* in-flight count,
+* shard read state.
+
+The coordinator uses this for monitoring and drain decisions. It does not use progress as an exactly-once guarantee.
+
+## Producer Integration
+
+Producer applications configure coordinator routing and Redis connectivity:
 
 ```yaml
 redis-stream-coordinator:
   producer:
-    enabled: true
     coordinator-base-url: http://localhost:8080
     stream-prefix: orders
     consumer-group: orders-consumer
-    routing-refresh-interval: 30s
+    routing-cache-ttl: 5s
+    maxlen: 100000
+    approximate-trimming: true
 ```
 
-Application producers can call `ProducerRoutingCache.route(partitionKey)` and write to the returned `streamKey`, or inject `RedisStreamPublisher` to route and `XADD` in one call. The built-in hasher currently supports `murmur3`, `murmur3_32`, and `murmur3-32` names.
+Applications publish through `RedisStreamPublisher`:
 
-## MVP Acceptance Criteria
+```kotlin
+redisStreamPublisher.publish(
+    partitionKey = "order-123",
+    fields = mapOf("eventId" to "evt-1", "payload" to "..."),
+)
+```
 
-* A Spring Boot application can add the starter and implement `CoordinatorShardLifecycle`.
-* The starter sends join heartbeats with `memberEpoch=0`.
-* The starter tracks `memberEpoch` and `metadataVersion` from coordinator responses.
-* The starter notifies newly assigned shards.
-* The starter notifies revoked shards and reports revoke completion to the coordinator.
-* The starter retries incomplete revoke callbacks across heartbeat cycles for long drain windows.
-* The starter resets local assignment state on fencing and rejoins.
-* The starter exposes an overridable `CoordinatorClient`.
-* The starter provides a producer routing cache that refreshes and replaces metadata by `metadataVersion`.
-* The starter provides a Redis Stream publisher that routes by partition key and appends to the active shard.
-* The starter provides an opt-in Redis Stream consumer adapter that polls assigned shards and acknowledges successfully handled records.
+The publisher:
 
-## Future Work
+* reads producer routing metadata,
+* caches metadata by `metadataVersion`,
+* routes partition keys to active stream shards,
+* sends XADD with configured max length policy,
+* refreshes routing metadata on stale route signals,
+* returns the produced stream key and Redis Stream ID.
 
-* Micrometer metrics for heartbeat latency, assignment lag, pending shards, and revoke duration.
-* Backoff and circuit-breaker policy for coordinator unavailability.
+## Redis Command Template
+
+Redis commands should be centralized behind shared templates instead of scattered across consumer and producer classes.
+
+Benefits:
+
+* Redis version compatibility checks happen in one place.
+* `XACKDEL`, `XACK`, `XREADGROUP`, `XADD`, and fallback behavior are easier to test.
+* Producer and consumer modules use consistent serialization.
+* Unsupported command paths can fail fast with clear errors.
+
+## Redis Version Compatibility
+
+The starter should check Redis server version before using version-specific commands. If the connected Redis version does not support a configured command, the module should either:
+
+* fail fast with a clear configuration error, or
+* use a documented fallback when safe.
+
+Examples:
+
+* `XACKDEL` requires Redis support for that command.
+* `XACK` is the conservative fallback when delete-after-ack is not required.
+* Max length trimming must match the selected Redis command behavior.
+
+## Metrics Boundary
+
+Shared ownership, routing, and progress metrics belong to the coordinator. Consumer and producer modules can expose local application metrics if an application chooses to add them, but the starter should avoid defining a second public metric surface for coordinator-owned state.
+
+## Compatibility Contract
+
+The starter must send `protocolVersion` in heartbeat requests. Coordinator servers accept a configured protocol version range so old and new clients can coexist during rolling upgrades.
+
+Breaking changes require:
+
+* major version bump,
+* compatibility notes,
+* migration guide,
+* tests covering N/N-1 compatibility.

@@ -7,7 +7,18 @@ management:
       exposure:
         include: health,info
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    try-it-out-enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+
 spring:
+  config:
+    import: ${SPRING_CONFIG_IMPORT:optional:configtree:/run/secrets/}
   data:
     redis:
       cluster:
@@ -20,10 +31,17 @@ coordinator:
   id: local-coordinator
   heartbeat-interval: 5s
   member-lease-ttl: 15s
+  loop:
+    enabled: true
+    tick-interval: 1s
   api:
     admin-username: admin
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
     authenticate-member-api: false
+    users: []
+    rate-limit:
+      enabled: false
+      admin-mutations-per-minute: 60
   protocol:
     min-heartbeat-version: 1
     max-heartbeat-version: 1
@@ -44,8 +62,17 @@ coordinator:
   store:
     type: memory
     key-prefix: redis-stream:coord
+  coordination:
+    state-mutex:
+      enabled: true
+      ttl: 30s
+      acquire-timeout: 5s
+      retry-interval: 100ms
   streams:
     provisioning-enabled: false
+  audit:
+    sink: log
+    redis-max-entries: 1000
   defaults:
     initial-shard-count: 12
     consumer-max-concurrency: 12

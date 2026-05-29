@@ -7,6 +7,7 @@ import org.springframework.data.redis.connection.stream.RecordId
 import org.springframework.data.redis.connection.stream.StreamOffset
 import org.springframework.data.redis.connection.stream.StreamReadOptions
 import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -29,7 +30,8 @@ class RedisStreamConsumerLifecycle(
     private val reader: RedisStreamReader,
     private val handler: RedisStreamMessageHandler,
     private val startPollersOnAssignment: Boolean = true,
-) : CoordinatorShardLifecycle, AutoCloseable {
+    private val metrics: CoordinatorConsumerMetrics = NoopCoordinatorConsumerMetrics,
+) : CoordinatorShardLifecycle, CoordinatorRuntimeCapacityProvider, AutoCloseable {
     private val shardStates = ConcurrentHashMap<CoordinatorShard, ShardState>()
     private val executor: ExecutorService = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "redis-stream-consumer-${properties.memberId}").apply {
@@ -73,6 +75,15 @@ class RedisStreamConsumerLifecycle(
         shardStates.clear()
     }
 
+    override fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity {
+        val inFlight = shardStates.values.sumOf { it.inFlight.get() }
+        val runtimeMaxConcurrency = properties.runtimeMaxConcurrency.coerceAtLeast(1)
+        return RuntimeConsumerCapacity(
+            runtimeMaxConcurrency = runtimeMaxConcurrency,
+            availableConcurrency = (runtimeMaxConcurrency - inFlight).coerceAtLeast(0),
+        )
+    }
+
     fun pollOnce(shard: CoordinatorShard): Int {
         val state = shardStates[shard] ?: return 0
         if (state.stopping.get()) {
@@ -91,9 +102,24 @@ class RedisStreamConsumerLifecycle(
 
         messages.forEach { message ->
             state.inFlight.incrementAndGet()
+            val startedAt = Instant.now()
             try {
-                handler.handle(message)
-                reader.ack(message.streamKey, properties.consumerGroup, message.recordId)
+                try {
+                    handler.handle(message)
+                } catch (error: RuntimeException) {
+                    metrics.recordMessageHandled("ERROR", Duration.between(startedAt, Instant.now()))
+                    throw error
+                }
+
+                try {
+                    reader.ack(message.streamKey, properties.consumerGroup, message.recordId)
+                    metrics.recordMessageAck("SUCCESS")
+                    metrics.recordMessageHandled("SUCCESS", Duration.between(startedAt, Instant.now()))
+                } catch (error: RuntimeException) {
+                    metrics.recordMessageAck("ERROR")
+                    metrics.recordMessageHandled("ERROR", Duration.between(startedAt, Instant.now()))
+                    throw error
+                }
             } finally {
                 state.inFlight.decrementAndGet()
             }

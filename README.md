@@ -19,10 +19,20 @@ This project was created to fill that gap. It adapts the coordinator-managed reb
 * Rebalance only the shards that need to move when members join, leave, expire, or when shard counts change.
 * Handle shard count changes through next-version stream migration instead of in-place resharding.
 
+## Guarantee Boundaries
+
+Routing is deterministic only for a fixed producer-routing metadata snapshot. If shard count or active stream version changes, the same partition key can route to a different Redis Stream shard.
+
+The project uses at-least-once processing as its baseline. Producer retries, consumer crashes, pending recovery, and shard scaling can all produce duplicate delivery or duplicate business-event attempts.
+
+The project does not provide a single-processing guarantee. Real applications often combine DB writes, Redis writes, HTTP calls, and other side effects that cannot be committed atomically with Redis Stream ACKs. Applications that cannot tolerate duplicate effects must implement domain-level idempotency, deduplication, or compensation.
+
 ## Modules
 
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
-* `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, receive assignment changes, and implement shard lifecycle callbacks.
+* `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
+* `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
+* `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
 
 ## Versioning
 
@@ -125,12 +135,47 @@ redis-stream-coordinator:
 
 ## Documentation
 
+* [Published Design Docs](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html)
+* [Published Design Docs (Korean)](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html?tl=ko)
+* [Design PRD](docs/PRD.md)
+* [Design PRD (Korean)](docs/ko/PRD.md)
 * [Implementation Status](docs/implementation-status.md)
+* [Docker Guide](docs/docker.md)
+* [Testing Guide](docs/testing.md)
+* [Operations Runbook](docs/operations-runbook.md)
 * [IntelliJ Setup](docs/intellij-setup.md)
+* [Contributing](CONTRIBUTING.md)
+* [Security Policy](SECURITY.md)
+* [Changelog](CHANGELOG.md)
+
+## Docker Quick Start
+
+```bash
+docker compose --profile coordinator up --build
+curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
+```
+
+Run a full local pod smoke stack with Redis Cluster, coordinator, two consumer pods, and one auto-publishing pod:
+
+```bash
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+curl -sS http://localhost:18090/sample/status
+curl -sS http://localhost:18081/sample/events
+curl -sS http://localhost:18082/sample/events
+```
+
+Swagger UI is available for interactive local testing:
+
+* Coordinator: `http://localhost:8080/swagger-ui.html`
+* Consumer pod 1: `http://localhost:18081/swagger-ui.html`
+* Consumer pod 2: `http://localhost:18082/swagger-ui.html`
+* Publisher pod: `http://localhost:18090/swagger-ui.html`
+
+Use `admin` / `password` in the coordinator Swagger Authorize dialog for protected coordinator endpoints.
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, consumer heartbeat integration, and a Codex review workflow.
+This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
 
 ## License
 

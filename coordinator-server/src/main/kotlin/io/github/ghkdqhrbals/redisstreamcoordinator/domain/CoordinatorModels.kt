@@ -3,6 +3,8 @@ package io.github.ghkdqhrbals.redisstreamcoordinator.domain
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
+import com.fasterxml.jackson.annotation.JsonAlias
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import java.time.Instant
 import java.util.UUID
 
@@ -11,6 +13,8 @@ enum class MemberState { STARTING, ACTIVE, LEAVING, EXPIRED, FENCED }
 enum class MigrationState { PREPARING, ACTIVE, DRAINING, DEPRECATED, ROLLING_BACK, ROLLED_BACK }
 enum class HeartbeatStatus { OK, RETRY, UNKNOWN_MEMBER_ID, FENCED_MEMBER_EPOCH, UNSUPPORTED_PROTOCOL, INVALID_REQUEST }
 enum class RevokingShardState { REVOKING, DRAINING, REVOKED }
+
+const val COORDINATOR_METADATA_SCHEMA_VERSION = 1
 
 data class GroupKey(
     val streamPrefix: String,
@@ -34,9 +38,6 @@ data class ConsumerConcurrencyPolicy(
 data class CreateGroupRequest(
     @field:Min(1)
     val initialShardCount: Int? = null,
-    @field:NotBlank
-    val hashAlgorithm: String,
-    val hashSeed: String = "default",
     val versionPolicy: String = "AUTO_INCREMENT",
     @field:Valid
     val consumerConcurrencyPolicy: ConsumerConcurrencyPolicy? = null,
@@ -125,7 +126,9 @@ data class HeartbeatResponse(
 )
 
 data class Migration(
-    val migrationId: String,
+    @param:JsonAlias("migrationId")
+    @field:JsonAlias("migrationId")
+    val reshardingId: String,
     val fromVersion: Int,
     val toVersion: Int,
     val fromShardCount: Int,
@@ -152,9 +155,11 @@ data class MemberMetadata(
     var rebalanceDeadlineAt: Instant? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class GroupMetadata(
     val streamPrefix: String,
     val consumerGroup: String,
+    var schemaVersion: Int = COORDINATOR_METADATA_SCHEMA_VERSION,
     var storeRevision: Long = 0,
     var groupEpoch: Long,
     var metadataVersion: Long,
@@ -163,13 +168,13 @@ data class GroupMetadata(
     var activeWriteVersion: Int,
     var readableVersions: Set<Int>,
     var shardCountsByVersion: MutableMap<Int, Int>,
-    val hashAlgorithm: String,
-    val hashSeed: String,
     var consumerConcurrencyPolicy: ConsumerConcurrencyPolicy,
     val members: MutableMap<String, MemberMetadata> = linkedMapOf(),
     var targetAssignments: MutableMap<String, MutableSet<ShardId>> = linkedMapOf(),
     var migrations: MutableMap<String, Migration> = linkedMapOf(),
-    var activeMigrationId: String? = null,
+    @param:JsonAlias("activeMigrationId")
+    @field:JsonAlias("activeMigrationId")
+    var activeReshardingId: String? = null,
     val createdAt: Instant,
     var updatedAt: Instant,
 )
@@ -212,8 +217,6 @@ data class ProducerRoutingResponse(
     val metadataVersion: Long,
     val activeWriteVersion: Int,
     val shardCount: Int,
-    val hashAlgorithm: String,
-    val hashSeed: String,
     val streamKeyPattern: String,
     val shards: List<ProducerRoutingShard>,
 )
@@ -235,7 +238,7 @@ data class AssignmentsResponse(
 )
 data class MigrationsResponse(
     val migrations: List<Migration>,
-    val activeMigration: String?,
+    val activeReshardingId: String?,
 )
 
-fun newMigrationId(): String = "mig-${UUID.randomUUID()}"
+fun newReshardingId(): String = "reshard-${UUID.randomUUID()}"

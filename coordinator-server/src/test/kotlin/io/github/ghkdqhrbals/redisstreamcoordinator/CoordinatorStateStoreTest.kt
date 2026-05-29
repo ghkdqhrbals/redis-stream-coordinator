@@ -111,7 +111,7 @@ class CoordinatorStateStoreTest {
             memberLeaseExpiresAt = Instant.now(clock).plusSeconds(15),
         )
         val migration = Migration(
-            migrationId = "mig-1",
+            reshardingId = "reshard-1",
             fromVersion = 1,
             toVersion = 2,
             fromShardCount = 4,
@@ -122,16 +122,16 @@ class CoordinatorStateStoreTest {
         )
         group.members[member.memberId] = member
         group.targetAssignments[member.memberId] = mutableSetOf(ShardId(1, 0), ShardId(1, 1))
-        group.migrations[migration.migrationId] = migration
-        group.activeMigrationId = migration.migrationId
+        group.migrations[migration.reshardingId] = migration
+        group.activeReshardingId = migration.reshardingId
 
         val projection = group.toRedisStateProjection()
 
         assertEquals(setOf("member-a"), projection.members.keys)
         assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), projection.targetAssignments.getValue("member-a"))
         assertEquals(setOf(ShardId(1, 0)), projection.currentAssignments.getValue("member-a"))
-        assertEquals(setOf("mig-1"), projection.migrations.keys)
-        assertEquals("mig-1", projection.activeMigrationId)
+        assertEquals(setOf("reshard-1"), projection.migrations.keys)
+        assertEquals("reshard-1", projection.activeReshardingId)
     }
 
     private fun service(store: CoordinatorStateStore): CoordinatorService =
@@ -154,8 +154,6 @@ class CoordinatorStateStoreTest {
             activeWriteVersion = 1,
             readableVersions = setOf(1),
             shardCountsByVersion = linkedMapOf(1 to 4),
-            hashAlgorithm = "murmur3",
-            hashSeed = "default",
             consumerConcurrencyPolicy = ConsumerConcurrencyPolicy(defaultMaxConcurrency = 4),
             createdAt = Instant.now(clock),
             updatedAt = Instant.now(clock),
@@ -164,7 +162,6 @@ class CoordinatorStateStoreTest {
     private fun createGroupRequest(initialShardCount: Int? = null): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 

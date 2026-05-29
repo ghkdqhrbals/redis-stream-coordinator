@@ -7,10 +7,12 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
 
+import org.mockito.Mockito
 import org.springframework.beans.factory.support.StaticListableBeanFactory
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import java.time.ZoneId
 import java.time.Clock
@@ -96,6 +98,41 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `health skips redis ping when redis features are disabled`() {
+        val redisConnectionFactory = Mockito.mock(RedisConnectionFactory::class.java)
+        val service = CoordinatorService(
+            properties = CoordinatorProperties(),
+            stateStore = InMemoryCoordinatorStateStore(),
+            redisConnectionFactory = redisProvider(redisConnectionFactory),
+            clock = clock,
+        )
+
+        val health = service.health()
+
+        assertEquals("UP", health.status)
+        assertEquals("NOT_CONFIGURED", health.redis)
+        Mockito.verifyNoInteractions(redisConnectionFactory)
+    }
+
+    @Test
+    fun `health degrades when redis is required and unavailable`() {
+        val redisConnectionFactory = Mockito.mock(RedisConnectionFactory::class.java)
+        Mockito.`when`(redisConnectionFactory.connection).thenThrow(IllegalStateException("redis down"))
+        val service = CoordinatorService(
+            properties = CoordinatorProperties(store = CoordinatorProperties.Store(type = CoordinatorProperties.StoreType.REDIS)),
+            stateStore = InMemoryCoordinatorStateStore(),
+            redisConnectionFactory = redisProvider(redisConnectionFactory),
+            clock = clock,
+        )
+
+        val health = service.health()
+
+        assertEquals("DEGRADED", health.status)
+        assertEquals("DOWN", health.redis)
+        Mockito.verify(redisConnectionFactory).connection
+    }
+
+    @Test
     fun `heartbeat rejects unknown member leave`() {
         service.createGroup("orders", "orders-consumer", createGroupRequest())
 
@@ -128,6 +165,50 @@ class CoordinatorServiceTest {
         assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-b"))
         assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), second.assignment.assignedShards)
         assertTrue(second.assignment.pendingShards.isEmpty())
+    }
+
+    @Test
+    fun `coordinator tick expires silent members without waiting for another heartbeat`() {
+        service.createGroup("tick-orders", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val first = service.heartbeat("tick-orders", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "tick-orders",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+
+        clock.advance(Duration.ofSeconds(16))
+        val tick = service.tick()
+        val members = service.listMembers("tick-orders", "orders-consumer").members
+        val assignments = service.assignments("tick-orders", "orders-consumer")
+
+        assertEquals(1, tick.scannedGroups)
+        assertEquals(1, tick.changedGroups)
+        assertEquals(MemberState.EXPIRED, members.single().state)
+        assertTrue(assignments.targetAssignment.isEmpty())
+    }
+
+    @Test
+    fun `monitoring read retries operational refresh when state save races with another writer`() {
+        val store = CopyingConflictOnceStateStore()
+        val service = service(clock, store)
+        service.createGroup("monitor-race", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val first = service.heartbeat("monitor-race", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "monitor-race",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+
+        clock.advance(Duration.ofSeconds(16))
+        store.conflictsBeforeSave = 1
+        val group = service.getGroup("monitor-race", "orders-consumer")
+
+        assertEquals(GroupState.EMPTY, group.state)
+        assertEquals(1, store.conflictedSaves)
+        assertEquals(MemberState.EXPIRED, service.listMembers("monitor-race", "orders-consumer").members.single().state)
     }
 
     @Test
@@ -263,7 +344,7 @@ class CoordinatorServiceTest {
         val rolledBack = service.rollbackMigration(
             "metrics",
             "metrics-consumer",
-            migration.migrationId,
+            migration.reshardingId,
         )
         val group = service.getGroup("metrics", "metrics-consumer")
 
@@ -278,7 +359,7 @@ class CoordinatorServiceTest {
         service.createGroup("metrics", "metrics-consumer", createGroupRequest(initialShardCount = 2))
 
         val error = kotlin.runCatching {
-            service.rollbackMigration("metrics", "metrics-consumer", "mig-missing")
+            service.rollbackMigration("metrics", "metrics-consumer", "reshard-missing")
         }.exceptionOrNull() as CoordinatorException
 
         assertEquals(CoordinatorError.MIGRATION_NOT_FOUND, error.error)
@@ -298,6 +379,39 @@ class CoordinatorServiceTest {
         assertEquals(HeartbeatStatus.OK, rejoined.status)
         assertEquals(MemberState.ACTIVE, member.state)
         assertEquals(rejoined.memberEpoch, member.memberEpoch)
+    }
+
+    @Test
+    fun `membership rejoin restores gracefully left member`() {
+        service.createGroup("logs", "logs-consumer", createGroupRequest(initialShardCount = 2))
+        val joined = service.heartbeat("logs", "logs-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "logs",
+            "logs-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = joined.memberEpoch, ownedShards = joined.assignment.assignedShards),
+        )
+        service.heartbeat(
+            "logs",
+            "logs-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = -1,
+                ownedShards = joined.assignment.assignedShards,
+                revokingShards = joined.assignment.assignedShards.map {
+                    RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
+                },
+            ),
+        )
+
+        val rejoined = service.heartbeat("logs", "logs-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        val member = service.listMembers("logs", "logs-consumer").members.single()
+
+        assertEquals(HeartbeatStatus.OK, rejoined.status)
+        assertEquals(MemberState.ACTIVE, member.state)
+        assertEquals(rejoined.memberEpoch, member.memberEpoch)
+        assertEquals(joined.assignment.assignedShards, rejoined.assignment.assignedShards)
     }
 
     @Test
@@ -646,6 +760,37 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `expired member leave heartbeat stays fenced`() {
+        service.createGroup("expired-leave", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "expired-leave",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "expired-leave",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        clock.advance(Duration.ofSeconds(16))
+        service.tick()
+
+        val leave = service.heartbeat(
+            "expired-leave",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = -1, ownedShards = memberA.assignment.assignedShards),
+        )
+        val member = service.listMembers("expired-leave", "orders-consumer").members.single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, leave.status)
+        assertEquals(MemberState.EXPIRED, member.state)
+        assertEquals(memberA.assignment.assignedShards, member.currentAssignment)
+    }
+
+    @Test
     fun `membership ignores stale ownership on rejoin`() {
         service.createGroup("expired-rejoin", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
@@ -687,6 +832,94 @@ class CoordinatorServiceTest {
         assertEquals(emptySet(), assignments.currentAssignments.getValue("member-a"))
         assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-b"))
         assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `heartbeat fences member that reports pending shard ownership before revoke completes`() {
+        service.createGroup("premature-ownership", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        val memberB = service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        val pendingShard = memberB.assignment.pendingShards.single()
+
+        val fenced = service.heartbeat(
+            "premature-ownership",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch, ownedShards = setOf(pendingShard)),
+        )
+        val members = service.listMembers("premature-ownership", "orders-consumer").members
+        val assignments = service.assignments("premature-ownership", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, fenced.status)
+        assertTrue(fenced.assignment.assignedShards.isEmpty())
+        assertEquals(MemberState.FENCED, members.single { it.memberId == "member-b" }.state)
+        assertEquals(emptySet(), assignments.currentAssignments.getValue("member-b"))
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-a"))
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `heartbeat fences member that reports shard owned by another active member`() {
+        val converged = convergeTwoMemberGroup("foreign-ownership")
+        val foreignShard = converged.memberATarget.single()
+
+        val fenced = service.heartbeat(
+            "foreign-ownership",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = converged.memberB.memberEpoch,
+                ownedShards = converged.memberBTarget + foreignShard,
+            ),
+        )
+        val members = service.listMembers("foreign-ownership", "orders-consumer").members
+        val assignments = service.assignments("foreign-ownership", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, fenced.status)
+        assertEquals(MemberState.FENCED, members.single { it.memberId == "member-b" }.state)
+        assertEquals(emptySet(), assignments.currentAssignments.getValue("member-b"))
+        assertEquals(emptySet(), assignments.revokeProgress["member-b"].orEmpty())
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `duplicate terminal revoke report after release does not fence member`() {
+        val converged = convergeTwoMemberGroup("duplicate-revoke")
+        val releasedByA = converged.memberBTarget.single()
+
+        val response = service.heartbeat(
+            "duplicate-revoke",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = converged.memberA.memberEpoch,
+                ownedShards = converged.memberATarget,
+                revokingShards = listOf(RevokingShardReport(releasedByA, RevokingShardState.REVOKED, inFlight = 0)),
+            ),
+        )
+        val memberA = service.listMembers("duplicate-revoke", "orders-consumer").members.single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.OK, response.status)
+        assertEquals(MemberState.ACTIVE, memberA.state)
+        assertEquals(converged.memberATarget, memberA.currentAssignment)
     }
 
     @Test
@@ -739,7 +972,7 @@ class CoordinatorServiceTest {
             heartbeat("member-a", memberEpoch = oldAndNew.memberEpoch, ownedShards = oldAndNew.assignment.assignedShards),
         )
         val drainingGroup = service.getGroup("drain", "orders-consumer")
-        val drainingMigration = service.getMigration("drain", "orders-consumer", migration.migrationId)
+        val drainingMigration = service.getMigration("drain", "orders-consumer", migration.reshardingId)
 
         assertEquals(MigrationState.DRAINING, drainingMigration.state)
         assertEquals(setOf(2), drainingGroup.readableVersions)
@@ -760,7 +993,7 @@ class CoordinatorServiceTest {
                 ),
             ),
         )
-        assertEquals(MigrationState.DRAINING, service.getMigration("drain", "orders-consumer", migration.migrationId).state)
+        assertEquals(MigrationState.DRAINING, service.getMigration("drain", "orders-consumer", migration.reshardingId).state)
 
         val completed = service.heartbeat(
             "drain",
@@ -777,12 +1010,60 @@ class CoordinatorServiceTest {
             ),
         )
         val completedGroup = service.getGroup("drain", "orders-consumer")
-        val completedMigration = service.getMigration("drain", "orders-consumer", migration.migrationId)
+        val completedMigration = service.getMigration("drain", "orders-consumer", migration.reshardingId)
 
         assertEquals(MigrationState.DEPRECATED, completedMigration.state)
         assertEquals(null, completedGroup.activeMigration)
         assertEquals(setOf(2), completedGroup.readableVersions)
         assertEquals((0 until 3).map { ShardId(2, it) }.toSet(), completed.assignment.assignedShards)
+    }
+
+    @Test
+    fun `migration scale lets live consumers revoke old assignments without fencing`() {
+        service.createGroup("live-scale", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = SimulatedConsumer("member-a")
+        val memberB = SimulatedConsumer("member-b")
+
+        fun poll(member: SimulatedConsumer): HeartbeatResponse {
+            val response = service.heartbeat(
+                "live-scale",
+                "orders-consumer",
+                member.memberId,
+                heartbeat(
+                    member.memberId,
+                    memberEpoch = member.memberEpoch,
+                    ownedShards = member.ownedShards,
+                    revokingShards = member.revokingShards,
+                ),
+            )
+            member.apply(response)
+            return response
+        }
+
+        poll(memberA)
+        poll(memberA)
+        poll(memberB)
+        poll(memberA)
+        poll(memberB)
+        poll(memberB)
+
+        service.scaleGroup(
+            "live-scale",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "live scale"),
+        )
+
+        repeat(8) {
+            assertNotEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, poll(memberA).status)
+            assertNotEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, poll(memberB).status)
+        }
+        val assignments = service.assignments("live-scale", "orders-consumer")
+        val members = service.listMembers("live-scale", "orders-consumer").members
+
+        assertTrue(assignments.invariantViolations.isEmpty())
+        assertEquals(assignments.targetAssignment, assignments.currentAssignments.filterValues { it.isNotEmpty() })
+        assertTrue(members.all { it.state == MemberState.ACTIVE })
+        assertTrue(assignments.targetAssignment.values.flatten().all { it.streamVersion == 2 })
     }
 
     @Test
@@ -792,8 +1073,6 @@ class CoordinatorServiceTest {
             "orders-consumer",
             CreateGroupRequest(
                 initialShardCount = 2,
-                hashAlgorithm = "murmur3",
-                hashSeed = "tenant-a",
                 requestedBy = "test",
             ),
         )
@@ -808,8 +1087,6 @@ class CoordinatorServiceTest {
 
         assertEquals(1, beforeScale.activeWriteVersion)
         assertEquals(2, beforeScale.shardCount)
-        assertEquals("murmur3", beforeScale.hashAlgorithm)
-        assertEquals("tenant-a", beforeScale.hashSeed)
         assertEquals("route-orders:v{streamVersion}:shard:{shardIndex}", beforeScale.streamKeyPattern)
         assertEquals(listOf("route-orders:v1:shard:0", "route-orders:v1:shard:1"), beforeScale.shards.map { it.streamKey })
         assertEquals(2, afterScale.activeWriteVersion)
@@ -881,10 +1158,116 @@ class CoordinatorServiceTest {
             clock = clock,
         )
 
+    private data class ConvergedTwoMemberGroup(
+        val memberA: HeartbeatResponse,
+        val memberB: HeartbeatResponse,
+        val memberATarget: Set<ShardId>,
+        val memberBTarget: Set<ShardId>,
+    )
+
+    private data class SimulatedConsumer(
+        val memberId: String,
+        var memberEpoch: Long = 0,
+        var ownedShards: Set<ShardId> = emptySet(),
+        var revokingShards: List<RevokingShardReport> = emptyList(),
+    ) {
+        fun apply(response: HeartbeatResponse) {
+            when (response.status) {
+                HeartbeatStatus.OK -> {
+                    memberEpoch = response.memberEpoch
+                    val nextOwned = response.assignment.assignedShards
+                    val revoked = ownedShards - nextOwned
+                    ownedShards = nextOwned
+                    revokingShards = revoked.map {
+                        RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
+                    }
+                }
+                HeartbeatStatus.FENCED_MEMBER_EPOCH, HeartbeatStatus.UNKNOWN_MEMBER_ID -> {
+                    memberEpoch = 0
+                    ownedShards = emptySet()
+                    revokingShards = emptyList()
+                }
+                HeartbeatStatus.RETRY -> Unit
+                HeartbeatStatus.UNSUPPORTED_PROTOCOL, HeartbeatStatus.INVALID_REQUEST ->
+                    error("Unexpected heartbeat status ${response.status}")
+            }
+        }
+    }
+
+    private fun convergeTwoMemberGroup(streamPrefix: String): ConvergedTwoMemberGroup {
+        service.createGroup(streamPrefix, "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberAJoined = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val memberAOwnedAll = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberAJoined.memberEpoch,
+                ownedShards = memberAJoined.assignment.assignedShards,
+            ),
+        )
+        val memberBJoined = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        val targetAssignments = service.assignments(streamPrefix, "orders-consumer").targetAssignment
+        val memberATarget = targetAssignments.getValue("member-a")
+        val memberBTarget = targetAssignments.getValue("member-b")
+        val releasedByA = memberAOwnedAll.assignment.assignedShards - memberATarget
+        val memberAReleased = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberAOwnedAll.memberEpoch,
+                ownedShards = memberATarget,
+                revokingShards = releasedByA.map {
+                    RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
+                },
+            ),
+        )
+        val memberBAssigned = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberBJoined.memberEpoch),
+        )
+        val memberBOwnedTarget = service.heartbeat(
+            streamPrefix,
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = memberBAssigned.memberEpoch,
+                ownedShards = memberBAssigned.assignment.assignedShards,
+            ),
+        )
+
+        return ConvergedTwoMemberGroup(
+            memberA = memberAReleased,
+            memberB = memberBOwnedTarget,
+            memberATarget = memberATarget,
+            memberBTarget = memberBTarget,
+        )
+    }
+
+    private fun redisProvider(redisConnectionFactory: RedisConnectionFactory) =
+        StaticListableBeanFactory()
+            .apply { addBean("redisConnectionFactory", redisConnectionFactory) }
+            .getBeanProvider(RedisConnectionFactory::class.java)
+
     private fun createGroupRequest(initialShardCount: Int? = null): CreateGroupRequest =
         CreateGroupRequest(
             initialShardCount = initialShardCount,
-            hashAlgorithm = "murmur3",
             requestedBy = "test",
         )
 
@@ -931,6 +1314,74 @@ private class RecordingStreamShardProvisioner : StreamShardProvisioner {
             shardCount = plan.shardCount,
         )
     }
+}
+
+private class CopyingConflictOnceStateStore : CoordinatorStateStore {
+    private val groups = linkedMapOf<GroupKey, GroupMetadata>()
+    var conflictsBeforeSave: Int = 0
+    var conflictedSaves: Int = 0
+        private set
+
+    override fun contains(key: GroupKey): Boolean =
+        key in groups
+
+    override fun get(key: GroupKey): GroupMetadata? =
+        groups[key]?.deepCopy()
+
+    override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean {
+        if (key in groups) {
+            return false
+        }
+        val stored = group.deepCopy()
+        stored.storeRevision = 1
+        group.storeRevision = stored.storeRevision
+        groups[key] = stored
+        return true
+    }
+
+    override fun deleteIfRevision(key: GroupKey, expectedRevision: Long): Boolean {
+        if (groups[key]?.storeRevision != expectedRevision) {
+            return false
+        }
+        groups.remove(key)
+        return true
+    }
+
+    override fun save(key: GroupKey, group: GroupMetadata) {
+        if (conflictsBeforeSave > 0) {
+            conflictsBeforeSave -= 1
+            conflictedSaves += 1
+            throw CoordinatorStateConflictException("injected monitoring save conflict")
+        }
+        val stored = group.deepCopy()
+        stored.storeRevision = group.storeRevision + 1
+        group.storeRevision = stored.storeRevision
+        groups[key] = stored
+    }
+
+    override fun list(): List<GroupMetadata> =
+        groups.values.map { it.deepCopy() }
+
+    private fun GroupMetadata.deepCopy(): GroupMetadata =
+        copy(
+            readableVersions = readableVersions.toSet(),
+            shardCountsByVersion = shardCountsByVersion.toMutableMap(),
+            consumerConcurrencyPolicy = consumerConcurrencyPolicy.copy(
+                memberOverrides = consumerConcurrencyPolicy.memberOverrides.toMap(),
+            ),
+            members = members
+                .mapValues { (_, member) ->
+                    member.copy(
+                        currentAssignment = member.currentAssignment.toSet(),
+                        revoking = member.revoking.toSet(),
+                    )
+                }
+                .toMutableMap(),
+            targetAssignments = targetAssignments
+                .mapValues { (_, shards) -> shards.toMutableSet() }
+                .toMutableMap(),
+            migrations = migrations.mapValues { (_, migration) -> migration.copy() }.toMutableMap(),
+        )
 }
 
 private class MutableClock(
