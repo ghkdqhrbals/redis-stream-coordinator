@@ -10,7 +10,6 @@ data class CoordinatorProperties(
     val memberLeaseTtl: Duration = Duration.ofSeconds(15),
     val loop: Loop = Loop(),
     val api: Api = Api(),
-    val protocol: Protocol = Protocol(),
     val redisCluster: RedisCluster = RedisCluster(),
     val store: Store = Store(),
     val coordination: Coordination = Coordination(),
@@ -48,14 +47,6 @@ data class CoordinatorProperties(
         MEMBER,
     }
 
-    data class Protocol(
-        val minHeartbeatVersion: Int = 1,
-        val maxHeartbeatVersion: Int = 1,
-    ) {
-        fun supportsHeartbeat(version: Int): Boolean =
-            version in minHeartbeatVersion..maxHeartbeatVersion
-    }
-
     data class RedisCluster(
         val nodeMappings: List<NodeMapping> = emptyList(),
     )
@@ -71,10 +62,28 @@ data class CoordinatorProperties(
 
     data class StateMutex(
         val enabled: Boolean = true,
-        val ttl: Duration = Duration.ofSeconds(30),
-        val acquireTimeout: Duration = Duration.ofSeconds(5),
-        val retryInterval: Duration = Duration.ofMillis(100),
-    )
+        val ttlMs: Long = 30_000,
+        val acquireTimeoutMs: Long = 5_000,
+        val retryIntervalMs: Long = 100,
+        @Deprecated("Use ttl-ms instead.")
+        val ttl: Duration? = null,
+        @Deprecated("Use acquire-timeout-ms instead.")
+        val acquireTimeout: Duration? = null,
+        @Deprecated("Use retry-interval-ms instead.")
+        val retryInterval: Duration? = null,
+    ) {
+        @Suppress("DEPRECATION")
+        val resolvedTtl: Duration
+            get() = ttl ?: Duration.ofMillis(ttlMs)
+
+        @Suppress("DEPRECATION")
+        val resolvedAcquireTimeout: Duration
+            get() = acquireTimeout ?: Duration.ofMillis(acquireTimeoutMs)
+
+        @Suppress("DEPRECATION")
+        val resolvedRetryInterval: Duration
+            get() = retryInterval ?: Duration.ofMillis(retryIntervalMs)
+    }
 
     data class Streams(
         val provisioningEnabled: Boolean = false,

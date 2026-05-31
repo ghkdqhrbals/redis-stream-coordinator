@@ -15,6 +15,7 @@
 9. [Coordinator API Endpoints](prd/09-api-endpoints.md)
 10. [RedisStream Spring Boot Starter and Integration Contract](prd/10-redisstream-spring-boot-starter.md)
 11. [Versioning and Compatibility Policy](prd/11-versioning-compatibility.md)
+12. [Failure Modes and Edge Cases](prd/12-failure-modes-edge-cases.md)
 
 ## Product Summary
 
@@ -35,11 +36,14 @@ Consumer 모듈은 heartbeat, assignment, revoke, fencing, optional Redis Stream
 * consumer `maxConcurrency`는 partition/shard 수가 아니라 member 내부 consumer worker 수이며, Coordinator Admin API가 저장한 server-side consumer concurrency policy로 결정한다.
 * coordinator config는 Redis 접속 정보, Basic Auth admin 계정, control-plane default만 가진다.
 * stream/group별 shard count와 consumer concurrency 개별 설정은 Admin API로 저장한다.
+* 각 group aggregate는 Redis의 단일 metadata key에 저장하고 store revision CAS로 update한다.
+* Consumer가 Redis 현재 metadata보다 높은 version을 heartbeat로 보고하면 coordinator는 consumer가 현재 Redis metadata version으로 heartbeat할 때까지 `SYNC_METADATA`를 반복 응답한다.
+* Metadata correction 중 consumer는 제거된 shard를 drain하고, 충돌 이전 owner가 release될 때까지 `REVOKE_PENDING`을 받는다. 신규 assigned shard read는 `OK`에서만 시작한다.
 * consumer runtime integration은 Spring Boot starter로 제공하되, 실제 message 처리와 Redis Stream read/ack 정책은 application이 구현하는 shard lifecycle interface 뒤에 둔다.
 * 처리 보장 기본 기조는 at-least-once이다. Redis Stream delivery, consumer handler execution, producer retry, pending recovery는 중복 시도를 만들 수 있다.
 * 단일 처리 보장은 제공하지 않는다. 실제 비즈니스 로직은 DB, Redis, HTTP, 외부 API 등 여러 side effect가 얽힐 수 있고, 이들을 Redis Stream ACK와 하나의 원자적 transaction으로 묶을 수 없다.
 * 동일 partition key도 shard count나 active stream version이 바뀌면 다른 Redis Stream shard로 route될 수 있다. 중복에 민감한 workload는 shard scale-out/in 중 in-flight produce와 retry가 없도록 producer를 먼저 멈추고 drain해야 한다.
-* 공개 API, heartbeat protocol, Redis metadata schema는 명시적으로 versioning하고, coordinator는 rolling upgrade를 위해 구버전과 신규 버전 protocol을 범위 기반으로 동시에 수용한다.
+* 공개 API, coordinator-module compatibility version, metadata schema는 명시적으로 versioning하고, coordination version은 모듈이 정의한 지원 범위와 release lifecycle metadata로 관리한다.
 
 ## Success Criteria
 
@@ -55,13 +59,13 @@ Consumer 모듈은 heartbeat, assignment, revoke, fencing, optional Redis Stream
 
 ## Current Implementation Snapshot
 
-Last reviewed: 2026-05-28.
+Last reviewed: 2026-06-01.
 
 Implemented:
 
 * Spring Boot 4 / Kotlin / Java 24 Gradle multi-module project.
 * `coordinator-server` control plane with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, scale migration, rollback, monitoring APIs with conflict retry, consumer shard progress/member lease monitoring, producer routing request counters, scheduled coordinator event loop, Redis-backed state mutex, ACL, audit logging, admin mutation rate limiting, and coordinator-owned Micrometer metrics.
-* Memory and Redis-backed coordinator state stores, including Redis Cluster-safe key layout, Redis metadata schemaVersion guard, Redis state mutex, Lua-backed aggregate/projection writes, optimistic store revision checks, and optional Redis Stream shard provisioning.
+* Memory and Redis-backed coordinator state stores, including Redis Cluster-safe single metadata key layout, metadata schemaVersion guard, Redis state mutex, Lua-backed aggregate writes, optimistic store revision checks, and optional Redis Stream shard provisioning.
 * `com.redisstream:redisstream-spring-boot-starter` with consumer heartbeat lifecycle, shard lifecycle callbacks, runtime capacity/progress reporting, opt-in Redis Stream polling adapter, producer routing cache, Redis Stream publisher stale-cache handling, graceful leave, and shared Redis command templates.
 * Local three-node Redis Cluster Docker Compose, coordinator Dockerfile, Compose coordinator profile, Docker smoke workflow, manual GHCR publish workflow, and gated Redis integration tests.
 * Open source contributor, testing, Docker, security, changelog, and operations documentation.

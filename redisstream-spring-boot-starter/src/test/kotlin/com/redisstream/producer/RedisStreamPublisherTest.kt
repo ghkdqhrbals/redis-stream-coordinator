@@ -7,7 +7,6 @@ import com.redisstream.consumer.HeartbeatResponse
 import com.redisstream.consumer.HeartbeatStatus
 import com.redisstream.consumer.ProducerRoutingResponse
 import com.redisstream.consumer.ProducerRoutingShard
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -19,7 +18,7 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
+                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -39,7 +38,7 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
+                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -57,7 +56,7 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
+                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -74,7 +73,7 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
+                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -92,6 +91,63 @@ class RedisStreamPublisherTest {
     }
 
     @Test
+    fun `publisher batch method applies per message xadd options`() {
+        val writer = RecordingRedisStreamWriter()
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                consumerGroupName = "orders-consumer",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = writer,
+        )
+
+        publisher.publishAll(
+            listOf(
+                RedisStreamPublishRequest(
+                    partitionKey = "order-1",
+                    fields = mapOf("payload" to "created"),
+                    options = RedisStreamPublishOptions(maxLen = 1_000, approximateTrimming = false),
+                ),
+                RedisStreamPublishRequest(
+                    partitionKey = "order-2",
+                    fields = mapOf("payload" to "paid"),
+                    options = RedisStreamPublishOptions(maxLen = 2_000, approximateTrimming = true),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                RedisStreamPublishOptions(maxLen = 1_000, approximateTrimming = false),
+                RedisStreamPublishOptions(maxLen = 2_000, approximateTrimming = true),
+            ),
+            writer.writes.map { it.options },
+        )
+    }
+
+    @Test
+    fun `publisher passes per message xadd maxlen options to writer`() {
+        val writer = RecordingRedisStreamWriter()
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                consumerGroupName = "orders-consumer",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = writer,
+        )
+
+        publisher.publish(
+            partitionKey = "order-1",
+            fields = mapOf("payload" to "created"),
+            options = RedisStreamPublishOptions(maxLen = 1_000, approximateTrimming = false),
+        )
+
+        assertEquals(RedisStreamPublishOptions(maxLen = 1_000, approximateTrimming = false), writer.writes.single().options)
+    }
+
+    @Test
     fun `publisher invalidates routing cache after write failure so next publish refreshes metadata`() {
         val client = ScriptedPublisherRoutingClient(
             routing(version = 1, activeWriteVersion = 1),
@@ -101,7 +157,7 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
+                consumerGroupName = "orders-consumer",
                 client = client,
             ),
             writer = writer,
@@ -118,8 +174,6 @@ class RedisStreamPublisherTest {
 
     @Test
     fun `publisher can opt into stale routing write retry after refreshing metadata`() {
-        val registry = SimpleMeterRegistry()
-        val metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer")
         val client = ScriptedPublisherRoutingClient(
             routing(version = 1, activeWriteVersion = 1),
             routing(version = 2, activeWriteVersion = 2),
@@ -128,12 +182,10 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
+                consumerGroupName = "orders-consumer",
                 client = client,
-                metrics = metrics,
             ),
             writer = writer,
-            metrics = metrics,
             maxAttempts = 2,
         )
 
@@ -142,61 +194,6 @@ class RedisStreamPublisherTest {
         assertEquals(2, client.calls)
         assertEquals(2, published.route.activeWriteVersion)
         assertEquals(listOf("orders:v1", "orders:v2"), writer.attemptedVersions)
-        assertEquals(
-            1.0,
-            registry.get("redis_stream_producer_publish_attempt_total")
-                .tag("status", "ERROR")
-                .tag("attempt", "1")
-                .counter()
-                .count(),
-        )
-        assertEquals(
-            1.0,
-            registry.get("redis_stream_producer_publish_attempt_total")
-                .tag("status", "SUCCESS")
-                .tag("attempt", "2")
-                .counter()
-                .count(),
-        )
-        assertEquals(
-            1.0,
-            registry.get("redis_stream_producer_routing_cache_invalidated_total")
-                .tag("reason", "write_failure")
-                .counter()
-                .count(),
-        )
-    }
-
-    @Test
-    fun `publisher records success and failure metrics`() {
-        val registry = SimpleMeterRegistry()
-        val metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer")
-        val publisher = RoutingRedisStreamPublisher(
-            routingCache = ProducerRoutingCache(
-                streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
-                client = SingleRoutingClient(routing()),
-            ),
-            writer = RecordingRedisStreamWriter(),
-            metrics = metrics,
-        )
-        val failingPublisher = RoutingRedisStreamPublisher(
-            routingCache = ProducerRoutingCache(
-                streamPrefix = "orders",
-                consumerGroup = "orders-consumer",
-                client = SingleRoutingClient(routing()),
-            ),
-            writer = FailingRedisStreamWriter(),
-            metrics = metrics,
-        )
-
-        publisher.publish("order-1", mapOf("payload" to "created"))
-        assertFailsWith<IllegalStateException> {
-            failingPublisher.publish("order-2", mapOf("payload" to "failed"))
-        }
-
-        assertEquals(1.0, registry.get("redis_stream_producer_publish_total").tag("status", "SUCCESS").counter().count())
-        assertEquals(1.0, registry.get("redis_stream_producer_publish_total").tag("status", "ERROR").counter().count())
     }
 
     private fun routing(
@@ -225,19 +222,20 @@ private class RecordingRedisStreamWriter : RedisStreamWriter {
     val writes = mutableListOf<Write>()
 
     override fun add(streamKey: String, fields: Map<String, String>): String {
-        writes += Write(streamKey, fields)
+        writes += Write(streamKey, fields, RedisStreamPublishOptions())
+        return "1-0"
+    }
+
+    override fun add(streamKey: String, fields: Map<String, String>, options: RedisStreamPublishOptions): String {
+        writes += Write(streamKey, fields, options)
         return "1-0"
     }
 
     data class Write(
         val streamKey: String,
         val fields: Map<String, String>,
+        val options: RedisStreamPublishOptions,
     )
-}
-
-private class FailingRedisStreamWriter : RedisStreamWriter {
-    override fun add(streamKey: String, fields: Map<String, String>): String =
-        error("write failed")
 }
 
 private class FailingOnceRedisStreamWriter : RedisStreamWriter {

@@ -6,21 +6,23 @@ Redis Stream Coordinator is a rebalance control plane. It manages group metadata
 
 It does not own data-plane processing state such as handler retry counters, business idempotency records, local caches, or application DLQ state.
 
-## Redis Key Layout
+## Redis Metadata Store
 
-Coordinator-owned metadata uses Redis Cluster-safe hash tags so the aggregate keys for one group can live in the same hash slot.
+The Redis metadata store keeps one Redis hash key per `{streamPrefix, consumerGroup}`:
 
-Example key pattern:
+```text
+redis-stream:coord:{streamPrefix:consumerGroup}:metadata
+```
 
-| Key | Purpose |
+Hash fields:
+
+| Field | Purpose |
 | --- | --- |
-| `redis-stream:coord:{group}:state` | group aggregate metadata |
-| `redis-stream:coord:{group}:projection` | monitoring projection |
-| `redis-stream:coord:{group}:audit` | admin mutation audit events |
-| `redis-stream:coord:{group}:mutex` | state mutex |
-| `redis-stream:coord:groups` | global group index |
-
-`redis-stream:coord:groups` is an index used to discover configured groups. Group-scoped metadata remains under hash-tagged group keys.
+| `aggregate` | Canonical `GroupMetadata` JSON aggregate |
+| `revision` | `storeRevision` compare-and-set guard |
+| `schemaVersion` | JSON aggregate schema version |
+| `layoutVersion` | Redis metadata layout version |
+| `updatedAt` | Last metadata write timestamp |
 
 ## Configuration Boundary
 
@@ -74,9 +76,9 @@ coordinator:
       interval: 1s
     state-mutex:
       enabled: true
-      lease-ttl: 5s
-      wait-timeout: 2s
-      retry-interval: 100ms
+      ttl-ms: 30000
+      acquire-timeout-ms: 5000
+      retry-interval-ms: 100
   defaults:
     initial-shard-count: 4
     max-concurrency: 4
@@ -101,17 +103,17 @@ Critical section order:
 
 ```text
 acquire mutex
-  -> read latest Redis state
+  -> read latest Redis metadata hash
   -> validate/process/reconcile
   -> save with storeRevision compare-and-set
   -> release mutex
 ```
 
-The mutex is not intended to implement active-active concurrent write semantics. It is intended to make open source deployments safer when multiple coordinator pods accidentally or intentionally run against the same Redis metadata store.
+The mutex serializes short coordinator critical sections. Store revision checks remain as the final stale-write guard.
 
 ## Store Revision
 
-Every Redis aggregate update carries an expected `storeRevision`.
+Every metadata aggregate update carries an expected `storeRevision`.
 
 If the expected revision does not match the current revision, the write fails and the coordinator reloads and retries or returns a conflict depending on the operation.
 
@@ -192,7 +194,8 @@ Coordinator metrics should cover:
 * producer routing requests by group,
 * stale producer routing refreshes,
 * store revision conflicts,
-* mutex acquire latency and timeout count,
+* Redis metadata write latency,
+* mutex acquire latency and timeout count for Redis-backed development mode,
 * admin mutation count and failure count.
 
 ## Alerts
@@ -204,8 +207,8 @@ Recommended alerts:
 * group epoch changed but assignment epoch does not progress,
 * duplicate owner invariant violation,
 * active resharding remains in progress too long,
-* Redis state mutex acquire failures,
-* Redis state store revision conflict spike,
+* Redis metadata write failures,
+* store revision conflict spike,
 * monitoring projection refresh failures,
 * producer stale routing refresh spike.
 

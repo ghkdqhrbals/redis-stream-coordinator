@@ -42,8 +42,8 @@ Redis Stream Coordinator fills this gap by adapting the coordinator-managed reba
 
 * Applications can choose a stable partition key for producer routing.
 * Duplicate delivery is acceptable at the infrastructure layer and must be handled by application idempotency where needed.
-* Operators can run the coordinator server with access to the Redis metadata store.
-* Redis Cluster deployments should use hash-tagged coordinator metadata keys so related metadata lives in one slot.
+* Operators can run the coordinator server with access to a durable metadata database.
+* Redis Cluster is used for the Redis Stream data plane. Redis-backed coordinator metadata is allowed only for development, tests, or non-critical deployments.
 * Redis Stream data-plane reads, handler retries, DLQ policy, and ACK policy remain application-owned unless the optional starter polling adapter is enabled.
 
 ## User-Facing Modules

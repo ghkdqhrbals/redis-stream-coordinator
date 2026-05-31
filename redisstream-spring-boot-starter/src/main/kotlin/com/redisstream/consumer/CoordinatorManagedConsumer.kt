@@ -1,7 +1,6 @@
 package com.redisstream.consumer
 
 import org.springframework.context.SmartLifecycle
-import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -14,7 +13,6 @@ class CoordinatorManagedConsumer(
     private val properties: CoordinatorConsumerProperties,
     private val client: CoordinatorClient,
     private val lifecycle: CoordinatorShardLifecycle,
-    private val metrics: CoordinatorConsumerMetrics = NoopCoordinatorConsumerMetrics,
 ) : SmartLifecycle {
     private val running = AtomicBoolean(false)
     private var executor: ScheduledExecutorService? = null
@@ -26,6 +24,9 @@ class CoordinatorManagedConsumer(
     private var revokingShards: Map<CoordinatorShard, RevokingShardReport> = emptyMap()
     private var lastContext: CoordinatorConsumerContext = context(0, 0)
 
+    /**
+     * Starts the managed heartbeat loop that joins the coordinator group and receives assignments.
+     */
     override fun start() {
         if (!properties.autoStartup || !running.compareAndSet(false, true)) {
             return
@@ -43,6 +44,9 @@ class CoordinatorManagedConsumer(
         )
     }
 
+    /**
+     * Stops heartbeat polling and optionally sends a final graceful-leave heartbeat.
+     */
     override fun stop() {
         val wasRunning = running.compareAndSet(true, false)
         if (wasRunning) {
@@ -61,59 +65,65 @@ class CoordinatorManagedConsumer(
 
     override fun isRunning(): Boolean = running.get()
 
+    /**
+     * Loads coordinator routing metadata during Spring bean creation so missing groups or shards fail fast.
+     */
+    @Synchronized
+    fun validateInitialRouting(): ProducerRoutingResponse {
+        validateLocalConfiguration()
+        return client.producerRouting(properties.streamPrefix, properties.consumerGroupName)
+            .also {
+                CoordinatorRoutingMetadataValidator.validate(
+                    streamPrefix = properties.streamPrefix,
+                    consumerGroupName = properties.consumerGroupName,
+                    metadata = it,
+                )
+            }
+    }
+
+    /**
+     * Sends one heartbeat and applies the coordinator response to local shard lifecycle state.
+     */
     @Synchronized
     fun pollOnce(): HeartbeatResponse {
-        require(properties.streamPrefix.isNotBlank()) { "redis-stream-coordinator.consumer.stream-prefix must be set" }
-        require(properties.consumerGroup.isNotBlank()) { "redis-stream-coordinator.consumer.consumer-group must be set" }
-        require(CoordinatorConsumerProtocol.supportsHeartbeat(properties.protocolVersion)) {
-            "Unsupported heartbeat protocol version ${properties.protocolVersion}; supported range is " +
-                "${CoordinatorConsumerProtocol.MIN_HEARTBEAT_VERSION}..${CoordinatorConsumerProtocol.MAX_HEARTBEAT_VERSION}"
-        }
+        validateLocalConfiguration()
 
         refreshRevocationProgress()
-        val startedAt = Instant.now()
         val runtimeCapacity = runtimeCapacity()
-        val response = try {
-            client.heartbeat(
-                streamPrefix = properties.streamPrefix,
-                consumerGroup = properties.consumerGroup,
+        val shardProgress = shardProgress()
+        val response = client.heartbeat(
+            streamPrefix = properties.streamPrefix,
+            consumerGroup = properties.consumerGroupName,
+            memberId = properties.memberId,
+            request = HeartbeatRequest(
+                protocolVersion = CoordinatorConsumerProtocol.CURRENT_COORDINATION_VERSION,
+                requestId = UUID.randomUUID().toString(),
                 memberId = properties.memberId,
-                request = HeartbeatRequest(
-                    protocolVersion = properties.protocolVersion,
-                    requestId = UUID.randomUUID().toString(),
-                    memberId = properties.memberId,
-                    memberName = properties.memberName,
-                    memberEpoch = memberEpoch,
-                    rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
-                    metadataVersion = metadataVersion,
-                    runtimeConsumerCapacity = runtimeCapacity,
-                    ownedShards = ownedShards,
-                    revokingShards = revokingShards.values.toList(),
-                ),
-            )
-        } catch (error: RuntimeException) {
-            metrics.recordHeartbeat(HeartbeatStatus.RETRY, Duration.between(startedAt, Instant.now()))
-            throw error
-        }
+                memberName = properties.heartbeatMemberName,
+                memberEpoch = memberEpoch,
+                rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
+                metadataVersion = metadataVersion,
+                runtimeConsumerCapacity = runtimeCapacity,
+                ownedShards = ownedShards,
+                revokingShards = revokingShards.values.toList(),
+                shardProgress = shardProgress,
+            ),
+        )
 
-        metrics.recordHeartbeat(response.status, Duration.between(startedAt, Instant.now()))
         apply(response)
         return response
     }
 
+    /**
+     * Sends one leave heartbeat with local revoke progress so the coordinator can reassign quickly.
+     */
     @Synchronized
     fun leaveOnce(): HeartbeatResponse? {
-        require(properties.streamPrefix.isNotBlank()) { "redis-stream-coordinator.consumer.stream-prefix must be set" }
-        require(properties.consumerGroup.isNotBlank()) { "redis-stream-coordinator.consumer.consumer-group must be set" }
-        require(CoordinatorConsumerProtocol.supportsHeartbeat(properties.protocolVersion)) {
-            "Unsupported heartbeat protocol version ${properties.protocolVersion}; supported range is " +
-                "${CoordinatorConsumerProtocol.MIN_HEARTBEAT_VERSION}..${CoordinatorConsumerProtocol.MAX_HEARTBEAT_VERSION}"
-        }
-        val startedAt = Instant.now()
+        validateLocalConfiguration()
         if (memberEpoch == 0L && ownedShards.isEmpty() && revokingShards.isEmpty()) {
-            metrics.recordLeave(null, Duration.between(startedAt, Instant.now()))
             return null
         }
+        val shardProgress = shardProgress()
 
         val leavingShards = (ownedShards + revokingShards.keys).toSortedSet()
         if (leavingShards.isNotEmpty()) {
@@ -127,33 +137,28 @@ class CoordinatorManagedConsumer(
             }
         }
 
-        val response = try {
-            client.heartbeat(
-                streamPrefix = properties.streamPrefix,
-                consumerGroup = properties.consumerGroup,
+        val response = client.heartbeat(
+            streamPrefix = properties.streamPrefix,
+            consumerGroup = properties.consumerGroupName,
+            memberId = properties.memberId,
+            request = HeartbeatRequest(
+                protocolVersion = CoordinatorConsumerProtocol.CURRENT_COORDINATION_VERSION,
+                requestId = UUID.randomUUID().toString(),
                 memberId = properties.memberId,
-                request = HeartbeatRequest(
-                    protocolVersion = properties.protocolVersion,
-                    requestId = UUID.randomUUID().toString(),
-                    memberId = properties.memberId,
-                    memberName = properties.memberName,
-                    memberEpoch = -1,
-                    rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
-                    metadataVersion = metadataVersion,
-                    runtimeConsumerCapacity = RuntimeConsumerCapacity(
-                        runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
-                        availableConcurrency = 0,
-                    ),
-                    ownedShards = ownedShards,
-                    revokingShards = revokingShards.values.toList(),
+                memberName = properties.heartbeatMemberName,
+                memberEpoch = -1,
+                rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
+                metadataVersion = metadataVersion,
+                runtimeConsumerCapacity = RuntimeConsumerCapacity(
+                    runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
+                    availableConcurrency = 0,
                 ),
-            )
-        } catch (error: RuntimeException) {
-            metrics.recordLeave(HeartbeatStatus.RETRY, Duration.between(startedAt, Instant.now()))
-            throw error
-        }
+                ownedShards = ownedShards,
+                revokingShards = revokingShards.values.toList(),
+                shardProgress = shardProgress,
+            ),
+        )
 
-        metrics.recordLeave(response.status, Duration.between(startedAt, Instant.now()))
         if (response.status == HeartbeatStatus.OK ||
             response.status == HeartbeatStatus.UNKNOWN_MEMBER_ID ||
             response.status == HeartbeatStatus.FENCED_MEMBER_EPOCH
@@ -166,20 +171,43 @@ class CoordinatorManagedConsumer(
         return response
     }
 
+    private fun validateLocalConfiguration() {
+        require(properties.streamPrefix.isNotBlank()) { "CoordinatorConsumerProperties.streamPrefix must be set" }
+        require(properties.consumerGroupName.isNotBlank()) { "CoordinatorConsumerProperties.consumerGroupName must be set" }
+        require(properties.memberId.isNotBlank()) { "CoordinatorConsumerProperties.memberId must be set" }
+        require(!properties.heartbeatInterval.isNegative && !properties.heartbeatInterval.isZero) {
+            "CoordinatorConsumerProperties.heartbeatInterval must be positive"
+        }
+        require(!properties.rebalanceTimeout.isNegative && !properties.rebalanceTimeout.isZero) {
+            "CoordinatorConsumerProperties.rebalanceTimeout must be positive"
+        }
+        require(properties.runtimeMaxConcurrency > 0) {
+            "CoordinatorConsumerProperties.runtimeMaxConcurrency must be positive"
+        }
+        require(properties.redis.pollBatchSize > 0) {
+            "CoordinatorConsumerProperties.redis.pollBatchSize must be positive"
+        }
+        require(!properties.redis.pollTimeout.isNegative && !properties.redis.pollTimeout.isZero) {
+            "CoordinatorConsumerProperties.redis.pollTimeout must be positive"
+        }
+    }
+
+    /**
+     * Interprets coordinator heartbeat status and either applies assignments or resets fenced state.
+     */
     private fun apply(response: HeartbeatResponse) {
         val context = context(response.groupEpoch, response.assignmentEpoch)
         lastContext = context
 
         when (response.status) {
             HeartbeatStatus.OK -> applyAssignment(response, context)
+            HeartbeatStatus.SYNC_METADATA, HeartbeatStatus.REVOKE_PENDING -> applyDrainOnlyAssignment(response, context)
             HeartbeatStatus.FENCED_MEMBER_EPOCH, HeartbeatStatus.UNKNOWN_MEMBER_ID -> {
                 lifecycle.onFenced(context)
-                metrics.recordFenced()
                 memberEpoch = 0
                 metadataVersion = 0
                 ownedShards = emptySet()
                 revokingShards = emptyMap()
-                metrics.recordAssignment(0, 0, 0)
             }
             HeartbeatStatus.RETRY -> Unit
             HeartbeatStatus.UNSUPPORTED_PROTOCOL, HeartbeatStatus.INVALID_REQUEST -> {
@@ -188,6 +216,9 @@ class CoordinatorManagedConsumer(
         }
     }
 
+    /**
+     * Diffs target assignment against local ownership and invokes assign, pending, and revoke callbacks.
+     */
     private fun applyAssignment(response: HeartbeatResponse, context: CoordinatorConsumerContext) {
         memberEpoch = response.memberEpoch
         metadataVersion = response.metadataVersion
@@ -215,29 +246,62 @@ class CoordinatorManagedConsumer(
                     nextRevokingShards[shard] = RevokingShardReport(shard, RevokingShardState.DRAINING, inFlight = 1)
                 }
             }
-            metrics.recordRevoked(completed.size)
             revokingShards = nextRevokingShards
         } else {
             revokingShards = nextRevokingShards.filterValues { it.state != RevokingShardState.REVOKED || it.inFlight != 0 }
         }
         ownedShards = nextAssigned
-        metrics.recordAssignment(
-            assignedShards = ownedShards.size,
-            pendingShards = response.assignment.pendingShards.size,
-            revokingShards = revokingShards.size,
-        )
+    }
+
+    /**
+     * Applies metadata sync and revoke-pending responses without starting newly assigned shards.
+     */
+    private fun applyDrainOnlyAssignment(response: HeartbeatResponse, context: CoordinatorConsumerContext) {
+        memberEpoch = response.memberEpoch
+        metadataVersion = response.metadataVersion
+        assignedMaxConcurrency = response.assignedMaxConcurrency
+
+        val keepReading = ownedShards
+            .filter { it in response.assignment.assignedShards }
+            .toSortedSet()
+        val revoked = ownedShards - keepReading
+        val pending = (response.assignment.assignedShards + response.assignment.pendingShards - keepReading)
+            .toSortedSet()
+        if (pending.isNotEmpty()) {
+            lifecycle.onPending(pending, context)
+        }
+
+        val nextRevokingShards = revokingShards
+            .filterValues { it.state != RevokingShardState.REVOKED || it.inFlight != 0 }
+            .toMutableMap()
+        if (revoked.isNotEmpty()) {
+            val completed = lifecycle.onRevoked(revoked.toSortedSet(), context)
+            revoked.forEach { shard ->
+                if (shard in completed) {
+                    nextRevokingShards[shard] =
+                        RevokingShardReport(shard, RevokingShardState.REVOKED, inFlight = 0, ackedAt = Instant.now())
+                } else {
+                    nextRevokingShards[shard] = RevokingShardReport(shard, RevokingShardState.DRAINING, inFlight = 1)
+                }
+            }
+        }
+        revokingShards = nextRevokingShards
+        ownedShards = keepReading
     }
 
     private fun context(groupEpoch: Long, assignmentEpoch: Long): CoordinatorConsumerContext =
         CoordinatorConsumerContext(
             memberId = properties.memberId,
-            memberName = properties.memberName,
+            memberName = properties.heartbeatMemberName,
             assignedMaxConcurrency = assignedMaxConcurrency,
             metadataVersion = metadataVersion,
             groupEpoch = groupEpoch,
             assignmentEpoch = assignmentEpoch,
         )
 
+    /**
+     * Collects runtime capacity from the lifecycle implementation and validates the reported bounds.
+     */
     private fun runtimeCapacity(): RuntimeConsumerCapacity {
         val reported = (lifecycle as? CoordinatorRuntimeCapacityProvider)?.runtimeCapacity(lastContext)
             ?: RuntimeConsumerCapacity(
@@ -249,14 +313,22 @@ class CoordinatorManagedConsumer(
         require(reported.availableConcurrency <= reported.runtimeMaxConcurrency) {
             "availableConcurrency must be less than or equal to runtimeMaxConcurrency"
         }
-        metrics.recordRuntimeCapacity(
-            runtimeMaxConcurrency = reported.runtimeMaxConcurrency,
-            availableConcurrency = reported.availableConcurrency,
-            inFlight = reported.runtimeMaxConcurrency - reported.availableConcurrency,
-        )
         return reported
     }
 
+    /**
+     * Collects per-shard consumption progress from the lifecycle when it supports progress reporting.
+     */
+    private fun shardProgress(): List<ShardConsumptionProgress> {
+        val progress = (lifecycle as? CoordinatorShardProgressProvider)?.shardProgress(lastContext)
+            ?: return emptyList()
+        val reportableShards = ownedShards + revokingShards.keys
+        return progress.filter { it.shard in reportableShards }
+    }
+
+    /**
+     * Re-runs revoke callbacks for shards that were still draining on a previous heartbeat.
+     */
     private fun refreshRevocationProgress() {
         val draining = revokingShards
             .filterValues { it.state == RevokingShardState.DRAINING }
@@ -269,7 +341,6 @@ class CoordinatorManagedConsumer(
         if (completed.isEmpty()) {
             return
         }
-        metrics.recordRevoked(completed.size)
         revokingShards = revokingShards.mapValues { (shard, report) ->
             if (shard in completed) {
                 RevokingShardReport(shard, RevokingShardState.REVOKED, inFlight = 0, ackedAt = Instant.now())

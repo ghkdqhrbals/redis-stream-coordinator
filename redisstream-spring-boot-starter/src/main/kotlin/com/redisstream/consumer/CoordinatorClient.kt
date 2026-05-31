@@ -1,9 +1,11 @@
 package com.redisstream.consumer
 
-import org.springframework.http.HttpHeaders
 import org.springframework.web.client.RestClient
 
 interface CoordinatorClient {
+    /**
+     * Sends a consumer heartbeat and receives assignment, fencing, or retry instructions.
+     */
     fun heartbeat(
         streamPrefix: String,
         consumerGroup: String,
@@ -11,12 +13,18 @@ interface CoordinatorClient {
         request: HeartbeatRequest,
     ): HeartbeatResponse
 
+    /**
+     * Fetches producer routing metadata for the active write stream version.
+     */
     fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse
 }
 
 class RestClientCoordinatorClient(
     private val restClient: RestClient,
 ) : CoordinatorClient {
+    /**
+     * Calls the coordinator heartbeat endpoint using Spring RestClient.
+     */
     override fun heartbeat(
         streamPrefix: String,
         consumerGroup: String,
@@ -35,6 +43,9 @@ class RestClientCoordinatorClient(
             .body(HeartbeatResponse::class.java)
             ?: error("Coordinator heartbeat response body was empty")
 
+    /**
+     * Calls the coordinator producer-routing endpoint using Spring RestClient.
+     */
     override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
         restClient.get()
             .uri("/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing", streamPrefix, consumerGroup)
@@ -43,25 +54,10 @@ class RestClientCoordinatorClient(
             ?: error("Coordinator producer routing response body was empty")
 }
 
-fun coordinatorRestClient(properties: CoordinatorConsumerProperties): RestClient {
-    return coordinatorRestClient(
-        coordinatorBaseUrl = properties.coordinatorBaseUrl,
-        username = properties.username,
-        password = properties.password,
-    )
-}
-
-fun coordinatorRestClient(
-    coordinatorBaseUrl: String,
-    username: String?,
-    password: String?,
-): RestClient {
-    val builder = RestClient.builder().baseUrl(coordinatorBaseUrl)
-    if (!username.isNullOrBlank() && password != null) {
-        builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Basic ${basicAuth(username, password)}")
-    }
-    return builder.build()
-}
-
-private fun basicAuth(username: String, password: String): String =
-    java.util.Base64.getEncoder().encodeToString("$username:$password".toByteArray(Charsets.UTF_8))
+/**
+ * Builds the shared coordinator HTTP client from the single public starter property.
+ */
+fun coordinatorRestClient(coordinatorBaseUrl: String): RestClient =
+    RestClient.builder()
+        .baseUrl(coordinatorBaseUrl)
+        .build()

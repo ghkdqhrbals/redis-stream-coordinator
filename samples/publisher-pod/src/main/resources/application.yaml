@@ -30,15 +30,7 @@ spring:
           - ${REDIS_CLUSTER_NODE_3:localhost:7003}
 
 redis-stream-coordinator:
-  producer:
-    enabled: true
-    coordinator-base-url: ${COORDINATOR_BASE_URL:http://localhost:8080}
-    stream-prefix: ${STREAM_PREFIX:demo.orders}
-    consumer-group: ${CONSUMER_GROUP:demo-workers}
-    routing-refresh-interval: 2s
-    publish-max-attempts: 2
-    username: ${COORDINATOR_USERNAME:admin}
-    password: ${COORDINATOR_PASSWORD:password}
+  coordinator-base-url: ${COORDINATOR_BASE_URL:http://localhost:8080}
 
 sample:
   publisher:

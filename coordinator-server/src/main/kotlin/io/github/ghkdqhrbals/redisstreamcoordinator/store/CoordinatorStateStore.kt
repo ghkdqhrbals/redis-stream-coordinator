@@ -4,9 +4,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.COORDINATOR_METADATA_SCHEMA_VERSION
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupKey
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
-import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MemberMetadata
-import io.github.ghkdqhrbals.redisstreamcoordinator.domain.Migration
-import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardId
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
@@ -16,11 +14,34 @@ import tools.jackson.module.kotlin.readValue
 import java.util.concurrent.ConcurrentHashMap
 
 interface CoordinatorStateStore {
+    /**
+     * Checks whether metadata for the group key exists.
+     */
     fun contains(key: GroupKey): Boolean
+
+    /**
+     * Loads the aggregate coordinator metadata for a group.
+     */
     fun get(key: GroupKey): GroupMetadata?
+
+    /**
+     * Creates a group only when no metadata already exists for the key.
+     */
     fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean
+
+    /**
+     * Deletes all group-scoped state only when the stored revision matches the expected revision.
+     */
     fun deleteIfRevision(key: GroupKey, expectedRevision: Long): Boolean
+
+    /**
+     * Persists a changed group and detects stale writers through the store revision.
+     */
     fun save(key: GroupKey, group: GroupMetadata)
+
+    /**
+     * Lists all known group aggregates from the store index.
+     */
     fun list(): List<GroupMetadata>
 }
 
@@ -70,61 +91,71 @@ class InMemoryCoordinatorStateStore : CoordinatorStateStore {
 @Component
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "redis")
 class RedisCoordinatorStateStore(
-    private val redisTemplate: StringRedisTemplate,
+    private val redisCommands: CoordinatorRedisCommands,
     private val objectMapper: ObjectMapper,
     private val properties: CoordinatorProperties,
 ) : CoordinatorStateStore {
+    constructor(
+        redisTemplate: StringRedisTemplate,
+        objectMapper: ObjectMapper,
+        properties: CoordinatorProperties,
+    ) : this(CoordinatorRedisCommands(redisTemplate = redisTemplate), objectMapper, properties)
+
     private val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
 
     override fun contains(key: GroupKey): Boolean =
-        redisTemplate.hasKey(keys.forGroup(key).group)
+        redisCommands.hasKey(keys.forGroup(key).metadata)
 
     override fun get(key: GroupKey): GroupMetadata? =
-        redisTemplate.opsForValue().get(keys.forGroup(key).group)?.let { objectMapper.readRedisGroupMetadata(it) }
+        redisCommands.hashGet(keys.forGroup(key).metadata, METADATA_AGGREGATE_FIELD)
+            ?.let { objectMapper.readRedisGroupMetadata(it) }
 
+    /**
+     * Writes the single group metadata hash atomically when this group does not already exist.
+     */
     override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean {
         val groupKeys = keys.forGroup(key)
-        val stored = writeGroupScopedState(groupKeys, group, onlyIfAbsent = true)
+        val stored = writeGroupMetadata(groupKeys, group, onlyIfAbsent = true)
         if (stored) {
-            redisTemplate.opsForSet().add(keys.groupsIndex, groupKeys.group)
+            redisCommands.setAdd(keys.groupsIndex, groupKeys.metadata)
         }
         return stored
     }
 
+    /**
+     * Removes the single group metadata hash atomically after a failed create/provision rollback.
+     */
     override fun deleteIfRevision(key: GroupKey, expectedRevision: Long): Boolean {
         val groupKeys = keys.forGroup(key)
-        val deleted = redisTemplate.execute(
+        val deleted = redisCommands.executeLong(
             DELETE_GROUP_IF_REVISION_SCRIPT,
-            listOf(
-                groupKeys.group,
-                groupKeys.members,
-                groupKeys.targetAssignments,
-                groupKeys.currentAssignments,
-                groupKeys.migrations,
-                groupKeys.activeMigration,
-                groupKeys.revision,
-            ),
+            listOf(groupKeys.metadata),
             expectedRevision.toString(),
         ) == 1L
         if (deleted) {
-            redisTemplate.opsForSet().remove(keys.groupsIndex, groupKeys.group)
+            redisCommands.setRemove(keys.groupsIndex, groupKeys.metadata)
         }
         return deleted
     }
 
+    /**
+     * Replaces the group metadata hash only if the caller's store revision is current.
+     */
     override fun save(key: GroupKey, group: GroupMetadata) {
         val groupKeys = keys.forGroup(key)
-        writeGroupScopedState(groupKeys, group, onlyIfAbsent = false)
-        redisTemplate.opsForSet().add(keys.groupsIndex, groupKeys.group)
+        writeGroupMetadata(groupKeys, group, onlyIfAbsent = false)
+        redisCommands.setAdd(keys.groupsIndex, groupKeys.metadata)
     }
 
     override fun list(): List<GroupMetadata> =
-        redisTemplate.opsForSet().members(keys.groupsIndex)
-            .orEmpty()
-            .mapNotNull { redisTemplate.opsForValue().get(it) }
+        redisCommands.setMembers(keys.groupsIndex)
+            .mapNotNull { redisCommands.hashGet(it, METADATA_AGGREGATE_FIELD) }
             .map { objectMapper.readRedisGroupMetadata(it) }
 
-    private fun writeGroupScopedState(
+    /**
+     * Atomically updates the single Redis hash that stores the canonical group metadata.
+     */
+    private fun writeGroupMetadata(
         keys: RedisCoordinatorGroupKeys,
         group: GroupMetadata,
         onlyIfAbsent: Boolean,
@@ -133,30 +164,19 @@ class RedisCoordinatorStateStore(
         val previousRevision = group.storeRevision
         val nextRevision = if (onlyIfAbsent) 1 else previousRevision + 1
         group.storeRevision = nextRevision
-        val projection = group.toRedisStateProjection()
         val args = mutableListOf(
             if (onlyIfAbsent) "NX" else "UPSERT",
             previousRevision.toString(),
             nextRevision.toString(),
             objectMapper.writeValueAsString(group),
-            projection.activeReshardingId.orEmpty(),
+            group.schemaVersion.toString(),
+            REDIS_METADATA_LAYOUT_VERSION.toString(),
+            group.updatedAt.toString(),
         )
-        appendHashArgs(args, projection.members)
-        appendHashArgs(args, projection.targetAssignments)
-        appendHashArgs(args, projection.currentAssignments)
-        appendHashArgs(args, projection.migrations)
 
-        val result = redisTemplate.execute(
-            UPSERT_GROUP_STATE_SCRIPT,
-            listOf(
-                keys.group,
-                keys.members,
-                keys.targetAssignments,
-                keys.currentAssignments,
-                keys.migrations,
-                keys.activeMigration,
-                keys.revision,
-            ),
+        val result = redisCommands.executeLong(
+            UPSERT_GROUP_METADATA_SCRIPT,
+            listOf(keys.metadata),
             *args.toTypedArray(),
         )
         return when (result) {
@@ -168,29 +188,28 @@ class RedisCoordinatorStateStore(
             else -> {
                 group.storeRevision = previousRevision
                 throw CoordinatorStateConflictException(
-                    "Redis coordinator state changed before save for ${keys.group}; expected store revision $previousRevision",
+                    "Redis coordinator metadata changed before save for ${keys.metadata}; expected store revision $previousRevision",
                 )
             }
         }
     }
 
-    private fun appendHashArgs(args: MutableList<String>, values: Map<String, Any>) {
-        args += values.size.toString()
-        values.forEach { (field, value) ->
-            args += field
-            args += objectMapper.writeValueAsString(value)
-        }
-    }
-
     companion object {
-        private val UPSERT_GROUP_STATE_SCRIPT = DefaultRedisScript(
+        private const val METADATA_AGGREGATE_FIELD = "aggregate"
+        private const val METADATA_REVISION_FIELD = "revision"
+        private const val METADATA_SCHEMA_VERSION_FIELD = "schemaVersion"
+        private const val METADATA_LAYOUT_VERSION_FIELD = "layoutVersion"
+        private const val METADATA_UPDATED_AT_FIELD = "updatedAt"
+        private const val REDIS_METADATA_LAYOUT_VERSION = 1
+
+        private val UPSERT_GROUP_METADATA_SCRIPT = DefaultRedisScript(
             """
             if ARGV[1] == 'NX' and redis.call('EXISTS', KEYS[1]) == 1 then
               return 0
             end
 
             if ARGV[1] ~= 'NX' then
-              local currentRevision = redis.call('GET', KEYS[7])
+              local currentRevision = redis.call('HGET', KEYS[1], '$METADATA_REVISION_FIELD')
               if currentRevision == false then
                 if redis.call('EXISTS', KEYS[1]) == 1 and ARGV[2] ~= '0' then
                   return -1
@@ -200,31 +219,15 @@ class RedisCoordinatorStateStore(
               end
             end
 
-            redis.call('SET', KEYS[1], ARGV[4])
-            redis.call('SET', KEYS[7], ARGV[3])
-
-            local argIndex = 6
-            local function replaceHash(key)
-              redis.call('DEL', key)
-              local count = tonumber(ARGV[argIndex])
-              argIndex = argIndex + 1
-              for i = 1, count do
-                redis.call('HSET', key, ARGV[argIndex], ARGV[argIndex + 1])
-                argIndex = argIndex + 2
-              end
-            end
-
-            replaceHash(KEYS[2])
-            replaceHash(KEYS[3])
-            replaceHash(KEYS[4])
-            replaceHash(KEYS[5])
-
-            if ARGV[5] == '' then
-              redis.call('DEL', KEYS[6])
-            else
-              redis.call('SET', KEYS[6], ARGV[5])
-            end
-
+            redis.call(
+              'HSET',
+              KEYS[1],
+              '$METADATA_AGGREGATE_FIELD', ARGV[4],
+              '$METADATA_REVISION_FIELD', ARGV[3],
+              '$METADATA_SCHEMA_VERSION_FIELD', ARGV[5],
+              '$METADATA_LAYOUT_VERSION_FIELD', ARGV[6],
+              '$METADATA_UPDATED_AT_FIELD', ARGV[7]
+            )
             return 1
             """.trimIndent(),
             Long::class.java,
@@ -232,12 +235,12 @@ class RedisCoordinatorStateStore(
 
         private val DELETE_GROUP_IF_REVISION_SCRIPT = DefaultRedisScript(
             """
-            local currentRevision = redis.call('GET', KEYS[7])
+            local currentRevision = redis.call('HGET', KEYS[1], '$METADATA_REVISION_FIELD')
             if currentRevision == false or currentRevision ~= ARGV[1] then
               return 0
             end
 
-            redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7])
+            redis.call('DEL', KEYS[1])
             return 1
             """.trimIndent(),
             Long::class.java,
@@ -256,27 +259,6 @@ internal fun GroupMetadata.requireSupportedRedisMetadataSchema() {
     }
 }
 
-data class RedisCoordinatorStateProjection(
-    val members: Map<String, MemberMetadata>,
-    val targetAssignments: Map<String, Set<ShardId>>,
-    val currentAssignments: Map<String, Set<ShardId>>,
-    val migrations: Map<String, Migration>,
-    val activeReshardingId: String?,
-)
-
-fun GroupMetadata.toRedisStateProjection(): RedisCoordinatorStateProjection =
-    RedisCoordinatorStateProjection(
-        members = members.toSortedMap(),
-        targetAssignments = targetAssignments
-            .mapValues { (_, shards) -> shards.toSortedSet() }
-            .toSortedMap(),
-        currentAssignments = members
-            .mapValues { (_, member) -> member.currentAssignment.toSortedSet() }
-            .toSortedMap(),
-        migrations = migrations.toSortedMap(),
-        activeReshardingId = activeReshardingId,
-    )
-
 class RedisCoordinatorStateKeys(
     keyPrefix: String,
 ) {
@@ -287,23 +269,11 @@ class RedisCoordinatorStateKeys(
     fun forGroup(key: GroupKey): RedisCoordinatorGroupKeys {
         val tag = "{${key.streamPrefix}:${key.consumerGroup}}"
         return RedisCoordinatorGroupKeys(
-            group = "$prefix:$tag:group",
-            members = "$prefix:$tag:members",
-            targetAssignments = "$prefix:$tag:target-assignments",
-            currentAssignments = "$prefix:$tag:current-assignments",
-            migrations = "$prefix:$tag:migrations",
-            activeMigration = "$prefix:$tag:active-migration",
-            revision = "$prefix:$tag:revision",
+            metadata = "$prefix:$tag:metadata",
         )
     }
 }
 
 data class RedisCoordinatorGroupKeys(
-    val group: String,
-    val members: String,
-    val targetAssignments: String,
-    val currentAssignments: String,
-    val migrations: String,
-    val activeMigration: String,
-    val revision: String,
+    val metadata: String,
 )

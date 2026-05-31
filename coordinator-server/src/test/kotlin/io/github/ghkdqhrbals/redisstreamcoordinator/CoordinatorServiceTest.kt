@@ -3,6 +3,7 @@ package io.github.ghkdqhrbals.redisstreamcoordinator
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.protocol.CoordinatorProtocol
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
@@ -61,35 +62,39 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `heartbeat protocol version is accepted inside configured support range`() {
-        val service = service(
-            clock = clock,
-            properties = CoordinatorProperties(
-                protocol = CoordinatorProperties.Protocol(minHeartbeatVersion = 2, maxHeartbeatVersion = 3),
-                heartbeatInterval = Duration.ofSeconds(3),
-                memberLeaseTtl = Duration.ofSeconds(15),
-                defaults = CoordinatorProperties.Defaults(initialShardCount = 4, consumerMaxConcurrency = 4),
-            ),
-        )
+    fun `coordination version is accepted only inside module support range`() {
+        val service = service(clock = clock)
         service.createGroup("protocol", "orders-consumer", createGroupRequest())
 
         val accepted = service.heartbeat(
             "protocol",
             "orders-consumer",
             "member-a",
-            heartbeat("member-a", memberEpoch = 0, protocolVersion = 2),
+            heartbeat(
+                "member-a",
+                memberEpoch = 0,
+                protocolVersion = CoordinatorProtocol.CURRENT_COORDINATION_VERSION,
+            ),
         )
         val rejectedBelowMinimum = service.heartbeat(
             "protocol",
             "orders-consumer",
             "member-b",
-            heartbeat("member-b", memberEpoch = 0, protocolVersion = 1),
+            heartbeat(
+                "member-b",
+                memberEpoch = 0,
+                protocolVersion = CoordinatorProtocol.MIN_COORDINATION_VERSION - 1,
+            ),
         )
         val rejectedAboveMaximum = service.heartbeat(
             "protocol",
             "orders-consumer",
             "member-c",
-            heartbeat("member-c", memberEpoch = 0, protocolVersion = 4),
+            heartbeat(
+                "member-c",
+                memberEpoch = 0,
+                protocolVersion = CoordinatorProtocol.MAX_COORDINATION_VERSION + 1,
+            ),
         )
 
         assertEquals(HeartbeatStatus.OK, accepted.status)
@@ -708,6 +713,176 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `heartbeat with higher metadata version requests sync to current redis metadata`() {
+        service.createGroup("metadata-sync", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "metadata-sync",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val acknowledged = service.heartbeat(
+            "metadata-sync",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+
+        val sync = service.heartbeat(
+            "metadata-sync",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = acknowledged.memberEpoch + 10,
+                metadataVersion = acknowledged.metadataVersion + 10,
+                ownedShards = memberA.assignment.assignedShards,
+            ),
+        )
+        val member = service.listMembers("metadata-sync", "orders-consumer").members.single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, sync.status)
+        assertEquals(acknowledged.metadataVersion, sync.metadataVersion)
+        assertEquals(acknowledged.memberEpoch, sync.memberEpoch)
+        assertEquals(memberA.assignment.assignedShards, sync.assignment.assignedShards)
+        assertEquals(acknowledged.metadataVersion + 10, member.metadataVersion)
+        assertEquals(memberA.assignment.assignedShards, member.currentAssignment)
+
+        val retriedAfterLostResponse = service.heartbeat(
+            "metadata-sync",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = acknowledged.memberEpoch + 10,
+                metadataVersion = acknowledged.metadataVersion + 10,
+                ownedShards = memberA.assignment.assignedShards,
+            ),
+        )
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, retriedAfterLostResponse.status)
+        assertEquals(acknowledged.metadataVersion, retriedAfterLostResponse.metadataVersion)
+    }
+
+    @Test
+    fun `metadata sync ignores stale revoke reports from discarded higher version`() {
+        val group = convergeTwoMemberGroup("metadata-sync-revoke")
+        val current = service.getGroup("metadata-sync-revoke", "orders-consumer")
+        val staleForeignShard = group.memberATarget.first()
+        val staleOwnedByB = group.memberBTarget + staleForeignShard
+
+        val sync = service.heartbeat(
+            "metadata-sync-revoke",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = group.memberB.memberEpoch + 5,
+                metadataVersion = current.metadataVersion + 5,
+                ownedShards = staleOwnedByB,
+            ),
+        )
+        val correctedB = service.heartbeat(
+            "metadata-sync-revoke",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = sync.memberEpoch,
+                metadataVersion = sync.metadataVersion,
+                ownedShards = group.memberBTarget,
+                revokingShards = listOf(RevokingShardReport(staleForeignShard, RevokingShardState.REVOKED, inFlight = 0)),
+            ),
+        )
+        val correctedA = service.heartbeat(
+            "metadata-sync-revoke",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = group.memberA.memberEpoch,
+                metadataVersion = sync.metadataVersion,
+                ownedShards = group.memberATarget,
+            ),
+        )
+        val memberB = service.listMembers("metadata-sync-revoke", "orders-consumer").members.single { it.memberId == "member-b" }
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, sync.status)
+        assertEquals(HeartbeatStatus.REVOKE_PENDING, correctedB.status)
+        assertEquals(HeartbeatStatus.OK, correctedA.status)
+        assertEquals(group.memberBTarget, memberB.currentAssignment)
+        assertTrue(memberB.revoking.isEmpty())
+    }
+
+    @Test
+    fun `metadata sync serializes concurrent stale revoke reports from multiple members`() {
+        val group = convergeTwoMemberGroup("metadata-sync-concurrent-revoke")
+        val current = service.getGroup("metadata-sync-concurrent-revoke", "orders-consumer")
+        val staleForeignShardForA = group.memberBTarget.first()
+        val staleForeignShardForB = group.memberATarget.first()
+
+        val syncA = service.heartbeat(
+            "metadata-sync-concurrent-revoke",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = group.memberA.memberEpoch + 5,
+                metadataVersion = current.metadataVersion + 5,
+                ownedShards = group.memberATarget + staleForeignShardForA,
+            ),
+        )
+        val syncB = service.heartbeat(
+            "metadata-sync-concurrent-revoke",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = group.memberB.memberEpoch + 6,
+                metadataVersion = current.metadataVersion + 6,
+                ownedShards = group.memberBTarget + staleForeignShardForB,
+            ),
+        )
+
+        val correctedA = service.heartbeat(
+            "metadata-sync-concurrent-revoke",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = syncA.memberEpoch,
+                metadataVersion = syncA.metadataVersion,
+                ownedShards = group.memberATarget,
+                revokingShards = listOf(RevokingShardReport(staleForeignShardForA, RevokingShardState.REVOKED, inFlight = 0)),
+            ),
+        )
+        val correctedB = service.heartbeat(
+            "metadata-sync-concurrent-revoke",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = syncB.memberEpoch,
+                metadataVersion = syncB.metadataVersion,
+                ownedShards = group.memberBTarget,
+                revokingShards = listOf(RevokingShardReport(staleForeignShardForB, RevokingShardState.REVOKED, inFlight = 0)),
+            ),
+        )
+        val members = service.listMembers("metadata-sync-concurrent-revoke", "orders-consumer").members.associateBy { it.memberId }
+        val finalGroup = service.getGroup("metadata-sync-concurrent-revoke", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, syncA.status)
+        assertEquals(HeartbeatStatus.SYNC_METADATA, syncB.status)
+        assertEquals(HeartbeatStatus.REVOKE_PENDING, correctedA.status)
+        assertEquals(HeartbeatStatus.OK, correctedB.status)
+        assertEquals(current.metadataVersion, finalGroup.metadataVersion)
+        assertEquals(group.memberATarget, members.getValue("member-a").currentAssignment)
+        assertEquals(group.memberBTarget, members.getValue("member-b").currentAssignment)
+        assertTrue(members.getValue("member-a").revoking.isEmpty())
+        assertTrue(members.getValue("member-b").revoking.isEmpty())
+    }
+
+    @Test
     fun `heartbeat rejects unsupported negative member epoch`() {
         service.createGroup("negative-epoch", "orders-consumer", createGroupRequest(initialShardCount = 2))
 
@@ -897,6 +1072,37 @@ class CoordinatorServiceTest {
         assertEquals(emptySet(), assignments.currentAssignments.getValue("member-b"))
         assertEquals(emptySet(), assignments.revokeProgress["member-b"].orEmpty())
         assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `higher metadata version does not bypass fenced member state`() {
+        val converged = convergeTwoMemberGroup("metadata-sync-fenced")
+        val foreignShard = converged.memberATarget.single()
+        service.heartbeat(
+            "metadata-sync-fenced",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = converged.memberB.memberEpoch,
+                ownedShards = converged.memberBTarget + foreignShard,
+            ),
+        )
+
+        val retried = service.heartbeat(
+            "metadata-sync-fenced",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = converged.memberB.memberEpoch,
+                metadataVersion = converged.memberB.metadataVersion + 10,
+                ownedShards = converged.memberBTarget + foreignShard,
+            ),
+        )
+
+        assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, retried.status)
+        assertTrue(retried.assignment.assignedShards.isEmpty())
     }
 
     @Test
@@ -1182,6 +1388,15 @@ class CoordinatorServiceTest {
                         RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
                     }
                 }
+                HeartbeatStatus.SYNC_METADATA, HeartbeatStatus.REVOKE_PENDING -> {
+                    memberEpoch = response.memberEpoch
+                    val nextOwned = ownedShards.intersect(response.assignment.assignedShards)
+                    val revoked = ownedShards - nextOwned
+                    ownedShards = nextOwned
+                    revokingShards = revoked.map {
+                        RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0)
+                    }
+                }
                 HeartbeatStatus.FENCED_MEMBER_EPOCH, HeartbeatStatus.UNKNOWN_MEMBER_ID -> {
                     memberEpoch = 0
                     ownedShards = emptySet()
@@ -1278,6 +1493,7 @@ class CoordinatorServiceTest {
         revokingShards: List<RevokingShardReport> = emptyList(),
         rebalanceTimeoutMs: Long = 60_000,
         protocolVersion: Int = 1,
+        metadataVersion: Long = 0,
     ): HeartbeatRequest =
         HeartbeatRequest(
             protocolVersion = protocolVersion,
@@ -1286,7 +1502,7 @@ class CoordinatorServiceTest {
             memberName = memberId,
             memberEpoch = memberEpoch,
             rebalanceTimeoutMs = rebalanceTimeoutMs,
-            metadataVersion = 0,
+            metadataVersion = metadataVersion,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,
                 availableConcurrency = 4,

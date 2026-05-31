@@ -8,10 +8,64 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import java.time.Instant
 import java.util.UUID
 
-enum class GroupState { EMPTY, ASSIGNING, RECONCILING, STABLE }
+enum class GroupState {
+    /** The group has no active members or assignable ownership yet. */
+    EMPTY,
+
+    /** The coordinator is calculating or installing target shard assignments. */
+    ASSIGNING,
+
+    /** Members are converging current ownership toward the coordinator target assignment. */
+    RECONCILING,
+
+    /** Target and current assignments have converged for all live members. */
+    STABLE,
+}
 enum class MemberState { STARTING, ACTIVE, LEAVING, EXPIRED, FENCED }
-enum class MigrationState { PREPARING, ACTIVE, DRAINING, DEPRECATED, ROLLING_BACK, ROLLED_BACK }
-enum class HeartbeatStatus { OK, RETRY, UNKNOWN_MEMBER_ID, FENCED_MEMBER_EPOCH, UNSUPPORTED_PROTOCOL, INVALID_REQUEST }
+enum class MigrationState {
+    /** The next stream version is being prepared before writes move to it. */
+    PREPARING,
+
+    /** Producer writes use the new stream version while consumers may still read old and new versions. */
+    ACTIVE,
+
+    /** The old stream version is no longer written and is waiting for consumers to drain. */
+    DRAINING,
+
+    /** The old stream version is no longer part of normal reads or writes. */
+    DEPRECATED,
+
+    /** The migration is reverting writes and reads back to the previous stream version. */
+    ROLLING_BACK,
+
+    /** Rollback has completed and the previous stream version is authoritative again. */
+    ROLLED_BACK,
+}
+enum class HeartbeatStatus {
+    /** The heartbeat was accepted and the response contains the current assignment view. */
+    OK,
+
+    /** The member should retry because the coordinator could not safely process the heartbeat now. */
+    RETRY,
+
+    /** The member must replace its local metadata view with the coordinator response metadata. */
+    SYNC_METADATA,
+
+    /** The member metadata version is correct, but revoke-before-assign handoff is still draining. */
+    REVOKE_PENDING,
+
+    /** The coordinator does not know this member id for the requested group. */
+    UNKNOWN_MEMBER_ID,
+
+    /** The member epoch is stale or fenced and the member must stop local work before rejoining. */
+    FENCED_MEMBER_EPOCH,
+
+    /** The request uses a coordination protocol version outside the supported range. */
+    UNSUPPORTED_PROTOCOL,
+
+    /** The heartbeat request is malformed or violates the coordinator contract. */
+    INVALID_REQUEST,
+}
 enum class RevokingShardState { REVOKING, DRAINING, REVOKED }
 
 const val COORDINATOR_METADATA_SCHEMA_VERSION = 1
@@ -89,6 +143,15 @@ data class RevokingShardReport(
     val ackedAt: Instant? = null,
 )
 
+data class ShardConsumptionProgress(
+    val shard: ShardId,
+    val streamKey: String,
+    val lastDeliveredId: String? = null,
+    val lastAckedId: String? = null,
+    val pendingCount: Long = 0,
+    val updatedAt: Instant? = null,
+)
+
 data class HeartbeatRequest(
     @field:Min(1)
     val protocolVersion: Int,
@@ -104,6 +167,7 @@ data class HeartbeatRequest(
     val runtimeConsumerCapacity: RuntimeConsumerCapacity,
     val ownedShards: Set<ShardId> = emptySet(),
     val revokingShards: List<RevokingShardReport> = emptyList(),
+    val shardProgress: List<ShardConsumptionProgress> = emptyList(),
 )
 
 data class AssignmentView(
@@ -153,6 +217,15 @@ data class MemberMetadata(
     var memberLeaseExpiresAt: Instant,
     var rebalanceTimeoutMs: Long = 60_000,
     var rebalanceDeadlineAt: Instant? = null,
+    var shardProgress: List<ShardConsumptionProgress> = emptyList(),
+)
+
+data class MetadataCorrection(
+    val targetMetadataVersion: Long,
+    var observedMetadataVersion: Long,
+    val requestedAt: Instant,
+    var updatedAt: Instant,
+    val acknowledgedMembers: MutableSet<String> = linkedSetOf(),
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -175,6 +248,7 @@ data class GroupMetadata(
     @param:JsonAlias("activeMigrationId")
     @field:JsonAlias("activeMigrationId")
     var activeReshardingId: String? = null,
+    var metadataCorrection: MetadataCorrection? = null,
     val createdAt: Instant,
     var updatedAt: Instant,
 )
@@ -240,5 +314,20 @@ data class MigrationsResponse(
     val migrations: List<Migration>,
     val activeReshardingId: String?,
 )
+
+data class ConsumerShardProgress(
+    val streamPrefix: String,
+    val consumerGroup: String,
+    val memberId: String,
+    val memberName: String,
+    val memberState: MemberState,
+    val shard: ShardId,
+    val streamKey: String,
+    val lastDeliveredId: String?,
+    val lastAckedId: String?,
+    val pendingCount: Long,
+    val updatedAt: Instant?,
+)
+data class ConsumptionProgressResponse(val progress: List<ConsumerShardProgress>)
 
 fun newReshardingId(): String = "reshard-${UUID.randomUUID()}"

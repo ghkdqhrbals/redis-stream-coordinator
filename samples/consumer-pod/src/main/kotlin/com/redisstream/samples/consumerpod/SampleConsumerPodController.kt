@@ -14,9 +14,8 @@ import org.springframework.web.server.ResponseStatusException
 
 data class ConsumerPodStatusResponse(
     val memberId: String,
-    val memberName: String,
     val streamPrefix: String,
-    val consumerGroup: String,
+    val consumerGroupName: String,
     val eventCount: Int,
 )
 
@@ -44,9 +43,8 @@ class SampleConsumerPodController(
     fun status(): ConsumerPodStatusResponse =
         ConsumerPodStatusResponse(
             memberId = properties.memberId,
-            memberName = properties.memberName,
             streamPrefix = properties.streamPrefix,
-            consumerGroup = properties.consumerGroup,
+            consumerGroupName = properties.consumerGroupName,
             eventCount = eventLog.snapshot().size,
         )
 

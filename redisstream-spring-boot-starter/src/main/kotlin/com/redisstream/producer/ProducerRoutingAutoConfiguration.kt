@@ -1,81 +1,61 @@
 package com.redisstream.producer
 
+import com.redisstream.RedisStreamCommandsTemplate
 import com.redisstream.consumer.CoordinatorClient
-import com.redisstream.consumer.RestClientCoordinatorClient
-import com.redisstream.consumer.coordinatorRestClient
-import io.micrometer.core.instrument.MeterRegistry
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.connection.RedisConnectionFactory
 
 @AutoConfiguration
-@EnableConfigurationProperties(ProducerRoutingProperties::class)
-@ConditionalOnProperty(
-    prefix = "redis-stream-coordinator.producer",
-    name = ["enabled"],
-    havingValue = "true",
-)
 class ProducerRoutingAutoConfiguration {
     @Bean
-    @ConditionalOnMissingBean
-    fun redisStreamProducerMetrics(
-        properties: ProducerRoutingProperties,
-        meterRegistry: ObjectProvider<MeterRegistry>,
-    ): RedisStreamProducerMetrics =
-        meterRegistry.ifAvailable?.let {
-            MicrometerRedisStreamProducerMetrics(
-                registry = it,
-                streamPrefix = properties.streamPrefix,
-                consumerGroup = properties.consumerGroup,
-            )
-        } ?: NoopRedisStreamProducerMetrics
-
-    @Bean
+    @ConditionalOnBean(ProducerRoutingProperties::class, CoordinatorClient::class)
     @ConditionalOnMissingBean
     fun producerRoutingCache(
         properties: ProducerRoutingProperties,
-        metrics: RedisStreamProducerMetrics,
-    ): ProducerRoutingCache {
-        val client: CoordinatorClient = RestClientCoordinatorClient(
-            coordinatorRestClient(
-                coordinatorBaseUrl = properties.coordinatorBaseUrl,
-                username = properties.username,
-                password = properties.password,
-            ),
-        )
-        return ProducerRoutingCache(
+        client: CoordinatorClient,
+    ): ProducerRoutingCache =
+        ProducerRoutingCache(
             streamPrefix = properties.streamPrefix,
-            consumerGroup = properties.consumerGroup,
+            consumerGroupName = properties.consumerGroupName,
             client = client,
             refreshInterval = properties.routingRefreshInterval,
-            metrics = metrics,
-        )
-    }
+        ).also { it.validateInitialRouting() }
 
     @Bean
     @ConditionalOnBean(RedisConnectionFactory::class)
     @ConditionalOnMissingBean
-    fun redisStreamWriter(redisConnectionFactory: RedisConnectionFactory): RedisStreamWriter =
-        SpringDataRedisStreamWriter(redisConnectionFactory)
+    fun redisStreamCommandsTemplate(redisConnectionFactory: RedisConnectionFactory): RedisStreamCommandsTemplate =
+        RedisStreamCommandsTemplate(redisConnectionFactory)
 
     @Bean
-    @ConditionalOnBean(RedisStreamWriter::class)
+    @ConditionalOnBean(ProducerRoutingProperties::class, RedisStreamCommandsTemplate::class)
+    @ConditionalOnMissingBean
+    fun redisStreamWriter(
+        redisStreamCommandsTemplate: RedisStreamCommandsTemplate,
+        properties: ProducerRoutingProperties,
+    ): RedisStreamWriter =
+        SpringDataRedisStreamWriter(
+            commands = redisStreamCommandsTemplate,
+            xadd = RedisStreamXAddConfiguration(
+                maxLen = properties.xadd.maxLen,
+                approximateTrimming = properties.xadd.approximateTrimming,
+            ),
+        )
+
+    @Bean
+    @ConditionalOnBean(ProducerRoutingProperties::class, ProducerRoutingCache::class, RedisStreamWriter::class)
     @ConditionalOnMissingBean
     fun redisStreamPublisher(
         properties: ProducerRoutingProperties,
         routingCache: ProducerRoutingCache,
         writer: RedisStreamWriter,
-        metrics: RedisStreamProducerMetrics,
     ): RedisStreamPublisher =
         RoutingRedisStreamPublisher(
             routingCache = routingCache,
             writer = writer,
-            metrics = metrics,
             maxAttempts = properties.publishMaxAttempts,
         )
 }

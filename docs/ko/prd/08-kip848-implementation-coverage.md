@@ -50,7 +50,7 @@
 
 | Area | KIP-848 | Redis Stream Coordinator |
 | --- | --- | --- |
-| Coordinator placement | Kafka broker group coordinator가 `__consumer_offsets` 기반 state machine으로 관리한다. | 별도 lightweight Coordinator API server가 Redis metadata store를 사용한다. |
+| Coordinator placement | Kafka broker group coordinator가 `__consumer_offsets` 기반 state machine으로 관리한다. | 별도 lightweight Coordinator API server가 Redis metadata store를 사용한다. Redis Stream은 data plane이다. |
 | Wire protocol | Kafka RPC와 error code를 확장한다. | HTTP Admin/Heartbeat/Monitoring API를 사용하고 Kafka protocol 호환을 목표로 하지 않는다. |
 | Member ID | KIP-848 원문은 server-generated member id를 설명하고, 이후 KIP-1082로 client-generated id가 반영됐다. | member runtime이 UUID `memberId`를 만들고 coordinator가 등록/epoch/fencing을 관리한다. `memberId` 자체가 runtime incarnation id이다. |
 | Heartbeat payload | 첫 heartbeat나 error 이후에는 전체 필드를 보내고, 이후에는 변경된 subscription/assignor/owned partition field만 보낼 수 있다. | MVP heartbeat는 owned shards, revoking shards, runtime consumer capacity를 명시적으로 보고하는 custom schema를 사용한다. |
@@ -84,4 +84,4 @@
 
 ## Coverage Notes
 
-KIP-848 says the new protocol moves complexity from clients to the group coordinator, removes a global synchronization barrier, stores target/current assignment, and uses heartbeat to carry member state and assignment. This design implements those parts directly, then replaces Kafka-specific broker, partition, offset, and protocol concerns with Redis metadata keys, stream version migration, and member data-plane boundaries.
+KIP-848 says the new protocol moves complexity from clients to the group coordinator, removes a global synchronization barrier, stores target/current assignment, and uses heartbeat to carry member state and assignment. This design implements those parts directly, then replaces Kafka-specific broker, partition, offset, and protocol concerns with Redis-backed coordinator metadata, Redis Stream version migration, and member data-plane boundaries.

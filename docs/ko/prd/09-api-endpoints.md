@@ -68,7 +68,7 @@ Common status codes:
 | `422 Unprocessable Entity` | 요청은 유효하지만 현재 group state에서 수행 불가. |
 | `429 Too Many Requests` | caller 또는 group 단위 rate limit 초과. |
 | `500 Internal Server Error` | coordinator 내부 오류. |
-| `503 Service Unavailable` | Redis store 또는 coordinator loop가 정상 동작하지 않거나 Redis state mutex를 획득하지 못함. |
+| `503 Service Unavailable` | Redis dependency, stream provisioning, coordinator loop가 정상 동작하지 않거나 state serialization을 확보하지 못함. |
 
 ## Endpoint Index
 
@@ -313,7 +313,7 @@ Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `protocolVersion` | yes | Heartbeat schema version. |
+| `protocolVersion` | yes | Coordinator-module coordination version carried by the heartbeat request. |
 | `requestId` | yes | Request trace and retry id. |
 | `memberId` | yes | Must match path parameter. Runtime-start UUID that identifies this member incarnation. |
 | `memberEpoch` | yes | `0` means join/rejoin, `-1` means leave, positive value means active member epoch. |
@@ -339,7 +339,7 @@ Response body:
 | Field | Meaning |
 | --- | --- |
 | `responseTo` | Request id this response handles. |
-| `status` | `OK`, `RETRY`, `UNKNOWN_MEMBER_ID`, `FENCED_MEMBER_EPOCH`, `UNSUPPORTED_PROTOCOL`, `INVALID_REQUEST`, or `GROUP_AUTHORIZATION_FAILED`. |
+| `status` | `OK`, `RETRY`, `SYNC_METADATA`, `REVOKE_PENDING`, `UNKNOWN_MEMBER_ID`, `FENCED_MEMBER_EPOCH`, `UNSUPPORTED_PROTOCOL`, or `INVALID_REQUEST`. |
 | `memberId` | Member id echoed by coordinator. |
 | `memberEpoch` | Epoch the member must use from next heartbeat. |
 | `heartbeatIntervalMs` | Server-side recommended next heartbeat interval. |
@@ -347,9 +347,22 @@ Response body:
 | `assignmentEpoch` | Latest target assignment epoch. |
 | `metadataVersion` | Latest metadata version. |
 | `assignedMaxConcurrency` | Server-side consumer worker limit assigned to this member. |
-| `assignment.assignedShards` | Shards the member can read immediately. |
+| `assignment.assignedShards` | `OK`에서는 즉시 read 가능한 shard이다. `SYNC_METADATA`와 `REVOKE_PENDING`에서는 이미 읽고 있던 shard 중 계속 유지 가능한 shard이다. |
 | `assignment.pendingShards` | Target shards blocked until previous owner releases them. |
 | `assignment.metadataVersion` | Metadata version to apply with the assignment. |
+
+Status behavior:
+
+| Status | Member action |
+| --- | --- |
+| `OK` | Assignment을 적용하고 신규 assigned shard read를 시작한다. |
+| `RETRY` | Ownership을 바꾸지 않고 full state heartbeat를 재시도한다. |
+| `SYNC_METADATA` | Local metadata version을 response version으로 교체하고, 유지 가능한 assigned shard 외에는 read를 중단한다. 신규 shard read는 시작하지 않는다. Consumer가 coordinator metadata version으로 heartbeat할 때까지 반복될 수 있다. |
+| `REVOKE_PENDING` | Metadata version은 맞았지만 revoke-before-assign handoff가 아직 끝나지 않았다. 기존 owned shard 중 assigned에 남은 shard만 유지하고 revoke/drain을 계속하며 신규 shard read는 시작하지 않는다. |
+| `UNKNOWN_MEMBER_ID` | Local work를 멈추고 `memberEpoch=0`으로 rejoin한다. |
+| `FENCED_MEMBER_EPOCH` | 모든 local work를 멈추고 `memberEpoch=0`으로 rejoin한다. |
+| `UNSUPPORTED_PROTOCOL` | Client/server coordination version이 호환되지 않으므로 중단한다. |
+| `INVALID_REQUEST` | Contract 위반이므로 fail fast한다. |
 
 Mutation behavior:
 
@@ -377,6 +390,23 @@ Response summary:
 | `coordinatorId` | Coordinator server identity. |
 | `redis` | Redis dependency health. Redis is checked only when Redis-backed store, Redis audit, or stream provisioning is enabled. |
 | `loop` | Coordinator loop health and last tick time. |
+
+### Compatibility
+
+```http
+GET /coord/v1/monitoring/compatibility
+```
+
+Response summary:
+
+| Field | Meaning |
+| --- | --- |
+| `currentCoordinationVersion` | Current coordinator module이 사용하는 coordination version. |
+| `supportedCoordinationVersions.min/max` | Coordinator가 수용하는 coordinator-module coordination version range. |
+| `coordinationVersions[]` | 각 coordination version의 release lifecycle entry. |
+| `coordinationVersions[].version` | Coordination version number. |
+| `coordinationVersions[].introducedIn.major/minor/patch` | Version이 처음 도입된 release. |
+| `coordinationVersions[].minimumSupportedUntil.major/minor/patch` | 이 release 전까지 version을 제거하지 않는 최소 지원 보장. |
 
 ### List Groups
 

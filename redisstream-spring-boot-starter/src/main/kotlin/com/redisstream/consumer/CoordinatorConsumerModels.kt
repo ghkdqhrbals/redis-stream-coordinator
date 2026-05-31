@@ -2,7 +2,31 @@ package com.redisstream.consumer
 
 import java.time.Instant
 
-enum class HeartbeatStatus { OK, RETRY, UNKNOWN_MEMBER_ID, FENCED_MEMBER_EPOCH, UNSUPPORTED_PROTOCOL, INVALID_REQUEST }
+enum class HeartbeatStatus {
+    /** The heartbeat was accepted and the response contains the current assignment view. */
+    OK,
+
+    /** The member should retry because the coordinator could not safely process the heartbeat now. */
+    RETRY,
+
+    /** The member must replace its local metadata view with the coordinator response metadata. */
+    SYNC_METADATA,
+
+    /** The member metadata version is correct, but revoke-before-assign handoff is still draining. */
+    REVOKE_PENDING,
+
+    /** The coordinator does not know this member id for the requested group. */
+    UNKNOWN_MEMBER_ID,
+
+    /** The member epoch is stale or fenced and the member must stop local work before rejoining. */
+    FENCED_MEMBER_EPOCH,
+
+    /** The request uses a coordination protocol version outside the supported range. */
+    UNSUPPORTED_PROTOCOL,
+
+    /** The heartbeat request is malformed or violates the coordinator contract. */
+    INVALID_REQUEST,
+}
 enum class RevokingShardState { REVOKING, DRAINING, REVOKED }
 
 data class CoordinatorShard(
@@ -28,6 +52,15 @@ data class RevokingShardReport(
     val ackedAt: Instant? = null,
 )
 
+data class ShardConsumptionProgress(
+    val shard: CoordinatorShard,
+    val streamKey: String,
+    val lastDeliveredId: String? = null,
+    val lastAckedId: String? = null,
+    val pendingCount: Long = 0,
+    val updatedAt: Instant? = null,
+)
+
 data class HeartbeatRequest(
     val protocolVersion: Int,
     val requestId: String,
@@ -39,6 +72,7 @@ data class HeartbeatRequest(
     val runtimeConsumerCapacity: RuntimeConsumerCapacity,
     val ownedShards: Set<CoordinatorShard> = emptySet(),
     val revokingShards: List<RevokingShardReport> = emptyList(),
+    val shardProgress: List<ShardConsumptionProgress> = emptyList(),
 )
 
 data class AssignmentView(

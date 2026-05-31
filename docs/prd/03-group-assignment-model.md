@@ -13,7 +13,7 @@
 | Group Epoch | Generation of group metadata changes |
 | Assignment Epoch | Generation of target assignment calculation |
 | Member Epoch | Generation used to fence stale member state |
-| Store Revision | Optimistic write guard for Redis-backed state updates |
+| Store Revision | Durable compare-and-set guard for metadata state updates |
 
 ## Metadata Ownership
 
@@ -74,7 +74,7 @@ The coordinator compares both views to enforce safety:
 
 ### Store Revision
 
-`storeRevision` protects Redis state from stale overwrites. Even with the Redis state mutex, it remains useful as a final compare-and-set guard when a process resumes with an old snapshot.
+`storeRevision` protects Redis-backed group metadata from stale overwrites. It is incremented only with committed metadata updates and remains the final compare-and-set guard when a process resumes with an old snapshot.
 
 ## Sticky Assignment
 

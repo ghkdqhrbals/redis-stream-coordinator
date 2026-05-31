@@ -53,24 +53,14 @@ class RedisCoordinatorStateStoreIntegrationTest {
     fun cleanup() {
         touchedGroups.forEach { key ->
             val keys = stateKeys.forGroup(key)
-            redisTemplate.delete(
-                listOf(
-                    keys.group,
-                    keys.members,
-                    keys.targetAssignments,
-                    keys.currentAssignments,
-                    keys.migrations,
-                    keys.activeMigration,
-                    keys.revision,
-                ),
-            )
-            redisTemplate.opsForSet().remove(stateKeys.groupsIndex, keys.group)
+            redisTemplate.delete(keys.metadata)
+            redisTemplate.opsForSet().remove(stateKeys.groupsIndex, keys.metadata)
         }
         touchedStreamKeys.forEach { redisTemplate.delete(it) }
     }
 
     @Test
-    fun `redis store writes aggregate and projection keys`() {
+    fun `redis store writes one metadata hash key`() {
         val key = GroupKey("redis-it-orders", "orders-consumer")
         touchedGroups += key
 
@@ -96,24 +86,18 @@ class RedisCoordinatorStateStoreIntegrationTest {
         touchStreamKeys(key.streamPrefix, streamVersion = migration.toVersion, shardCount = 3)
 
         val keys = stateKeys.forGroup(key)
-        val storedGroup = redisTemplate.opsForValue().get(keys.group)
+        val storedGroup = redisTemplate.opsForHash<String, String>().get(keys.metadata, "aggregate")
             ?.let { objectMapper.readValue<GroupMetadata>(it) }
-        val storedMember = redisTemplate.opsForHash<String, String>().get(keys.members, "member-a")
-            ?.let { objectMapper.readValue<MemberMetadata>(it) }
-        val targetAssignment = redisTemplate.opsForHash<String, String>().get(keys.targetAssignments, "member-a")
-            ?.let { objectMapper.readValue<Set<ShardId>>(it) }
-        val currentAssignment = redisTemplate.opsForHash<String, String>().get(keys.currentAssignments, "member-a")
-            ?.let { objectMapper.readValue<Set<ShardId>>(it) }
-        val storedMigration = redisTemplate.opsForHash<String, String>().get(keys.migrations, migration.reshardingId)
-            ?.let { objectMapper.readValue<Migration>(it) }
+        val revision = redisTemplate.opsForHash<String, String>().get(keys.metadata, "revision")
 
         assertNotNull(storedGroup)
         assertEquals(2, storedGroup.activeWriteVersion)
-        assertEquals("member-a", assertNotNull(storedMember).memberId)
-        assertTrue(assertNotNull(targetAssignment).containsAll(setOf(ShardId(1, 0), ShardId(1, 1))))
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), currentAssignment)
-        assertEquals(MigrationState.ACTIVE, assertNotNull(storedMigration).state)
-        assertEquals(migration.reshardingId, redisTemplate.opsForValue().get(keys.activeMigration))
+        assertEquals("member-a", storedGroup.members.getValue("member-a").memberId)
+        assertTrue(storedGroup.targetAssignments.getValue("member-a").containsAll(setOf(ShardId(1, 0), ShardId(1, 1))))
+        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), storedGroup.members.getValue("member-a").currentAssignment)
+        assertEquals(MigrationState.ACTIVE, storedGroup.migrations.getValue(migration.reshardingId).state)
+        assertEquals(migration.reshardingId, storedGroup.activeReshardingId)
+        assertEquals(storedGroup.storeRevision.toString(), revision)
     }
 
     @Test

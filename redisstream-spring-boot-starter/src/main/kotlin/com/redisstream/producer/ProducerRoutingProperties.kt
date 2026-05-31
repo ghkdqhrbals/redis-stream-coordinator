@@ -1,16 +1,39 @@
 package com.redisstream.producer
 
-import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration
 
-@ConfigurationProperties("redis-stream-coordinator.producer")
 class ProducerRoutingProperties {
-    var enabled: Boolean = false
-    var coordinatorBaseUrl: String = "http://localhost:8080"
     var streamPrefix: String = ""
-    var consumerGroup: String = ""
+    var consumerGroupName: String = ""
     var routingRefreshInterval: Duration = Duration.ofSeconds(30)
     var publishMaxAttempts: Int = 1
-    var username: String? = null
-    var password: String? = null
+    var xadd: XAdd = XAdd()
+
+    @Deprecated(
+        message = "Use consumerGroupName. Producer routing settings are now code-defined, not YAML-bound.",
+        replaceWith = ReplaceWith("consumerGroupName"),
+    )
+    var consumerGroup: String
+        get() = consumerGroupName
+        set(value) {
+            consumerGroupName = value
+        }
+
+    class XAdd {
+        var maxLen: Long = 10_000_000
+        var approximateTrimming: Boolean = true
+    }
+
+    companion object {
+        fun producer(
+            streamPrefix: String,
+            consumerGroupName: String,
+            configure: ProducerRoutingProperties.() -> Unit = {},
+        ): ProducerRoutingProperties =
+            ProducerRoutingProperties().apply {
+                this.streamPrefix = streamPrefix
+                this.consumerGroupName = consumerGroupName
+                configure()
+            }
+    }
 }

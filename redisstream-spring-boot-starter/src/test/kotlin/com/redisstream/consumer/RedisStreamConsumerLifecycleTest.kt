@@ -1,6 +1,5 @@
 package com.redisstream.consumer
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,13 +36,12 @@ class RedisStreamConsumerLifecycleTest {
     }
 
     @Test
-    fun `consumer lifecycle records message success and ack metrics`() {
+    fun `consumer lifecycle reports delivered and acked stream progress`() {
         val shard = CoordinatorShard(1, 0)
-        val registry = SimpleMeterRegistry()
         val reader = ScriptedRedisStreamReader(
             ConsumedRedisStreamMessage(
                 streamKey = "orders:v1:shard:0",
-                recordId = "1-0",
+                recordId = "10-1",
                 shard = shard,
                 fields = mapOf("payload" to "created"),
             ),
@@ -53,24 +51,22 @@ class RedisStreamConsumerLifecycleTest {
             reader = reader,
             handler = RecordingRedisStreamMessageHandler(),
             startPollersOnAssignment = false,
-            metrics = MicrometerCoordinatorConsumerMetrics(registry, "orders", "orders-consumer", "member-a"),
         )
 
         lifecycle.onAssigned(setOf(shard), context())
         lifecycle.pollOnce(shard)
 
-        assertEquals(1.0, registry.get("redis_stream_consumer_messages_total").tag("status", "SUCCESS").counter().count())
-        assertEquals(1.0, registry.get("redis_stream_consumer_ack_total").counter().count())
-        assertEquals(
-            1.0,
-            registry.get("redis_stream_consumer_ack_status_total").tag("status", "SUCCESS").counter().count(),
-        )
+        val progress = lifecycle.shardProgress(context()).single()
+        assertEquals(shard, progress.shard)
+        assertEquals("orders:v1:shard:0", progress.streamKey)
+        assertEquals("10-1", progress.lastDeliveredId)
+        assertEquals("10-1", progress.lastAckedId)
+        assertEquals(0L, progress.pendingCount)
     }
 
     @Test
-    fun `ack failure records error without message success metric`() {
+    fun `ack failure propagates without advancing ack progress`() {
         val shard = CoordinatorShard(1, 0)
-        val registry = SimpleMeterRegistry()
         val reader = FailingAckRedisStreamReader(
             ConsumedRedisStreamMessage(
                 streamKey = "orders:v1:shard:0",
@@ -84,7 +80,6 @@ class RedisStreamConsumerLifecycleTest {
             reader = reader,
             handler = RecordingRedisStreamMessageHandler(),
             startPollersOnAssignment = false,
-            metrics = MicrometerCoordinatorConsumerMetrics(registry, "orders", "orders-consumer", "member-a"),
         )
 
         lifecycle.onAssigned(setOf(shard), context())
@@ -93,13 +88,9 @@ class RedisStreamConsumerLifecycleTest {
             lifecycle.pollOnce(shard)
         }
 
-        assertEquals(
-            0.0,
-            registry.find("redis_stream_consumer_messages_total").tag("status", "SUCCESS").counter()?.count() ?: 0.0,
-        )
-        assertEquals(1.0, registry.get("redis_stream_consumer_messages_total").tag("status", "ERROR").counter().count())
-        assertEquals(1.0, registry.get("redis_stream_consumer_ack_status_total").tag("status", "ERROR").counter().count())
-        assertEquals(0.0, registry.find("redis_stream_consumer_ack_total").counter()?.count() ?: 0.0)
+        val progress = lifecycle.shardProgress(context()).single()
+        assertEquals("1-0", progress.lastDeliveredId)
+        assertEquals(null, progress.lastAckedId)
     }
 
     @Test
@@ -150,6 +141,34 @@ class RedisStreamConsumerLifecycleTest {
     }
 
     @Test
+    fun `handler failure can release message with xnack`() {
+        val shard = CoordinatorShard(1, 0)
+        val reader = ScriptedRedisStreamReader(
+            ConsumedRedisStreamMessage(
+                streamKey = "orders:v1:shard:0",
+                recordId = "1-0",
+                shard = shard,
+                fields = mapOf("payload" to "created"),
+            ),
+        )
+        val lifecycle = RedisStreamConsumerLifecycle(
+            properties = properties().apply {
+                redis.failure.mode = RedisStreamFailureMode.XNACK
+            },
+            reader = reader,
+            handler = RedisStreamMessageHandler { error("handler failed") },
+            startPollersOnAssignment = false,
+        )
+
+        lifecycle.onAssigned(setOf(shard), context())
+
+        assertFailsWith<IllegalStateException> {
+            lifecycle.pollOnce(shard)
+        }
+        assertEquals(listOf("1-0"), reader.nacks.map { it.recordId })
+    }
+
+    @Test
     fun `runtime capacity reflects messages currently handled by redis poller`() {
         val shard = CoordinatorShard(1, 0)
         lateinit var lifecycle: RedisStreamConsumerLifecycle
@@ -184,9 +203,8 @@ class RedisStreamConsumerLifecycleTest {
     private fun properties(): CoordinatorConsumerProperties =
         CoordinatorConsumerProperties().apply {
             streamPrefix = "orders"
-            consumerGroup = "orders-consumer"
+            consumerGroupName = "orders-consumer"
             memberId = "member-a"
-            memberName = "member-a"
             runtimeMaxConcurrency = 4
             redis.pollBatchSize = 2
             redis.pollTimeout = Duration.ofMillis(10)
@@ -208,6 +226,7 @@ private class ScriptedRedisStreamReader(
 ) : RedisStreamReader {
     val reads = mutableListOf<Read>()
     val acks = mutableListOf<Ack>()
+    val nacks = mutableListOf<Nack>()
 
     override fun read(
         streamKey: String,
@@ -225,6 +244,10 @@ private class ScriptedRedisStreamReader(
         acks += Ack(streamKey, consumerGroup, recordId)
     }
 
+    override fun nack(streamKey: String, consumerGroup: String, recordId: String) {
+        nacks += Nack(streamKey, consumerGroup, recordId)
+    }
+
     data class Read(
         val streamKey: String,
         val shard: CoordinatorShard,
@@ -235,6 +258,12 @@ private class ScriptedRedisStreamReader(
     )
 
     data class Ack(
+        val streamKey: String,
+        val consumerGroup: String,
+        val recordId: String,
+    )
+
+    data class Nack(
         val streamKey: String,
         val consumerGroup: String,
         val recordId: String,

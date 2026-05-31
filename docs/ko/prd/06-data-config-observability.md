@@ -2,7 +2,7 @@
 
 ## Scope
 
-Redis Stream Coordinator는 KIP-848 스타일의 rebalance control plane이다. 이 서버는 group metadata, member liveness, target/current assignment, migration state만 관리한다.
+Redis Stream Coordinator는 KIP-848 스타일의 rebalance control plane이다. 이 서버는 group metadata, member liveness, target/current assignment, migration state를 관리한다. Coordinator metadata는 group별 Redis metadata hash key 하나에 저장한다.
 
 Coordinator config에 두지 않는 것:
 
@@ -11,24 +11,25 @@ Coordinator config에 두지 않는 것:
 * pending recovery, idempotency marker lifecycle.
 * producer routing cache나 member runtime local tuning.
 
-## Redis Key Model
+## Redis Metadata Store
 
-Coordinator가 직접 소유하는 key만 둔다.
+Redis metadata store는 `{streamPrefix, consumerGroup}`당 하나의 hash key를 둔다.
 
 ```text
-redis-stream:coord:{streamPrefix:consumerGroup}:group
-redis-stream:coord:{streamPrefix:consumerGroup}:members
-redis-stream:coord:{streamPrefix:consumerGroup}:member:{memberId}
-redis-stream:coord:{streamPrefix:consumerGroup}:target-assignment
-redis-stream:coord:{streamPrefix:consumerGroup}:current-assignment:{memberId}
-redis-stream:coord:{streamPrefix:consumerGroup}:migration:active
-redis-stream:coord:{streamPrefix:consumerGroup}:migration:{reshardingId}
-redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
+redis-stream:coord:{streamPrefix:consumerGroup}:metadata
 ```
 
-Data-plane key는 coordinator 문서의 config에 넣지 않는다. 예를 들어 processing marker, stream read cursor, handler retry state는 member/consumer 구현 소관이다.
+| Field | 역할 |
+| --- | --- |
+| `aggregate` | Canonical `GroupMetadata` JSON aggregate |
+| `revision` | `storeRevision` compare-and-set guard |
+| `schemaVersion` | JSON aggregate schema version |
+| `layoutVersion` | Redis metadata layout version |
+| `updatedAt` | Last metadata write timestamp |
 
-The group aggregate JSON stored at `...:group` includes `schemaVersion`. The current schema version is `1`. Redis-backed reads and writes reject unsupported future schema versions instead of silently downgrading or overwriting metadata from a newer coordinator. Metadata written before `schemaVersion` existed is treated as schema version `1`.
+`aggregate`가 source of truth이다. `revision`, `schemaVersion`, `layoutVersion`, `updatedAt`은 compare-and-set, compatibility check, operational query를 위한 metadata field이며 Lua script로 같은 hash에 원자적으로 갱신한다.
+
+Data-plane key는 coordinator 문서의 config에 넣지 않는다. 예를 들어 processing marker, stream read cursor, handler retry state는 member/consumer 구현 소관이다.
 
 ## Minimal Configuration
 
@@ -65,7 +66,7 @@ coordinator:
     sink: log
     redis-max-entries: 1000
 
-  # Coordinator metadata store로 사용할 Redis 접속 정보이다.
+  # Redis Stream data plane과 optional stream provisioning에 사용할 Redis 접속 정보이다.
   redis:
     # Redis host이다.
     host: localhost
@@ -92,16 +93,14 @@ coordinator:
     tick-interval: 1s
   coordination:
     state-mutex:
-      # Redis-backed store에서 coordinator state 접근을 Redis mutex critical section으로 직렬화한다.
-      # open source 사용자는 k8s Recreate/blue-green active-passive를 직접 맞출 필요 없이
-      # 여러 coordinator pod를 띄울 수 있고, mutex를 잡은 요청만 state를 읽고 처리하고 저장한다.
+      # Redis metadata store 접근을 직렬화하는 mutex 설정이다.
       enabled: true
       # 요청 처리 중 coordinator가 죽으면 이 시간이 지난 뒤 다른 instance가 critical section을 이어받는다.
-      ttl: 30s
+      ttl-ms: 30000
       # mutex가 바쁠 때 heartbeat/admin/read-refresh 요청이 기다릴 최대 시간이다.
-      acquire-timeout: 5s
+      acquire-timeout-ms: 5000
       # mutex 획득 재시도 간격이다.
-      retry-interval: 100ms
+      retry-interval-ms: 100
 
   # Admin API 요청에서 값이 생략됐을 때 적용되는 기본값이다.
   defaults:
@@ -113,19 +112,17 @@ coordinator:
 
 Shard count와 consumer `maxConcurrency`의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 `defaults`는 요청값이 생략됐을 때만 쓰이며, stream/group별 개별 설정은 Admin API로 저장한다. Kafka coordinator처럼 coordinator server config에는 shard count나 consumer concurrency min/max를 두지 않는다.
 
-## Coordinator State Mutex
+## Coordinator State Serialization
 
-Redis-backed coordinator는 open source 배포에서 사용자가 k8s rollout 전략을 세밀하게 맞추지 않아도 되도록 Redis state mutex를 기본 사용한다.
+Redis-backed coordinator는 Redis mutex와 `storeRevision` compare-and-set을 state serialization boundary로 사용한다.
 
-* Redis store이면 `coordinator.coordination.state-mutex.enabled=true`가 기본이다.
-* create, heartbeat, scale, rollback, consumer concurrency update, migration read, monitoring read-time operational refresh, scheduled tick은 state mutex를 획득한 instance만 수행한다.
-* critical section 순서는 `acquire mutex -> read latest Redis state -> validate/process/reconcile -> save with storeRevision CAS -> release mutex`이다.
-* 여러 coordinator pod가 같은 Redis store를 보더라도 동시에 state를 읽고 처리하지 않고, 요청 단위로 짧게 mutex를 잡아 직렬화한다.
-* event loop tick은 mutex를 못 잡으면 조용히 skip하고, 다른 instance가 처리한다.
-* `storeRevision` CAS는 mutex 이후에도 남아 stale snapshot overwrite를 막는 마지막 방어선이다.
+* create, heartbeat, scale, rollback, consumer concurrency update, monitoring read-time operational refresh, scheduled tick은 Redis mutex 안에서 group metadata hash를 읽고 갱신한다.
+* critical section 순서는 `acquire Redis mutex -> read latest metadata hash -> validate/process/reconcile -> save with storeRevision CAS -> release mutex`이다.
+* 여러 coordinator pod가 같은 Redis store를 보더라도 같은 group update는 mutex 또는 `storeRevision` CAS로 직렬화된다.
+* event loop tick은 다른 instance가 먼저 같은 group을 update하면 reload하거나 skip하고 다음 tick에서 이어간다.
 * memory store는 개발용이며 process-local state이므로 여러 coordinator replicas에 사용하지 않는다.
 
-이 구조의 목적은 active-active coordinator semantics가 아니라, 사용자가 `replicas=1`, `Recreate`, blue/green passive mode 같은 배포 세부사항을 직접 맞추지 않아도 안전하게 운영을 시작할 수 있게 하는 것이다.
+이 구조의 목적은 사용자가 `replicas=1`, `Recreate`, blue/green passive mode 같은 배포 세부사항을 직접 맞추지 않아도 안전하게 운영을 시작할 수 있게 하는 것이다.
 
 ## Access Control
 

@@ -78,6 +78,26 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `monitoring exposes coordination version compatibility lifecycle`() {
+        mockMvc.perform(
+            get("/coord/v1/monitoring/compatibility")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.currentCoordinationVersion").value(1))
+            .andExpect(jsonPath("$.supportedCoordinationVersions.min").value(1))
+            .andExpect(jsonPath("$.supportedCoordinationVersions.max").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].version").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].status").value("ACTIVE"))
+            .andExpect(jsonPath("$.coordinationVersions[0].introducedIn.major").value(0))
+            .andExpect(jsonPath("$.coordinationVersions[0].introducedIn.minor").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].introducedIn.patch").value(0))
+            .andExpect(jsonPath("$.coordinationVersions[0].minimumSupportedUntil.major").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].minimumSupportedUntil.minor").value(0))
+            .andExpect(jsonPath("$.coordinationVersions[0].minimumSupportedUntil.patch").value(0))
+    }
+
+    @Test
     fun `admin api validates create group body`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-validation/groups/orders-consumer")

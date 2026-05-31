@@ -1,74 +1,55 @@
 package com.redisstream.consumer
 
-import io.micrometer.core.instrument.MeterRegistry
+import com.redisstream.RedisStreamCommandsTemplate
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.boot.context.properties.EnableConfigurationProperties
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.connection.RedisConnectionFactory
 
 @AutoConfiguration
-@EnableConfigurationProperties(CoordinatorConsumerProperties::class)
-@ConditionalOnProperty(
-    prefix = "redis-stream-coordinator.consumer",
-    name = ["enabled"],
-    havingValue = "true",
-    matchIfMissing = true,
-)
 class CoordinatorConsumerAutoConfiguration {
-    @Bean
-    @ConditionalOnMissingBean
-    fun coordinatorClient(properties: CoordinatorConsumerProperties): CoordinatorClient =
-        RestClientCoordinatorClient(coordinatorRestClient(properties))
-
-    @Bean
-    @ConditionalOnMissingBean
-    fun coordinatorConsumerMetrics(
-        properties: CoordinatorConsumerProperties,
-        meterRegistry: ObjectProvider<MeterRegistry>,
-    ): CoordinatorConsumerMetrics =
-        meterRegistry.ifAvailable?.let {
-            MicrometerCoordinatorConsumerMetrics(
-                registry = it,
-                streamPrefix = properties.streamPrefix,
-                consumerGroup = properties.consumerGroup,
-                memberName = properties.memberName,
-            )
-        } ?: NoopCoordinatorConsumerMetrics
-
     @Bean
     @ConditionalOnBean(RedisConnectionFactory::class)
     @ConditionalOnMissingBean
-    fun redisStreamReader(redisConnectionFactory: RedisConnectionFactory): RedisStreamReader =
-        SpringDataRedisStreamReader(redisConnectionFactory)
+    fun redisStreamCommandsTemplate(redisConnectionFactory: RedisConnectionFactory): RedisStreamCommandsTemplate =
+        RedisStreamCommandsTemplate(redisConnectionFactory)
 
     @Bean
-    @ConditionalOnBean(RedisStreamMessageHandler::class, RedisStreamReader::class)
-    @ConditionalOnMissingBean(CoordinatorShardLifecycle::class)
-    @ConditionalOnProperty(
-        prefix = "redis-stream-coordinator.consumer.redis",
-        name = ["enabled"],
-        havingValue = "true",
+    @ConditionalOnBean(CoordinatorConsumerProperties::class, RedisStreamCommandsTemplate::class)
+    @ConditionalOnMissingBean
+    fun redisStreamReader(
+        redisStreamCommandsTemplate: RedisStreamCommandsTemplate,
+        properties: CoordinatorConsumerProperties,
+    ): RedisStreamReader =
+        SpringDataRedisStreamReader(
+            commands = redisStreamCommandsTemplate,
+            acknowledgement = properties.redis.ack,
+            failureHandling = properties.redis.failure,
+        )
+
+    @Bean
+    @ConditionalOnBean(
+        CoordinatorConsumerProperties::class,
+        RedisStreamMessageHandler::class,
+        RedisStreamReader::class,
     )
+    @ConditionalOnMissingBean(CoordinatorShardLifecycle::class)
     fun redisStreamConsumerLifecycle(
         properties: CoordinatorConsumerProperties,
         reader: RedisStreamReader,
         handler: RedisStreamMessageHandler,
-        metrics: CoordinatorConsumerMetrics,
     ): CoordinatorShardLifecycle =
-        RedisStreamConsumerLifecycle(properties, reader, handler, metrics = metrics)
+        RedisStreamConsumerLifecycle(properties, reader, handler)
 
     @Bean
-    @ConditionalOnBean(CoordinatorShardLifecycle::class)
+    @ConditionalOnBean(CoordinatorConsumerProperties::class, CoordinatorShardLifecycle::class)
     @ConditionalOnMissingBean
     fun coordinatorManagedConsumer(
         properties: CoordinatorConsumerProperties,
         client: CoordinatorClient,
         lifecycle: CoordinatorShardLifecycle,
-        metrics: CoordinatorConsumerMetrics,
     ): CoordinatorManagedConsumer =
-        CoordinatorManagedConsumer(properties, client, lifecycle, metrics)
+        CoordinatorManagedConsumer(properties, client, lifecycle)
+            .also { it.validateInitialRouting() }
 }

@@ -6,7 +6,6 @@ import com.redisstream.consumer.HeartbeatRequest
 import com.redisstream.consumer.HeartbeatResponse
 import com.redisstream.consumer.ProducerRoutingResponse
 import com.redisstream.consumer.ProducerRoutingShard
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -23,7 +22,7 @@ class ProducerRoutingCacheTest {
         val clock = MutableClock(Instant.parse("2026-05-23T00:00:00Z"))
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofSeconds(30),
             clock = clock,
@@ -48,7 +47,7 @@ class ProducerRoutingCacheTest {
         val clock = MutableClock(Instant.parse("2026-05-23T00:00:00Z"))
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofSeconds(10),
             clock = clock,
@@ -73,7 +72,7 @@ class ProducerRoutingCacheTest {
         )
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofMinutes(5),
         )
@@ -84,27 +83,6 @@ class ProducerRoutingCacheTest {
         assertEquals(2, client.calls)
         assertEquals(2, refreshed.metadataVersion)
         assertEquals(2, cache.route("order-1").activeWriteVersion)
-    }
-
-    @Test
-    fun `routing cache records refresh and cache hit metrics`() {
-        val registry = SimpleMeterRegistry()
-        val cache = ProducerRoutingCache(
-            streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
-            client = ScriptedRoutingClient(routing(version = 1, activeWriteVersion = 1, shardCount = 2)),
-            refreshInterval = Duration.ofMinutes(5),
-            metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer"),
-        )
-
-        cache.route("order-1")
-        cache.route("order-2")
-
-        assertEquals(
-            1.0,
-            registry.get("redis_stream_producer_routing_refresh_total").tag("status", "SUCCESS").counter().count(),
-        )
-        assertEquals(1.0, registry.get("redis_stream_producer_routing_cache_hit_total").counter().count())
     }
 
     @Test
@@ -123,7 +101,7 @@ class ProducerRoutingCacheTest {
     fun `routing metadata for a different group is rejected`() {
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = ScriptedRoutingClient(
                 routing(version = 1, activeWriteVersion = 1, shardCount = 2, consumerGroup = "other-consumer"),
             ),
@@ -139,7 +117,7 @@ class ProducerRoutingCacheTest {
         val metadata = routing(version = 1, activeWriteVersion = 1, shardCount = 2)
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = ScriptedRoutingClient(
                 metadata.copy(
                     shards = listOf(
@@ -153,6 +131,22 @@ class ProducerRoutingCacheTest {
         assertFailsWith<IllegalArgumentException> {
             cache.route("order-1")
         }
+    }
+
+    @Test
+    fun `initial routing validation fails when coordinator has no active shards`() {
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            consumerGroupName = "orders-consumer",
+            client = ScriptedRoutingClient(
+                routing(version = 1, activeWriteVersion = 1, shardCount = 0),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            cache.validateInitialRouting()
+        }
+        assertTrue(error.message!!.contains("has no active shards"))
     }
 
     private fun routing(

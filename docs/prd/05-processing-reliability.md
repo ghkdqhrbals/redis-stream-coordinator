@@ -73,6 +73,8 @@ When a shard disappears from `assignment.assignedShards` in a heartbeat response
 
 The coordinator accepts the revoke acknowledgement and can assign the shard to the next target member.
 
+During metadata correction, `SYNC_METADATA` and `REVOKE_PENDING` are drain-only responses. A member may keep shards it already owns and that remain in `assignment.assignedShards`, but it must not start shards that appear for the first time until a later `OK` response.
+
 ## Fencing Flow
 
 If the coordinator returns a fencing status or rejects stale ownership:

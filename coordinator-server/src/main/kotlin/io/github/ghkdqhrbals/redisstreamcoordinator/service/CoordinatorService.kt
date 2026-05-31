@@ -4,6 +4,9 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.protocol.CoordinatorCompatibilityResponse
+import io.github.ghkdqhrbals.redisstreamcoordinator.protocol.CoordinatorProtocol
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateConflictException
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateStore
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.NoopStreamShardProvisioner
@@ -34,12 +37,16 @@ class CoordinatorService(
     private val metrics: CoordinatorMetrics = NoopCoordinatorMetrics,
     private val stateMutex: CoordinatorStateMutex = LocalCoordinatorStateMutex,
 ) {
-    @Synchronized
+    /**
+     * Creates a coordinator group and provisions the initial stream shard version.
+     */
+    @CriticalSection(operation = "create-group")
     fun createGroup(streamPrefix: String, consumerGroup: String, request: CreateGroupRequest): GroupResponse =
-        stateMutex.withCriticalSection("create-group") {
-            createGroupOnce(streamPrefix, consumerGroup, request)
-        }
+        createGroupOnce(streamPrefix, consumerGroup, request)
 
+    /**
+     * Performs the create operation after the cross-instance state mutex has been acquired.
+     */
     private fun createGroupOnce(streamPrefix: String, consumerGroup: String, request: CreateGroupRequest): GroupResponse {
         val key = GroupKey(streamPrefix, consumerGroup)
         if (stateStore.contains(key)) {
@@ -81,23 +88,27 @@ class CoordinatorService(
         return group.toResponse()
     }
 
-    @Synchronized
+    /**
+     * Returns the current group view after applying time-based operational transitions.
+     */
+    @CriticalSection(operation = "get-group")
     fun getGroup(streamPrefix: String, consumerGroup: String): GroupResponse =
-        stateMutex.withCriticalSection("get-group") {
-            withStateConflictRetry("get-group") {
-                val group = requireGroup(streamPrefix, consumerGroup)
-                if (refreshOperationalState(group, Instant.now(clock))) {
-                    stateStore.save(group.key(), group)
-                }
-                recordGroupState(group)
-                group.toResponse()
+        withStateConflictRetry("get-group") {
+            val group = requireGroup(streamPrefix, consumerGroup)
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
             }
+            recordGroupState(group)
+            group.toResponse()
         }
 
-    @Synchronized
-    fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
-        stateMutex.withCriticalSection("producer-routing") {
-            withStateConflictRetry("producer-routing") {
+    /**
+     * Returns producer routing metadata for the current active write stream version.
+     */
+    @CriticalSection(operation = "producer-routing")
+    fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse {
+        try {
+            val response = withStateConflictRetry("producer-routing") {
                 val group = requireGroup(streamPrefix, consumerGroup)
                 if (refreshOperationalState(group, Instant.now(clock))) {
                     stateStore.save(group.key(), group)
@@ -105,14 +116,21 @@ class CoordinatorService(
                 recordGroupState(group)
                 group.toProducerRoutingResponse()
             }
+            metrics.recordProducerRouting(streamPrefix, consumerGroup, "SUCCESS")
+            return response
+        } catch (error: RuntimeException) {
+            metrics.recordProducerRouting(streamPrefix, consumerGroup, "ERROR")
+            throw error
         }
+    }
 
-    @Synchronized
+    /**
+     * Starts or resumes a shard-count change and moves producer writes to the new stream version.
+     */
+    @CriticalSection(operation = "scale-group")
     fun scaleGroup(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
         try {
-            val migration = stateMutex.withCriticalSection("scale-group") {
-                withStateConflictRetry("scale-group") { scaleGroupOnce(streamPrefix, consumerGroup, request) }
-            }
+            val migration = withStateConflictRetry("scale-group") { scaleGroupOnce(streamPrefix, consumerGroup, request) }
             metrics.recordScaleRequest(
                 streamPrefix,
                 consumerGroup,
@@ -125,6 +143,9 @@ class CoordinatorService(
         }
     }
 
+    /**
+     * Builds the PREPARING resharding record before provisioning or activating new stream shards.
+     */
     private fun scaleGroupOnce(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
         val now = Instant.now(clock)
@@ -175,6 +196,9 @@ class CoordinatorService(
         return provisionAndActivatePreparedMigration(group, migration, request, now)
     }
 
+    /**
+     * Provisions the target stream version, switches producer routing, and reconciles consumers.
+     */
     private fun provisionAndActivatePreparedMigration(
         group: GroupMetadata,
         migration: Migration,
@@ -205,17 +229,18 @@ class CoordinatorService(
         return migration
     }
 
-    @Synchronized
+    /**
+     * Updates member concurrency weights and triggers reassignment when effective capacity changes.
+     */
+    @CriticalSection(operation = "update-consumer-concurrency")
     fun updateConsumerConcurrency(
         streamPrefix: String,
         consumerGroup: String,
         request: UpdateConsumerConcurrencyRequest,
     ): ConsumerConcurrencyResponse {
         try {
-            val response = stateMutex.withCriticalSection("update-consumer-concurrency") {
-                withStateConflictRetry("update-consumer-concurrency") {
-                    updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request)
-                }
+            val response = withStateConflictRetry("update-consumer-concurrency") {
+                updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request)
             }
             metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "SUCCESS")
             return response
@@ -225,6 +250,9 @@ class CoordinatorService(
         }
     }
 
+    /**
+     * Applies a concurrency policy update inside the already-held state mutex.
+     */
     private fun updateConsumerConcurrencyOnce(
         streamPrefix: String,
         consumerGroup: String,
@@ -261,19 +289,24 @@ class CoordinatorService(
         )
     }
 
-    @Synchronized
+    /**
+     * Returns one resharding record by id.
+     */
+    @CriticalSection(operation = "get-migration")
     fun getMigration(streamPrefix: String, consumerGroup: String, reshardingId: String): Migration =
-        stateMutex.withCriticalSection("get-migration") {
-            requireGroup(streamPrefix, consumerGroup).migrations[reshardingId]
-                ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
-        }
+        requireGroup(streamPrefix, consumerGroup).migrations[reshardingId]
+            ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
 
-    @Synchronized
+    /**
+     * Rolls back an active resharding operation before the old version has been deprecated.
+     */
+    @CriticalSection(operation = "rollback-migration")
     fun rollbackMigration(streamPrefix: String, consumerGroup: String, reshardingId: String): Migration =
-        stateMutex.withCriticalSection("rollback-migration") {
-            withStateConflictRetry("rollback-migration") { rollbackMigrationOnce(streamPrefix, consumerGroup, reshardingId) }
-        }
+        withStateConflictRetry("rollback-migration") { rollbackMigrationOnce(streamPrefix, consumerGroup, reshardingId) }
 
+    /**
+     * Restores active writes and reads to the source stream version.
+     */
     private fun rollbackMigrationOnce(streamPrefix: String, consumerGroup: String, reshardingId: String): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
         val migration = group.migrations[reshardingId]
@@ -300,27 +333,31 @@ class CoordinatorService(
         return migration
     }
 
-    @Synchronized
+    /**
+     * Processes a consumer heartbeat and returns assignment, fencing, or retry instructions.
+     */
+    @CriticalSection(operation = "heartbeat")
     fun heartbeat(
         streamPrefix: String,
         consumerGroup: String,
         memberId: String,
         request: HeartbeatRequest,
     ): HeartbeatResponse {
-        val response = stateMutex.withCriticalSection("heartbeat") {
-            withStateConflictRetry("heartbeat") { heartbeatOnce(streamPrefix, consumerGroup, memberId, request) }
-        }
+        val response = withStateConflictRetry("heartbeat") { handleHeartbeat(streamPrefix, consumerGroup, memberId, request) }
         metrics.recordHeartbeat(streamPrefix, consumerGroup, response.status)
         return response
     }
 
-    private fun heartbeatOnce(
+    /**
+     * Applies join, leave, lease renewal, ownership validation, and assignment reconciliation.
+     */
+    private fun handleHeartbeat(
         streamPrefix: String,
         consumerGroup: String,
         memberId: String,
         request: HeartbeatRequest,
     ): HeartbeatResponse {
-        if (!properties.protocol.supportsHeartbeat(request.protocolVersion)) {
+        if (!CoordinatorProtocol.support(request.protocolVersion)) {
             return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNSUPPORTED_PROTOCOL)
         }
         if (request.memberId != memberId) {
@@ -339,6 +376,27 @@ class CoordinatorService(
         val now = Instant.now(clock)
         val membersExpired = expireMembers(group, now)
         val existing = group.members[memberId]
+        val metadataSyncMember = existing
+            ?.takeUnless { it.state == MemberState.FENCED || it.state == MemberState.EXPIRED }
+        if (request.metadataVersion > group.metadataVersion && metadataSyncMember != null) {
+            startMetadataCorrection(group, request.metadataVersion, now)
+            refreshMemberLivenessForMetadataSync(group, metadataSyncMember, request, now)
+            if (membersExpired > 0) {
+                reconcile(group, now)
+            }
+            stateStore.save(group.key(), group)
+            recordGroupState(group)
+            return metadataSyncHeartbeat(group, request, memberId, metadataSyncMember)
+        }
+        if (group.metadataCorrection != null && metadataSyncMember != null && request.metadataVersion != group.metadataVersion) {
+            refreshMemberLivenessForMetadataSync(group, metadataSyncMember, request, now)
+            if (membersExpired > 0) {
+                reconcile(group, now)
+            }
+            stateStore.save(group.key(), group)
+            recordGroupState(group)
+            return metadataSyncHeartbeat(group, request, memberId, metadataSyncMember)
+        }
         val member = when {
             request.memberEpoch < -1L -> {
                 if (membersExpired > 0) {
@@ -381,28 +439,34 @@ class CoordinatorService(
             else -> existing
         }
 
-        val ownershipReport = validateOwnershipReport(group, member, request)
+        val correctionWasActive = group.metadataCorrection != null
+        val validatingRequest = metadataCorrectionAwareRequest(group, member, request)
+        val ownershipReport = validateOwnershipReport(group, member, validatingRequest)
             ?: return fenceInvalidOwnershipReport(group, member, request, now)
 
         member.memberName = request.memberName ?: member.memberName
-        member.metadataVersion = request.metadataVersion
+        member.metadataVersion = group.metadataVersion
         member.runtimeMaxConcurrency = request.runtimeConsumerCapacity.runtimeMaxConcurrency
         member.activeConsumerWorkers =
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
         member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
-        member.rebalanceTimeoutMs = request.rebalanceTimeoutMs ?: member.rebalanceTimeoutMs
+        member.rebalanceTimeoutMs = validatingRequest.rebalanceTimeoutMs ?: member.rebalanceTimeoutMs
         member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else ownershipReport.ownedShards
         member.revoking = ownershipReport.revokingShards
             .filterNot { it.state == RevokingShardState.REVOKED && it.inFlight == 0 }
             .map { it.shard }
             .toSet()
+        member.shardProgress = ownershipReport.shardProgress
         member.lastHeartbeatAt = now
         member.memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl)
 
         reconcile(group, now)
         enforceRebalanceTimeouts(group, now)
         advanceMigrationDrainState(group, now)
+        if (correctionWasActive) {
+            acknowledgeMetadataCorrectionIfNeeded(group, member.memberId, request, now)
+        }
         if (member.state == MemberState.FENCED) {
             stateStore.save(group.key(), group)
             return fencedHeartbeat(group, request, memberId, member)
@@ -417,6 +481,9 @@ class CoordinatorService(
         val blocked = blockedShards(group, memberId)
         val assigned = target.filterNot { it in blocked }.toSortedSet()
         val pending = target.filter { it in blocked }.toSortedSet()
+        if (group.metadataCorrection != null) {
+            return revokePendingHeartbeat(group, request, member, target, blocked)
+        }
 
         return HeartbeatResponse(
             responseTo = request.requestId,
@@ -436,12 +503,14 @@ class CoordinatorService(
         )
     }
 
-    @Synchronized
+    /**
+     * Reports coordinator liveness and Redis dependency status.
+     */
     fun health(): HealthResponse {
         val redisStatus = if (requiresRedis()) {
             redisConnectionFactory.ifAvailable?.let { factory ->
                 runCatching {
-                    factory.connection.use { connection -> connection.ping() }
+                    CoordinatorRedisCommands(redisConnectionFactory = factory).ping()
                 }.fold(
                     onSuccess = { "UP" },
                     onFailure = { "DOWN" },
@@ -461,11 +530,20 @@ class CoordinatorService(
         return health
     }
 
+    /**
+     * Returns module-defined protocol compatibility metadata for operators and client diagnostics.
+     */
+    fun compatibility(): CoordinatorCompatibilityResponse =
+        CoordinatorProtocol.compatibility()
+
     private fun requiresRedis(): Boolean =
         properties.store.type == CoordinatorProperties.StoreType.REDIS ||
             properties.streams.provisioningEnabled ||
             properties.audit.sink == CoordinatorProperties.AuditSink.REDIS
 
+    /**
+     * Runs one background maintenance pass without blocking if another coordinator owns the mutex.
+     */
     @Synchronized
     fun tick(): CoordinatorTickResult {
         return stateMutex.tryCriticalSection("tick") {
@@ -473,6 +551,9 @@ class CoordinatorService(
         } ?: CoordinatorTickResult(scannedGroups = 0, changedGroups = 0)
     }
 
+    /**
+     * Expires leases, advances migrations, and records metrics for all known groups.
+     */
     private fun tickOnce(): CoordinatorTickResult {
         val startedAt = Instant.now(clock)
         val now = Instant.now(clock)
@@ -488,70 +569,91 @@ class CoordinatorService(
         return result
     }
 
-    @Synchronized
+    /**
+     * Lists groups after refreshing any time-based operational state.
+     */
+    @CriticalSection(operation = "list-groups")
     fun listGroups(): GroupsResponse {
         val now = Instant.now(clock)
-        return stateMutex.withCriticalSection("list-groups") {
-            withStateConflictRetry("list-groups") {
-                GroupsResponse(stateStore.list().map {
-                    if (refreshOperationalState(it, now)) {
-                        stateStore.save(it.key(), it)
-                    }
-                    recordGroupState(it)
-                    it.toResponse()
-                })
-            }
+        return withStateConflictRetry("list-groups") {
+            GroupsResponse(stateStore.list().map {
+                if (refreshOperationalState(it, now)) {
+                    stateStore.save(it.key(), it)
+                }
+                recordGroupState(it)
+                it.toResponse()
+            })
         }
     }
 
-    @Synchronized
+    /**
+     * Lists members in a group after applying expiration and rebalance timeout checks.
+     */
+    @CriticalSection(operation = "list-members")
     fun listMembers(streamPrefix: String, consumerGroup: String): MembersResponse =
-        stateMutex.withCriticalSection("list-members") {
-            withStateConflictRetry("list-members") {
-                val group = requireGroup(streamPrefix, consumerGroup)
-                if (refreshOperationalState(group, Instant.now(clock))) {
-                    stateStore.save(group.key(), group)
-                }
-                recordGroupState(group)
-                MembersResponse(group.members.values.sortedBy { it.memberId })
-            }
-        }
-
-    @Synchronized
-    fun assignments(streamPrefix: String, consumerGroup: String): AssignmentsResponse =
-        stateMutex.withCriticalSection("assignments") {
-            withStateConflictRetry("assignments") {
-                val group = requireGroup(streamPrefix, consumerGroup)
-                if (refreshOperationalState(group, Instant.now(clock))) {
-                    stateStore.save(group.key(), group)
-                }
-                val violations = invariantViolations(group)
-                metrics.recordGroupState(group, violations.size)
-                AssignmentsResponse(
-                    targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
-                    currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
-                    revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }
-                        .filterValues { it.isNotEmpty() },
-                    invariantViolations = violations,
-                )
-            }
-        }
-
-    @Synchronized
-    fun migrations(streamPrefix: String, consumerGroup: String): MigrationsResponse {
-        return stateMutex.withCriticalSection("migrations") {
+        withStateConflictRetry("list-members") {
             val group = requireGroup(streamPrefix, consumerGroup)
-            MigrationsResponse(
-                migrations = group.migrations.values.sortedBy { it.createdAt },
-                activeReshardingId = group.activeReshardingId,
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
+            }
+            recordGroupState(group)
+            MembersResponse(group.members.values.sortedBy { it.memberId })
+        }
+
+    /**
+     * Returns target/current assignment snapshots plus invariant violations for debugging.
+     */
+    @CriticalSection(operation = "assignments")
+    fun assignments(streamPrefix: String, consumerGroup: String): AssignmentsResponse =
+        withStateConflictRetry("assignments") {
+            val group = requireGroup(streamPrefix, consumerGroup)
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
+            }
+            val violations = invariantViolations(group)
+            metrics.recordGroupState(group, violations.size)
+            AssignmentsResponse(
+                targetAssignment = group.targetAssignments.mapValues { it.value.toSortedSet() },
+                currentAssignments = group.members.mapValues { it.value.currentAssignment.toSortedSet() },
+                revokeProgress = group.members.mapValues { it.value.revoking.toSortedSet() }
+                    .filterValues { it.isNotEmpty() },
+                invariantViolations = violations,
             )
         }
+
+    /**
+     * Returns the last consumption progress reported by consumers for each owned stream shard.
+     */
+    @CriticalSection(operation = "consumption-progress")
+    fun consumptionProgress(streamPrefix: String, consumerGroup: String): ConsumptionProgressResponse =
+        withStateConflictRetry("consumption-progress") {
+            val group = requireGroup(streamPrefix, consumerGroup)
+            if (refreshOperationalState(group, Instant.now(clock))) {
+                stateStore.save(group.key(), group)
+            }
+            recordGroupState(group)
+            ConsumptionProgressResponse(group.toConsumerShardProgress())
+        }
+
+    /**
+     * Lists all resharding records for a group.
+     */
+    @CriticalSection(operation = "migrations")
+    fun migrations(streamPrefix: String, consumerGroup: String): MigrationsResponse {
+        val group = requireGroup(streamPrefix, consumerGroup)
+        return MigrationsResponse(
+            migrations = group.migrations.values.sortedBy { it.createdAt },
+            activeReshardingId = group.activeReshardingId,
+        )
     }
 
     private fun requireGroup(streamPrefix: String, consumerGroup: String): GroupMetadata =
         stateStore.get(GroupKey(streamPrefix, consumerGroup))
             ?: throw CoordinatorException(CoordinatorError.GROUP_NOT_FOUND)
 
+    /**
+     * Refreshes one group and persists it only when operational state changed.
+     */
     private fun refreshGroupOperationalState(key: GroupKey, now: Instant): Boolean {
         val group = stateStore.get(key) ?: return false
         if (!refreshOperationalState(group, now)) {
@@ -561,6 +663,9 @@ class CoordinatorService(
         return true
     }
 
+    /**
+     * Retries optimistic Redis store conflicts that can still happen after mutex lease churn.
+     */
     private fun <T> withStateConflictRetry(operation: String, block: () -> T): T {
         var attempts = 0
         while (true) {
@@ -610,45 +715,131 @@ class CoordinatorService(
         return member
     }
 
-    private data class ValidatedOwnershipReport(
-        val ownedShards: Set<ShardId>,
-        val revokingShards: List<RevokingShardReport>,
-    )
-
+    /**
+     * Accepts only ownership reports that match previous ownership or coordinator-granted targets.
+     */
     private fun validateOwnershipReport(
         group: GroupMetadata,
         member: MemberMetadata,
         request: HeartbeatRequest,
     ): ValidatedOwnershipReport? {
-        if (request.memberEpoch == 0L) {
-            return ValidatedOwnershipReport(emptySet(), emptyList())
-        }
-
-        val readableShards = group.readableShards().toSet()
-        val previouslyAcceptedShards = member.currentAssignment + member.revoking
-        val assignableTargetShards = group.targetAssignments[member.memberId].orEmpty() -
-            blockedShards(group, member.memberId)
-        val allowedOwnedShards = previouslyAcceptedShards +
-            assignableTargetShards.filter { it in readableShards }
-        val allowedRevokingShards = previouslyAcceptedShards +
-            assignableTargetShards.filter { it in readableShards }
-        val reportedOwnedShards = if (member.state == MemberState.LEAVING) emptySet() else request.ownedShards
-        val unauthorizedOwnedShards = reportedOwnedShards - allowedOwnedShards
-        val unauthorizedRevokingShards = request.revokingShards
-            .filterNot { it.state == RevokingShardState.REVOKED && it.inFlight == 0 }
-            .map { it.shard }
-            .filter { it !in allowedRevokingShards }
-
-        if (unauthorizedOwnedShards.isNotEmpty() || unauthorizedRevokingShards.isNotEmpty()) {
-            return null
-        }
-
-        return ValidatedOwnershipReport(
-            ownedShards = reportedOwnedShards.filter { it in allowedOwnedShards }.toSet(),
-            revokingShards = request.revokingShards.filter { it.shard in allowedRevokingShards },
+        return OwnershipReportValidator.validate(
+            group = group,
+            member = member,
+            request = request,
+            readableShards = group.readableShards().toSet(),
+            blockedTargetShards = blockedShards(group, member.memberId),
         )
     }
 
+    /**
+     * Starts a group-wide request for consumers to discard a higher local metadata view and use Redis current state.
+     */
+    private fun startMetadataCorrection(group: GroupMetadata, observedMetadataVersion: Long, now: Instant) {
+        val correction = group.metadataCorrection
+        if (correction == null || correction.targetMetadataVersion != group.metadataVersion) {
+            group.metadataCorrection = MetadataCorrection(
+                targetMetadataVersion = group.metadataVersion,
+                observedMetadataVersion = observedMetadataVersion,
+                requestedAt = now,
+                updatedAt = now,
+            )
+        } else {
+            correction.observedMetadataVersion = maxOf(correction.observedMetadataVersion, observedMetadataVersion)
+            correction.updatedAt = now
+        }
+        group.updatedAt = now
+    }
+
+    /**
+     * Keeps member liveness current while rejecting stale ownership from a higher metadata version.
+     */
+    private fun refreshMemberLivenessForMetadataSync(
+        group: GroupMetadata,
+        member: MemberMetadata,
+        request: HeartbeatRequest,
+        now: Instant,
+    ) {
+        member.memberName = request.memberName ?: member.memberName
+        member.metadataVersion = request.metadataVersion
+        member.runtimeMaxConcurrency = request.runtimeConsumerCapacity.runtimeMaxConcurrency
+        member.activeConsumerWorkers =
+            (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
+                .coerceAtLeast(0)
+        member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
+        member.rebalanceTimeoutMs = request.rebalanceTimeoutMs ?: member.rebalanceTimeoutMs
+        member.lastHeartbeatAt = now
+        member.memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl)
+        group.updatedAt = now
+    }
+
+    /**
+     * During metadata correction, stale revoking reports from a discarded future view are ignored, not accepted.
+     */
+    private fun metadataCorrectionAwareRequest(
+        group: GroupMetadata,
+        member: MemberMetadata,
+        request: HeartbeatRequest,
+    ): HeartbeatRequest {
+        val correction = group.metadataCorrection ?: return request
+        if (request.metadataVersion != correction.targetMetadataVersion) {
+            return request
+        }
+        val authority = member.currentAssignment +
+            member.revoking +
+            group.targetAssignments[member.memberId].orEmpty()
+        return request.copy(
+            revokingShards = request.revokingShards.filter { it.shard in authority },
+            shardProgress = request.shardProgress.filter { it.shard in authority },
+        )
+    }
+
+    /**
+     * Marks one consumer as corrected; the correction round ends after all live members report the target version.
+     */
+    private fun acknowledgeMetadataCorrectionIfNeeded(
+        group: GroupMetadata,
+        memberId: String,
+        request: HeartbeatRequest,
+        now: Instant,
+    ) {
+        val correction = group.metadataCorrection ?: return
+        if (correction.targetMetadataVersion != group.metadataVersion) {
+            group.metadataCorrection = null
+            group.updatedAt = now
+            return
+        }
+        if (request.metadataVersion == correction.targetMetadataVersion) {
+            correction.acknowledgedMembers += memberId
+            correction.updatedAt = now
+            val liveMemberIds = group.members.values
+                .filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING || it.state == MemberState.LEAVING }
+                .map { it.memberId }
+                .toSet()
+            correction.acknowledgedMembers.retainAll(liveMemberIds)
+            if (liveMemberIds.isNotEmpty() &&
+                correction.acknowledgedMembers.containsAll(liveMemberIds) &&
+                !hasMetadataCorrectionHandoffPending(group)
+            ) {
+                group.metadataCorrection = null
+            }
+            group.updatedAt = now
+        }
+    }
+
+    /**
+     * Keeps the metadata correction round open until all previous owners have drained or been fenced.
+     */
+    private fun hasMetadataCorrectionHandoffPending(group: GroupMetadata): Boolean {
+        val liveMembers = group.members.values
+            .filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING || it.state == MemberState.LEAVING }
+        return liveMembers.any { it.revoking.isNotEmpty() } ||
+            group.targetAssignments.keys.any { blockedShards(group, it).isNotEmpty() }
+    }
+
+    /**
+     * Fences a member that reports ownership for shards the coordinator did not grant.
+     */
     private fun fenceInvalidOwnershipReport(
         group: GroupMetadata,
         member: MemberMetadata,
@@ -667,6 +858,9 @@ class CoordinatorService(
         return fencedHeartbeat(group, request, member.memberId, member)
     }
 
+    /**
+     * Applies all state-machine transitions that depend only on current time and stored metadata.
+     */
     private fun refreshOperationalState(group: GroupMetadata, now: Instant): Boolean {
         val expired = expireMembers(group, now) > 0
         val timedOut = enforceRebalanceTimeouts(group, now)
@@ -674,6 +868,9 @@ class CoordinatorService(
         return expired || timedOut || migrationAdvanced
     }
 
+    /**
+     * Marks a member as leaving so its shards are drained before reassignment.
+     */
     private fun markLeaving(
         group: GroupMetadata,
         memberId: String,
@@ -708,6 +905,67 @@ class CoordinatorService(
             assignment = AssignmentView(emptySet(), emptySet(), group.metadataVersion),
         )
 
+    private fun metadataSyncHeartbeat(
+        group: GroupMetadata,
+        request: HeartbeatRequest,
+        memberId: String,
+        existing: MemberMetadata,
+    ): HeartbeatResponse {
+        val target = group.targetAssignments[memberId].orEmpty()
+        val blocked = blockedShards(group, memberId)
+        val assignable = target.filterNot { it in blocked }.toSet()
+        val assigned = request.ownedShards
+            .filter { it in assignable }
+            .toSortedSet()
+        val pending = (target - assigned).toSortedSet()
+        return HeartbeatResponse(
+            responseTo = request.requestId,
+            status = HeartbeatStatus.SYNC_METADATA,
+            memberId = memberId,
+            memberEpoch = existing.memberEpoch,
+            heartbeatIntervalMs = properties.heartbeatInterval.toMillis(),
+            groupEpoch = group.groupEpoch,
+            assignmentEpoch = group.assignmentEpoch,
+            metadataVersion = group.metadataVersion,
+            assignedMaxConcurrency = existing.assignedMaxConcurrency,
+            assignment = AssignmentView(
+                assignedShards = assigned,
+                pendingShards = pending,
+                metadataVersion = group.metadataVersion,
+            ),
+        )
+    }
+
+    private fun revokePendingHeartbeat(
+        group: GroupMetadata,
+        request: HeartbeatRequest,
+        member: MemberMetadata,
+        target: Set<ShardId>,
+        blocked: Set<ShardId>,
+    ): HeartbeatResponse {
+        val assignable = target.filterNot { it in blocked }.toSet()
+        val assigned = member.currentAssignment
+            .filter { it in assignable }
+            .toSortedSet()
+        val pending = (target - assigned).toSortedSet()
+        return HeartbeatResponse(
+            responseTo = request.requestId,
+            status = HeartbeatStatus.REVOKE_PENDING,
+            memberId = member.memberId,
+            memberEpoch = member.memberEpoch,
+            heartbeatIntervalMs = properties.heartbeatInterval.toMillis(),
+            groupEpoch = group.groupEpoch,
+            assignmentEpoch = group.assignmentEpoch,
+            metadataVersion = group.metadataVersion,
+            assignedMaxConcurrency = member.assignedMaxConcurrency,
+            assignment = AssignmentView(
+                assignedShards = assigned,
+                pendingShards = pending,
+                metadataVersion = group.metadataVersion,
+            ),
+        )
+    }
+
     private fun rejectedHeartbeat(
         request: HeartbeatRequest,
         memberId: String,
@@ -726,6 +984,9 @@ class CoordinatorService(
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
+    /**
+     * Expires members that missed their lease deadline and forces a rebalance.
+     */
     private fun expireMembers(group: GroupMetadata, now: Instant): Int {
         var expiredCount = 0
         group.members.values.forEach { member ->
@@ -743,6 +1004,9 @@ class CoordinatorService(
         return expiredCount
     }
 
+    /**
+     * Fences members that do not revoke removed shards before their rebalance deadline.
+     */
     private fun enforceRebalanceTimeouts(group: GroupMetadata, now: Instant): Boolean {
         var changed = false
         var fenced = false
@@ -781,6 +1045,9 @@ class CoordinatorService(
         return changed
     }
 
+    /**
+     * Advances resharding from ACTIVE to DRAINING to DEPRECATED as consumers converge.
+     */
     private fun advanceMigrationDrainState(group: GroupMetadata, now: Instant): Boolean {
         val migration = group.activeReshardingId?.let { group.migrations[it] } ?: return false
         return when (migration.state) {
@@ -790,6 +1057,9 @@ class CoordinatorService(
         }
     }
 
+    /**
+     * Starts draining the old stream version once all live members converged on the target assignment.
+     */
     private fun startMigrationDrainIfReady(
         group: GroupMetadata,
         migration: Migration,
@@ -811,6 +1081,9 @@ class CoordinatorService(
         return true
     }
 
+    /**
+     * Completes resharding after no live member still owns or revokes shards from the old version.
+     */
     private fun completeMigrationDrainIfReady(
         group: GroupMetadata,
         migration: Migration,
@@ -833,6 +1106,9 @@ class CoordinatorService(
         return true
     }
 
+    /**
+     * Computes the target assignment and group state from live members and readable shards.
+     */
     private fun reconcile(group: GroupMetadata, now: Instant) {
         val startedAt = Instant.now(clock)
         val previousAssignments = group.targetAssignmentSnapshot()
@@ -857,6 +1133,9 @@ class CoordinatorService(
         recordRebalanceIfChanged(group, previousAssignments, previousState, startedAt)
     }
 
+    /**
+     * Records rebalance metrics only when target assignments or group state changed.
+     */
     private fun recordRebalanceIfChanged(
         group: GroupMetadata,
         previousAssignments: Map<String, Set<ShardId>>,
@@ -870,6 +1149,9 @@ class CoordinatorService(
         recordGroupState(group)
     }
 
+    /**
+     * Preserves previous owners where possible, then fills and balances remaining shard ownership.
+     */
     private fun computeStickyAssignment(
         group: GroupMetadata,
         liveMembers: List<MemberMetadata>,
@@ -905,6 +1187,9 @@ class CoordinatorService(
         return result
     }
 
+    /**
+     * Moves shards from overloaded members only when the weighted load spread improves.
+     */
     private fun balanceExistingAssignments(
         assignments: MutableMap<String, MutableSet<ShardId>>,
         memberWeights: Map<String, Int>,
@@ -940,6 +1225,9 @@ class CoordinatorService(
         return (loads.maxOrNull() ?: 0.0) - (loads.minOrNull() ?: 0.0)
     }
 
+    /**
+     * Finds target shards that cannot be assigned until another member reports revoke completion.
+     */
     private fun blockedShards(group: GroupMetadata, targetMemberId: String): Set<ShardId> {
         val target = group.targetAssignments[targetMemberId].orEmpty()
         if (target.isEmpty()) return emptySet()
@@ -952,6 +1240,9 @@ class CoordinatorService(
         }.toSet()
     }
 
+    /**
+     * Checks whether current ownership has caught up with the coordinator target assignment.
+     */
     private fun hasPendingConvergence(group: GroupMetadata): Boolean =
         group.targetAssignments.any { (memberId, target) ->
             val member = group.members[memberId] ?: return@any true
@@ -959,6 +1250,9 @@ class CoordinatorService(
             member.currentAssignment != target - blocked || blocked.isNotEmpty()
         }
 
+    /**
+     * Increments metadataVersion for every state change and groupEpoch for assignment-affecting changes.
+     */
     private fun bumpMetadata(group: GroupMetadata, now: Instant, bumpGroupEpoch: Boolean) {
         if (bumpGroupEpoch) {
             group.groupEpoch += 1
@@ -1009,6 +1303,37 @@ class CoordinatorService(
             currentAssignmentSummary = members.mapValues { it.value.currentAssignment.size },
         )
 
+    /**
+     * Flattens member progress into a monitoring view keyed by member and shard.
+     */
+    private fun GroupMetadata.toConsumerShardProgress(): List<ConsumerShardProgress> =
+        members.values
+            .flatMap { member ->
+                member.shardProgress.map { progress ->
+                    ConsumerShardProgress(
+                        streamPrefix = streamPrefix,
+                        consumerGroup = consumerGroup,
+                        memberId = member.memberId,
+                        memberName = member.memberName,
+                        memberState = member.state,
+                        shard = progress.shard,
+                        streamKey = progress.streamKey,
+                        lastDeliveredId = progress.lastDeliveredId,
+                        lastAckedId = progress.lastAckedId,
+                        pendingCount = progress.pendingCount,
+                        updatedAt = progress.updatedAt,
+                    )
+                }
+            }
+            .sortedWith(
+                compareBy<ConsumerShardProgress> { it.memberId }
+                    .thenBy { it.shard.streamVersion }
+                    .thenBy { it.shard.shardIndex },
+            )
+
+    /**
+     * Converts the active stream version into metadata consumed by producer-side routers.
+     */
     private fun GroupMetadata.toProducerRoutingResponse(): ProducerRoutingResponse {
         val activeShardKeys = streamShardKeys(activeWriteVersion)
         return ProducerRoutingResponse(
@@ -1029,6 +1354,9 @@ class CoordinatorService(
         )
     }
 
+    /**
+     * Detects assignment consistency problems that should never appear in a healthy group.
+     */
     private fun invariantViolations(group: GroupMetadata): List<String> {
         val violations = mutableListOf<String>()
         val owners = mutableMapOf<ShardId, MutableList<String>>()

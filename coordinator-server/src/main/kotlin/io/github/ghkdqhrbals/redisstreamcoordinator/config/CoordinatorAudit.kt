@@ -1,5 +1,6 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.config
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -58,17 +59,22 @@ class StructuredCoordinatorAuditLogSink : CoordinatorAuditLogSink {
 @Component
 @ConditionalOnProperty(prefix = "coordinator.audit", name = ["sink"], havingValue = "redis")
 class RedisCoordinatorAuditLogSink(
-    private val redisTemplate: StringRedisTemplate,
+    private val redisCommands: CoordinatorRedisCommands,
     private val objectMapper: ObjectMapper,
     private val properties: CoordinatorProperties,
 ) : CoordinatorAuditLogSink {
+    constructor(
+        redisTemplate: StringRedisTemplate,
+        objectMapper: ObjectMapper,
+        properties: CoordinatorProperties,
+    ) : this(CoordinatorRedisCommands(redisTemplate = redisTemplate), objectMapper, properties)
+
     override fun append(event: CoordinatorAuditEvent) {
         val streamPrefix = event.streamPrefix ?: return
         val consumerGroup = event.consumerGroup ?: return
         val key = auditKey(streamPrefix, consumerGroup)
         val maxEntries = properties.audit.redisMaxEntries.coerceAtLeast(1)
-        redisTemplate.opsForList().rightPush(key, objectMapper.writeValueAsString(event))
-        redisTemplate.opsForList().trim(key, -maxEntries, -1L)
+        redisCommands.rightPushAndTrim(key, objectMapper.writeValueAsString(event), maxEntries.toLong())
     }
 
     private fun auditKey(streamPrefix: String, consumerGroup: String): String {

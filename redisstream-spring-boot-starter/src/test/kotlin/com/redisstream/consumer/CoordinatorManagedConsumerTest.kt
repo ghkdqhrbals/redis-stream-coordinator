@@ -1,6 +1,5 @@
 package com.redisstream.consumer
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -34,6 +33,7 @@ class CoordinatorManagedConsumerTest {
 
         assertEquals(setOf(CoordinatorShard(1, 0), CoordinatorShard(1, 1)), lifecycle.assigned.single())
         assertEquals(0, client.requests.single().memberEpoch)
+        assertEquals(CoordinatorConsumerProtocol.CURRENT_COORDINATION_VERSION, client.requests.single().protocolVersion)
     }
 
     @Test
@@ -192,41 +192,70 @@ class CoordinatorManagedConsumerTest {
     }
 
     @Test
-    fun `managed consumer records heartbeat assignment and fenced metrics`() {
-        val assigned = setOf(CoordinatorShard(1, 0))
-        val registry = SimpleMeterRegistry()
-        val metrics = MicrometerCoordinatorConsumerMetrics(
-            registry = registry,
-            streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
-            memberName = "member-a",
-        )
+    fun `sync metadata revokes stale reads without starting new shards`() {
+        val oldShard = CoordinatorShard(1, 0)
+        val newShard = CoordinatorShard(1, 1)
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
-                assignment = AssignmentView(assigned, emptySet(), 2),
+                assignment = AssignmentView(setOf(oldShard), emptySet(), 10),
             ),
             heartbeatResponse(
-                status = HeartbeatStatus.FENCED_MEMBER_EPOCH,
+                status = HeartbeatStatus.SYNC_METADATA,
                 memberEpoch = 1,
-                assignment = AssignmentView(emptySet(), emptySet(), 2),
+                assignment = AssignmentView(setOf(newShard), emptySet(), 9),
+            ),
+            heartbeatResponse(
+                status = HeartbeatStatus.REVOKE_PENDING,
+                memberEpoch = 1,
+                assignment = AssignmentView(emptySet(), setOf(newShard), 9),
             ),
         )
-        val consumer = CoordinatorManagedConsumer(properties(), client, RecordingShardLifecycle(), metrics)
+        val lifecycle = RecordingShardLifecycle()
+        val consumer = CoordinatorManagedConsumer(properties(), client, lifecycle)
 
         consumer.pollOnce()
         consumer.pollOnce()
+        consumer.pollOnce()
 
-        assertEquals(1.0, registry.get("redis_stream_consumer_heartbeat_total").tag("status", "OK").counter().count())
-        assertEquals(
-            1.0,
-            registry.get("redis_stream_consumer_heartbeat_total").tag("status", "FENCED_MEMBER_EPOCH").counter().count(),
+        assertEquals(listOf(setOf(oldShard)), lifecycle.assigned)
+        assertEquals(setOf(oldShard), lifecycle.revoked.single())
+        assertEquals(setOf(newShard), lifecycle.pending.first())
+        assertEquals(emptySet(), client.requests[2].ownedShards)
+        assertEquals(oldShard, client.requests[2].revokingShards.single().shard)
+        assertEquals(9, client.requests[2].metadataVersion)
+    }
+
+    @Test
+    fun `revoke pending keeps new shards pending until ok`() {
+        val oldShard = CoordinatorShard(1, 0)
+        val newShard = CoordinatorShard(1, 1)
+        val client = ScriptedCoordinatorClient(
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(setOf(oldShard), emptySet(), 2),
+            ),
+            heartbeatResponse(
+                status = HeartbeatStatus.REVOKE_PENDING,
+                memberEpoch = 1,
+                assignment = AssignmentView(setOf(newShard), emptySet(), 2),
+            ),
+            heartbeatResponse(
+                status = HeartbeatStatus.OK,
+                memberEpoch = 1,
+                assignment = AssignmentView(setOf(newShard), emptySet(), 2),
+            ),
         )
-        assertEquals(1.0, registry.get("redis_stream_consumer_fenced_total").counter().count())
-        assertEquals(0.0, registry.get("redis_stream_consumer_assigned_shards").gauge().value())
-        assertEquals(4.0, registry.get("redis_stream_consumer_runtime_max_concurrency").gauge().value())
-        assertEquals(4.0, registry.get("redis_stream_consumer_available_concurrency").gauge().value())
-        assertEquals(0.0, registry.get("redis_stream_consumer_in_flight_messages").gauge().value())
+        val lifecycle = RecordingShardLifecycle()
+        val consumer = CoordinatorManagedConsumer(properties(), client, lifecycle)
+
+        consumer.pollOnce()
+        consumer.pollOnce()
+        consumer.pollOnce()
+
+        assertEquals(listOf(setOf(oldShard), setOf(newShard)), lifecycle.assigned)
+        assertEquals(setOf(oldShard), lifecycle.revoked.single())
+        assertEquals(emptySet(), client.requests[2].ownedShards)
     }
 
     @Test
@@ -266,6 +295,46 @@ class CoordinatorManagedConsumerTest {
         consumer.pollOnce()
 
         assertEquals(RuntimeConsumerCapacity(runtimeMaxConcurrency = 4, availableConcurrency = 2), client.requests.single().runtimeConsumerCapacity)
+    }
+
+    @Test
+    fun `managed consumer sends shard progress only for owned shards`() {
+        val owned = CoordinatorShard(1, 0)
+        val other = CoordinatorShard(1, 1)
+        val lifecycle = ProgressReportingShardLifecycle(
+            listOf(
+                ShardConsumptionProgress(
+                    shard = owned,
+                    streamKey = "orders:v1:shard:0",
+                    lastDeliveredId = "10-0",
+                    lastAckedId = "9-0",
+                    pendingCount = 1,
+                ),
+                ShardConsumptionProgress(
+                    shard = other,
+                    streamKey = "orders:v1:shard:1",
+                    lastDeliveredId = "11-0",
+                    lastAckedId = "11-0",
+                ),
+            ),
+        )
+        val client = ScriptedCoordinatorClient(
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(setOf(owned), emptySet(), 2),
+            ),
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(setOf(owned), emptySet(), 2),
+            ),
+        )
+        val consumer = CoordinatorManagedConsumer(properties(), client, lifecycle)
+
+        consumer.pollOnce()
+        consumer.pollOnce()
+
+        assertEquals(listOf(owned), client.requests[1].shardProgress.map { it.shard })
+        assertEquals("9-0", client.requests[1].shardProgress.single().lastAckedId)
     }
 
     @Test
@@ -361,25 +430,50 @@ class CoordinatorManagedConsumerTest {
     }
 
     @Test
-    fun `unsupported local heartbeat protocol version fails before polling coordinator`() {
-        val client = ScriptedCoordinatorClient()
-        val properties = properties().apply {
-            protocolVersion = CoordinatorConsumerProtocol.MAX_HEARTBEAT_VERSION + 1
-        }
-        val consumer = CoordinatorManagedConsumer(properties, client, RecordingShardLifecycle())
+    fun `coordination version is supplied by the consumer module`() {
+        val client = ScriptedCoordinatorClient(
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(emptySet(), emptySet(), 1),
+            ),
+        )
+        val consumer = CoordinatorManagedConsumer(properties(), client, RecordingShardLifecycle())
 
-        assertFailsWith<IllegalArgumentException> {
-            consumer.pollOnce()
+        consumer.pollOnce()
+
+        assertEquals(CoordinatorConsumerProtocol.CURRENT_COORDINATION_VERSION, client.requests.single().protocolVersion)
+    }
+
+    @Test
+    fun `consumer module declares coordination version release lifecycle`() {
+        val support = CoordinatorConsumerProtocol.VERSIONS.single()
+
+        assertEquals(CoordinatorConsumerProtocol.CURRENT_COORDINATION_VERSION, support.version)
+        assertEquals(CoordinatorConsumerProtocolStatus.ACTIVE, support.status)
+        assertEquals("0.1.0", support.introducedIn.version)
+        assertEquals("1.0.0", support.minimumSupportedUntil.version)
+        assertEquals(null, support.deprecatedIn)
+        assertEquals(null, support.removedIn)
+    }
+
+    @Test
+    fun `initial routing validation fails when coordinator has no active shards`() {
+        val client = ScriptedCoordinatorClient(
+            routing = routingResponse(shardCount = 0),
+        )
+        val consumer = CoordinatorManagedConsumer(properties(), client, RecordingShardLifecycle())
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            consumer.validateInitialRouting()
         }
-        assertTrue(client.requests.isEmpty())
+        assertTrue(error.message!!.contains("has no active shards"))
     }
 
     private fun properties(): CoordinatorConsumerProperties =
         CoordinatorConsumerProperties().apply {
             streamPrefix = "orders"
-            consumerGroup = "orders-consumer"
+            consumerGroupName = "orders-consumer"
             memberId = "member-a"
-            memberName = "member-a"
             runtimeMaxConcurrency = 4
         }
 
@@ -399,6 +493,26 @@ class CoordinatorManagedConsumerTest {
             metadataVersion = assignment.metadataVersion,
             assignedMaxConcurrency = 4,
             assignment = assignment,
+        )
+
+    private fun routingResponse(
+        shardCount: Int = 2,
+    ): ProducerRoutingResponse =
+        ProducerRoutingResponse(
+            streamPrefix = "orders",
+            consumerGroup = "orders-consumer",
+            metadataVersion = 1,
+            activeWriteVersion = 1,
+            shardCount = shardCount,
+            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+            shards = (0 until shardCount).map { shardIndex ->
+                ProducerRoutingShard(
+                    streamVersion = 1,
+                    shardIndex = shardIndex,
+                    streamKey = "orders:v1:shard:$shardIndex",
+                    redisSlot = shardIndex,
+                )
+            },
         )
 }
 
@@ -437,8 +551,19 @@ private class CapacityReportingShardLifecycle(
         capacity
 }
 
+private class ProgressReportingShardLifecycle(
+    private val progress: List<ShardConsumptionProgress>,
+) : CoordinatorShardLifecycle, CoordinatorShardProgressProvider {
+    override fun onAssigned(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext) {
+    }
+
+    override fun shardProgress(context: CoordinatorConsumerContext): List<ShardConsumptionProgress> =
+        progress
+}
+
 private class ScriptedCoordinatorClient(
     private vararg val responses: HeartbeatResponse,
+    private val routing: ProducerRoutingResponse? = null,
 ) : CoordinatorClient {
     val requests = mutableListOf<HeartbeatRequest>()
     private var index = 0
@@ -454,5 +579,5 @@ private class ScriptedCoordinatorClient(
     }
 
     override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
-        error("producer routing is not used in this test")
+        routing ?: error("producer routing is not used in this test")
 }

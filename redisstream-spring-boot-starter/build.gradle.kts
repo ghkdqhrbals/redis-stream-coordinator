@@ -24,7 +24,6 @@ dependencies {
     api("org.springframework.data:spring-data-redis")
     api("org.springframework:spring-context")
     api("org.springframework:spring-web")
-    api("io.micrometer:micrometer-core")
 
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")

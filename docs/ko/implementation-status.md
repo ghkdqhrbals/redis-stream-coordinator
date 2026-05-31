@@ -51,14 +51,25 @@
 * [x] Host-to-Docker Redis Cluster redirect를 위한 Lettuce node address mapping
 * [x] Memory state store
 * [x] Redis state store
-* [x] Redis projection keys for members, target assignment, current assignment, migrations, active migration, revision
+* [x] Redis group별 단일 metadata hash key
 * [x] Redis state mutex key
 * [x] Redis store revision compare-and-set
 * [x] Redis metadata `schemaVersion` guard
-* [x] Lua aggregate/projection update
+* [x] Redis group별 단일 metadata hash key
+* [x] Lua metadata hash update
 * [x] Redis Cluster hash-slot-safe coordinator keys
 * [x] Optional Redis Stream shard and consumer-group provisioning
 * [x] Coordinator Redis command template
+
+### Redis Metadata Correction
+
+* [x] `{streamPrefix, consumerGroup}`당 하나의 canonical Redis metadata key 사용
+* [x] Consumer heartbeat가 Redis metadata보다 높은 `metadataVersion`을 보고하면 coordinator가 감지
+* [x] Coordinator가 `SYNC_METADATA` 응답으로 consumer의 local metadata view를 현재 Redis metadata로 수정 요청
+* [x] `SYNC_METADATA`는 retry-safe drain-only 응답이며, 신규 shard read는 이후 `OK`까지 차단
+* [x] `REVOKE_PENDING`으로 metadata correction 완료 전 revoke-before-assign 대기 상태 분리
+* [x] Live member들이 target metadata version으로 heartbeat할 때까지 correction round 유지
+* [x] 폐기된 상위 metadata view에서 온 stale revoke report 무시
 
 ### Security, Audit, Observability
 
@@ -120,5 +131,5 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
 1. [ ] 첫 public Docker image release
 2. [ ] 외부 배포 예제와 release automation hardening
 3. [ ] Redis version compatibility guide 보강
-4. [ ] 운영 dashboard/alert 예제 보강
-
+4. [ ] 오래된 metadata JSON과 client coordination version compatibility fixture 보강
+5. [ ] 운영 dashboard/alert 예제 보강

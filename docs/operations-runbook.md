@@ -93,8 +93,8 @@ This is required because the same event id can be published to old and new strea
 ## Upgrade Procedure
 
 1. Read the release notes and compatibility matrix.
-2. Confirm the coordinator supports the heartbeat protocol range used by existing consumers.
-3. Back up Redis metadata keys under the configured `coordinator.store.key-prefix`.
+2. Confirm the coordinator supports the coordination version range used by existing consumers.
+3. Back up coordinator Redis metadata keys.
 4. Deploy the new coordinator version.
 5. Verify `/coord/v1/monitoring/health`.
 6. Roll consumer applications gradually.
@@ -102,10 +102,41 @@ This is required because the same event id can be published to old and new strea
 
 ## Redis Metadata Backup
 
-Coordinator keys use one Redis Cluster hash tag per group:
+Coordinator metadata lives in one Redis hash key per group:
 
 ```text
-redis-stream:coord:{streamPrefix:consumerGroup}:*
+redis-stream:coord:{streamPrefix:consumerGroup}:metadata
 ```
 
-Back up all keys under `coordinator.store.key-prefix` before schema-changing upgrades.
+Back up coordinator metadata keys before schema-changing upgrades and before manual repair operations.
+
+## Metadata Durability
+
+The Redis metadata key is the coordinator source of truth for a group. The coordinator treats client-reported versions as observations only. If a consumer reports a higher `metadataVersion` than Redis currently stores, the coordinator asks consumers to synchronize down to the current Redis metadata with retry-safe `SYNC_METADATA` instead of trusting the client version. After the consumer reports the current version, it receives `REVOKE_PENDING` while revoke/drain is still blocking handoff and receives `OK` only when newly assigned shards may be started.
+
+Recommended production controls:
+
+1. Use managed Redis persistence and backups appropriate for the deployment.
+2. Keep coordinator metadata keys under a dedicated `coordinator.store.key-prefix`.
+3. Do not let application runtime users delete coordinator metadata keys.
+4. Back up coordinator metadata keys before schema-changing upgrades or manual maintenance.
+5. Treat Redis restore to an older backup as disaster recovery, not as a normal retry path.
+
+Watch for metadata rollback signals:
+
+1. A consumer heartbeat reports a higher previously seen `metadataVersion`, `assignmentEpoch`, or `memberEpoch` than the coordinator currently stores.
+2. A producer routing cache has observed a higher `metadataVersion` than the coordinator returns.
+3. Coordinator metrics report metadata version regression or store revision regression.
+4. Rebalance state appears to move backward, such as a shard returning from released to revoking without a new assignment epoch.
+
+Redis metadata has an important limitation: if Redis rolls back and no surviving consumer or producer can report the higher observed version, the rollback can be invisible to the coordinator.
+
+If a source-of-truth metadata key is lost or Redis is restored to an older backup:
+
+1. Stop admin mutations for the affected group.
+2. Confirm whether the key was deleted, corrupted, or restored from an older backup.
+3. Restore metadata from backup when possible.
+4. If backup is unavailable or older than the highest client-observed version, explicitly recreate the group with the expected shard layout and treat consumers/producers as a new group lifecycle.
+5. Do not rely on consumer heartbeats, producer routing caches, or stale local state to reconstruct group metadata automatically.
+6. Do not force clients to downgrade to a lower metadata version; fail closed until repair or recreation is complete.
+7. Do not repair by only incrementing the rolled-back version number. The lost transition contents may include drain, release, shard scale, or routing decisions that cannot be inferred safely.

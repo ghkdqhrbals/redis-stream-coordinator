@@ -34,13 +34,15 @@ The project does not provide a single-processing guarantee. Real applications of
 * `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
 * `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
 
+Application code should use the `com.redisstream:*` starter APIs only. Coordinator-server internals such as state mutex guards, AOP aspects, and critical-section annotations are implementation details, not public integration points.
+
 ## Versioning
 
 The project treats compatibility as part of the public contract:
 
 * Artifact versions follow Semantic Versioning.
-* Heartbeat schema compatibility is controlled by `protocolVersion`.
-* Coordinator servers accept a configured heartbeat protocol range so old and new consumers can coexist during rolling upgrades.
+* Coordinator-module compatibility is carried in heartbeat requests as `protocolVersion`.
+* Coordinator and starter modules provide the supported coordination version range and release lifecycle; it is not a user YAML setting.
 * Breaking HTTP API changes require a new path prefix such as `/coord/v2`.
 * Redis metadata schema changes require migration notes and compatibility tests.
 
@@ -54,11 +56,22 @@ Applications can implement `CoordinatorShardLifecycle` directly and keep ownersh
 implementation("com.redisstream:redisstream-spring-boot-starter:<version>")
 ```
 
-For the built-in Redis Stream polling adapter, provide a `RedisStreamMessageHandler` bean and enable Redis polling:
+For the built-in Redis Stream polling adapter, provide a `RedisStreamMessageHandler` bean and code-defined consumer settings:
+
+```yaml
+redis-stream-coordinator:
+  coordinator-base-url: http://localhost:8080
+```
 
 ```kotlin
 import com.redisstream.consumer.ConsumedRedisStreamMessage
+import com.redisstream.consumer.CoordinatorConsumerProperties
+import com.redisstream.consumer.RedisStreamAckMode
 import com.redisstream.consumer.RedisStreamMessageHandler
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.stereotype.Component
+import java.time.Duration
 
 @Component
 class OrdersMessageHandler : RedisStreamMessageHandler {
@@ -66,25 +79,28 @@ class OrdersMessageHandler : RedisStreamMessageHandler {
         // Run business processing. The starter XACKs only after this returns successfully.
     }
 }
-```
 
-```yaml
-redis-stream-coordinator:
-  consumer:
-    coordinator-base-url: http://localhost:8080
-    stream-prefix: orders
-    consumer-group: orders-consumer
-    member-name: orders-worker
-    redis:
-      enabled: true
-      poll-batch-size: 10
-      poll-timeout: 1s
+@Configuration(proxyBeanMethods = false)
+class OrdersConsumerConfiguration {
+    @Bean
+    fun ordersConsumerProperties(): CoordinatorConsumerProperties =
+        CoordinatorConsumerProperties.consumer(
+            streamPrefix = "orders",
+            consumerGroupName = "orders-consumer",
+        ) {
+            runtimeMaxConcurrency = 4
+            redis.pollBatchSize = 10
+            redis.pollTimeout = Duration.ofSeconds(1)
+            redis.ack.mode = RedisStreamAckMode.AUTO
+        }
+}
 ```
 
 ```kotlin
 import com.redisstream.consumer.CoordinatorConsumerContext
 import com.redisstream.consumer.CoordinatorShard
 import com.redisstream.consumer.CoordinatorShardLifecycle
+import org.springframework.stereotype.Component
 
 @Component
 class OrdersShardLifecycle : CoordinatorShardLifecycle {
@@ -102,20 +118,29 @@ class OrdersShardLifecycle : CoordinatorShardLifecycle {
 }
 ```
 
-```yaml
-redis-stream-coordinator:
-  consumer:
-    coordinator-base-url: http://localhost:8080
-    stream-prefix: orders
-    consumer-group: orders-consumer
-    member-name: orders-worker
-    runtime-max-concurrency: 4
-```
+Consumer and producer runtime settings are intentionally code-defined. The only official starter YAML property is `redis-stream-coordinator.coordinator-base-url`. Use `consumerGroupName` for the logical Redis Stream consumer group name; `member-name` is not a public YAML setting.
 
 Producer applications can use the starter to route and publish to the active Redis Stream shard:
 
 ```kotlin
+import com.redisstream.producer.ProducerRoutingProperties
 import com.redisstream.producer.RedisStreamPublisher
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import java.time.Duration
+
+@Configuration(proxyBeanMethods = false)
+class OrdersProducerConfiguration {
+    @Bean
+    fun ordersProducerProperties(): ProducerRoutingProperties =
+        ProducerRoutingProperties.producer(
+            streamPrefix = "orders",
+            consumerGroupName = "orders-consumer",
+        ) {
+            routingRefreshInterval = Duration.ofSeconds(30)
+            xadd.maxLen = 10_000_000
+        }
+}
 
 redisStreamPublisher.publish(
     partitionKey = orderId,
@@ -123,15 +148,7 @@ redisStreamPublisher.publish(
 )
 ```
 
-```yaml
-redis-stream-coordinator:
-  producer:
-    enabled: true
-    coordinator-base-url: http://localhost:8080
-    stream-prefix: orders
-    consumer-group: orders-consumer
-    routing-refresh-interval: 30s
-```
+During Spring bean initialization, both managed consumers and producer routing caches validate coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`. If the coordinator group does not exist or has no active shards, application startup fails immediately instead of waiting for the first heartbeat or publish call.
 
 ## Documentation
 

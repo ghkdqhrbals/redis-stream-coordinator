@@ -60,7 +60,8 @@ aws cloudformation deploy \
     VpcId=vpc-0caceb0e72c675ecb \
     SubnetId=subnet-064c5def16502b53a \
     AllowedClientCidr=<your-public-ip>/32 \
-    RedisPassword=<strong-password>
+    RedisPassword=<strong-password> \
+    RedisImage=redis:8.8-alpine
 ```
 
 Get the externally reachable cluster nodes:

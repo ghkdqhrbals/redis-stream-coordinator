@@ -1,6 +1,7 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.api
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.protocol.CoordinatorCompatibilityResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -18,66 +19,98 @@ import org.springframework.web.bind.annotation.RestController
 class AdminController(
     private val coordinator: CoordinatorService,
 ) {
+    /**
+     * Creates a coordinator-owned group metadata record and initial stream version.
+     */
     @PostMapping
     fun createGroup(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
         @Valid @RequestBody request: CreateGroupRequest,
-    ): ResponseEntity<GroupResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(
-            coordinator.createGroup(streamPrefix, consumerGroup, request),
-        )
+    ): ResponseEntity<GroupResponse> {
+        // The service validates duplicate groups, stores the initial metadata, and provisions stream shards when enabled.
+        val response = coordinator.createGroup(streamPrefix, consumerGroup, request)
+        return ResponseEntity.status(HttpStatus.CREATED).body(response)
+    }
 
+    /**
+     * Returns the current coordinator source-of-truth metadata for a group.
+     */
     @GetMapping
     fun getGroup(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
-    ): GroupResponse =
-        coordinator.getGroup(streamPrefix, consumerGroup)
+    ): GroupResponse {
+        // Reads the latest group metadata and applies any time-based state refresh before returning.
+        return coordinator.getGroup(streamPrefix, consumerGroup)
+    }
 
+    /**
+     * Returns read-only producer routing metadata for the active write stream version.
+     */
     @GetMapping("/producer-routing")
     fun getProducerRouting(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
-    ): ProducerRoutingResponse =
-        coordinator.producerRouting(streamPrefix, consumerGroup)
+    ): ProducerRoutingResponse {
+        // Producers use this response as a cacheable routing snapshot; this endpoint does not mutate shard layout.
+        return coordinator.producerRouting(streamPrefix, consumerGroup)
+    }
 
+    /**
+     * Starts shard scale-out or scale-in by creating the next stream-version migration.
+     */
     @PostMapping("/scale")
     fun scaleGroup(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
         @Valid @RequestBody request: ScaleGroupRequest,
-    ): ResponseEntity<Migration> =
-        ResponseEntity.status(HttpStatus.ACCEPTED).body(
-            coordinator.scaleGroup(streamPrefix, consumerGroup, request),
-        )
+    ): ResponseEntity<Migration> {
+        // The service records the migration first, then provisioning and rebalance continue from recorded metadata.
+        val migration = coordinator.scaleGroup(streamPrefix, consumerGroup, request)
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(migration)
+    }
 
+    /**
+     * Updates the server-side consumer worker capacity policy without changing shard count.
+     */
     @PatchMapping("/consumer-concurrency")
     fun updateConsumerConcurrency(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
         @Valid @RequestBody request: UpdateConsumerConcurrencyRequest,
-    ): ConsumerConcurrencyResponse =
-        coordinator.updateConsumerConcurrency(streamPrefix, consumerGroup, request)
+    ): ConsumerConcurrencyResponse {
+        // Assignment weights are recalculated only when the stored policy changes.
+        return coordinator.updateConsumerConcurrency(streamPrefix, consumerGroup, request)
+    }
 
+    /**
+     * Returns one recorded resharding migration by id.
+     */
     @GetMapping("/migrations/{reshardingId}")
     fun getMigration(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
         @PathVariable reshardingId: String,
-    ): Migration =
-        coordinator.getMigration(streamPrefix, consumerGroup, reshardingId)
+    ): Migration {
+        // Migration state is read from coordinator metadata; Redis Stream data-plane records are not inspected here.
+        return coordinator.getMigration(streamPrefix, consumerGroup, reshardingId)
+    }
 
+    /**
+     * Requests rollback of an active migration when rollback is still allowed.
+     */
     @PostMapping("/migrations/{reshardingId}/rollback")
     fun rollbackMigration(
         @PathVariable streamPrefix: String,
         @PathVariable consumerGroup: String,
         @PathVariable reshardingId: String,
         @Valid @RequestBody request: RollbackMigrationRequest,
-    ): ResponseEntity<Migration> =
-        ResponseEntity.status(HttpStatus.ACCEPTED).body(
-            coordinator.rollbackMigration(streamPrefix, consumerGroup, reshardingId),
-        )
+    ): ResponseEntity<Migration> {
+        // The request body is validated at the API boundary; the service enforces rollback state and version rules.
+        val migration = coordinator.rollbackMigration(streamPrefix, consumerGroup, reshardingId)
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(migration)
+    }
 }
 
 @RestController
@@ -104,6 +137,10 @@ class MonitoringController(
     fun health(): HealthResponse =
         coordinator.health()
 
+    @GetMapping("/compatibility")
+    fun compatibility(): CoordinatorCompatibilityResponse =
+        coordinator.compatibility()
+
     @GetMapping("/groups")
     fun listGroups(): GroupsResponse =
         coordinator.listGroups()
@@ -128,6 +165,13 @@ class MonitoringController(
         @PathVariable consumerGroup: String,
     ): AssignmentsResponse =
         coordinator.assignments(streamPrefix, consumerGroup)
+
+    @GetMapping("/streams/{streamPrefix}/groups/{consumerGroup}/consumption")
+    fun consumptionProgress(
+        @PathVariable streamPrefix: String,
+        @PathVariable consumerGroup: String,
+    ): ConsumptionProgressResponse =
+        coordinator.consumptionProgress(streamPrefix, consumerGroup)
 
     @GetMapping("/streams/{streamPrefix}/groups/{consumerGroup}/migrations")
     fun migrations(

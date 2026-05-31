@@ -58,7 +58,9 @@ XREADGROUP
 
 Coordinator heartbeat response의 `assignment.assignedShards`에서 기존 owned shard가 빠지면 member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 된 뒤 heartbeat의 `revokingShards.state=REVOKED`로 보고한다.
 
-Coordinator heartbeat response의 `assignment.assignedShards`에 새 shard가 포함되면 member는 shard를 `ownedShards`에 반영하고, 실제 Redis Stream read/recovery는 member data-plane 정책에 따라 수행한다.
+`OK` response의 `assignment.assignedShards`에 새 shard가 포함되면 member는 shard를 `ownedShards`에 반영하고, 실제 Redis Stream read/recovery는 member data-plane 정책에 따라 수행한다.
+
+Metadata correction 중 `SYNC_METADATA`와 `REVOKE_PENDING`은 drain-only response이다. Member는 이미 소유한 shard 중 `assignment.assignedShards`에 남은 shard만 유지할 수 있고, 처음 등장한 shard는 이후 `OK` response를 받을 때까지 read를 시작하면 안 된다.
 
 Coordinator가 `FENCED_MEMBER_EPOCH`을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 `memberEpoch=0` full heartbeat로 rejoin한다.
 
