@@ -148,6 +148,7 @@ class CoordinatorService(
      */
     private fun scaleGroupOnce(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
+        requireNoMetadataCorrection(group)
         val now = Instant.now(clock)
         expireMembers(group, now)
 
@@ -259,6 +260,7 @@ class CoordinatorService(
         request: UpdateConsumerConcurrencyRequest,
     ): ConsumerConcurrencyResponse {
         val group = requireGroup(streamPrefix, consumerGroup)
+        requireNoMetadataCorrection(group)
         val nextPolicy = ConsumerConcurrencyPolicy(request.defaultMaxConcurrency, request.memberOverrides)
         if (group.consumerConcurrencyPolicy != nextPolicy) {
             val now = Instant.now(clock)
@@ -309,6 +311,7 @@ class CoordinatorService(
      */
     private fun rollbackMigrationOnce(streamPrefix: String, consumerGroup: String, reshardingId: String): Migration {
         val group = requireGroup(streamPrefix, consumerGroup)
+        requireNoMetadataCorrection(group)
         val migration = group.migrations[reshardingId]
             ?: throw CoordinatorException(CoordinatorError.MIGRATION_NOT_FOUND)
 
@@ -650,6 +653,12 @@ class CoordinatorService(
     private fun requireGroup(streamPrefix: String, consumerGroup: String): GroupMetadata =
         stateStore.get(GroupKey(streamPrefix, consumerGroup))
             ?: throw CoordinatorException(CoordinatorError.GROUP_NOT_FOUND)
+
+    private fun requireNoMetadataCorrection(group: GroupMetadata) {
+        if (group.metadataCorrection != null) {
+            throw CoordinatorException(CoordinatorError.METADATA_SYNC_IN_PROGRESS)
+        }
+    }
 
     /**
      * Refreshes one group and persists it only when operational state changed.

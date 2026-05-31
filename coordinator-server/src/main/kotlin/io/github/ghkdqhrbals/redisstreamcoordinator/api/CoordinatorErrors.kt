@@ -14,6 +14,11 @@ enum class CoordinatorError(
     GROUP_ALREADY_EXISTS(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists"),
     GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUP_NOT_FOUND", "Group not found"),
     ACTIVE_MIGRATION_EXISTS(HttpStatus.CONFLICT, "ACTIVE_MIGRATION_EXISTS", "Group already has an active migration"),
+    METADATA_SYNC_IN_PROGRESS(
+        HttpStatus.CONFLICT,
+        "METADATA_SYNC_IN_PROGRESS",
+        "Coordinator metadata sync is in progress for this group",
+    ),
     MIGRATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MIGRATION_NOT_FOUND", "Migration not found"),
     ROLLBACK_NOT_ALLOWED(HttpStatus.UNPROCESSABLE_ENTITY, "ROLLBACK_NOT_ALLOWED", "Migration cannot be rolled back"),
     STATE_VERSION_CONFLICT(

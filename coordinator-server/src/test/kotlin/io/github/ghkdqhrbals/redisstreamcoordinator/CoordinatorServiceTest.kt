@@ -815,6 +815,207 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `metadata sync does not expose new target shards as immediately assigned`() {
+        val group = convergeTwoMemberGroup("metadata-sync-new-pending")
+        val current = service.getGroup("metadata-sync-new-pending", "orders-consumer")
+
+        val sync = service.heartbeat(
+            "metadata-sync-new-pending",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = group.memberB.memberEpoch + 5,
+                metadataVersion = current.metadataVersion + 5,
+                ownedShards = group.memberATarget,
+            ),
+        )
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, sync.status)
+        assertTrue(sync.assignment.assignedShards.isEmpty())
+        assertEquals(group.memberBTarget, sync.assignment.pendingShards)
+    }
+
+    @Test
+    fun `metadata sync waits in revoke pending until draining member releases and peers acknowledge`() {
+        service.createGroup("metadata-sync-draining", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberAJoined = service.heartbeat(
+            "metadata-sync-draining",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val memberAOwnedAll = service.heartbeat(
+            "metadata-sync-draining",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberAJoined.memberEpoch,
+                ownedShards = memberAJoined.assignment.assignedShards,
+            ),
+        )
+        val memberBJoined = service.heartbeat(
+            "metadata-sync-draining",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        val targetAssignments = service.assignments("metadata-sync-draining", "orders-consumer").targetAssignment
+        val memberATarget = targetAssignments.getValue("member-a")
+        val memberBTarget = targetAssignments.getValue("member-b")
+        val releasedByA = memberAOwnedAll.assignment.assignedShards - memberATarget
+        val current = service.getGroup("metadata-sync-draining", "orders-consumer")
+
+        val syncA = service.heartbeat(
+            "metadata-sync-draining",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberAOwnedAll.memberEpoch + 5,
+                metadataVersion = current.metadataVersion + 5,
+                ownedShards = memberAOwnedAll.assignment.assignedShards,
+            ),
+        )
+        val drainingA = service.heartbeat(
+            "metadata-sync-draining",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = syncA.memberEpoch,
+                metadataVersion = syncA.metadataVersion,
+                ownedShards = memberATarget,
+                revokingShards = releasedByA.map { RevokingShardReport(it, RevokingShardState.DRAINING, inFlight = 1) },
+            ),
+        )
+        val revokedA = service.heartbeat(
+            "metadata-sync-draining",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = drainingA.memberEpoch,
+                metadataVersion = syncA.metadataVersion,
+                ownedShards = memberATarget,
+                revokingShards = releasedByA.map { RevokingShardReport(it, RevokingShardState.REVOKED, inFlight = 0) },
+            ),
+        )
+        val assignedB = service.heartbeat(
+            "metadata-sync-draining",
+            "orders-consumer",
+            "member-b",
+            heartbeat(
+                "member-b",
+                memberEpoch = memberBJoined.memberEpoch,
+                metadataVersion = syncA.metadataVersion,
+                ownedShards = emptySet(),
+            ),
+        )
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, syncA.status)
+        assertEquals(memberATarget, syncA.assignment.assignedShards)
+        assertEquals(HeartbeatStatus.REVOKE_PENDING, drainingA.status)
+        assertEquals(HeartbeatStatus.REVOKE_PENDING, revokedA.status)
+        assertEquals(HeartbeatStatus.OK, assignedB.status)
+        assertEquals(memberBTarget, assignedB.assignment.assignedShards)
+    }
+
+    @Test
+    fun `admin mutations are blocked while metadata sync is in progress`() {
+        service.createGroup("metadata-sync-admin", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val joined = service.heartbeat(
+            "metadata-sync-admin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val acknowledged = service.heartbeat(
+            "metadata-sync-admin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = joined.memberEpoch, ownedShards = joined.assignment.assignedShards),
+        )
+        val current = service.getGroup("metadata-sync-admin", "orders-consumer")
+
+        val sync = service.heartbeat(
+            "metadata-sync-admin",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = acknowledged.memberEpoch + 5,
+                metadataVersion = current.metadataVersion + 5,
+                ownedShards = joined.assignment.assignedShards,
+            ),
+        )
+        val scaleError = kotlin.runCatching {
+            service.scaleGroup(
+                "metadata-sync-admin",
+                "orders-consumer",
+                ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "must wait for metadata sync"),
+            )
+        }.exceptionOrNull() as CoordinatorException
+        val concurrencyError = kotlin.runCatching {
+            service.updateConsumerConcurrency(
+                "metadata-sync-admin",
+                "orders-consumer",
+                UpdateConsumerConcurrencyRequest(
+                    defaultMaxConcurrency = 2,
+                    requestedBy = "test",
+                    reason = "must wait for metadata sync",
+                ),
+            )
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, sync.status)
+        assertEquals(CoordinatorError.METADATA_SYNC_IN_PROGRESS, scaleError.error)
+        assertEquals(CoordinatorError.METADATA_SYNC_IN_PROGRESS, concurrencyError.error)
+
+        service.createGroup("metadata-sync-rollback", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val rollbackJoined = service.heartbeat(
+            "metadata-sync-rollback",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val rollbackOwned = service.heartbeat(
+            "metadata-sync-rollback",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = rollbackJoined.memberEpoch,
+                ownedShards = rollbackJoined.assignment.assignedShards,
+            ),
+        )
+        val migration = service.scaleGroup(
+            "metadata-sync-rollback",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "prepare rollback race"),
+        )
+        val afterScale = service.getGroup("metadata-sync-rollback", "orders-consumer")
+        service.heartbeat(
+            "metadata-sync-rollback",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = rollbackOwned.memberEpoch + 5,
+                metadataVersion = afterScale.metadataVersion + 5,
+                ownedShards = rollbackOwned.assignment.assignedShards,
+            ),
+        )
+
+        val rollbackError = kotlin.runCatching {
+            service.rollbackMigration("metadata-sync-rollback", "orders-consumer", migration.reshardingId)
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.METADATA_SYNC_IN_PROGRESS, rollbackError.error)
+    }
+
+    @Test
     fun `metadata sync serializes concurrent stale revoke reports from multiple members`() {
         val group = convergeTwoMemberGroup("metadata-sync-concurrent-revoke")
         val current = service.getGroup("metadata-sync-concurrent-revoke", "orders-consumer")

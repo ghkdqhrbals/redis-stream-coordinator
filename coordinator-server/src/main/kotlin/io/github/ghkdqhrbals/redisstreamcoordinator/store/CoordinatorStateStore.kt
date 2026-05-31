@@ -5,6 +5,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.domain.COORDINATOR_METADATA_
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupKey
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
@@ -90,7 +91,7 @@ class InMemoryCoordinatorStateStore : CoordinatorStateStore {
 
 @Component
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "redis")
-class RedisCoordinatorStateStore(
+class RedisCoordinatorStateStore @Autowired constructor(
     private val redisCommands: CoordinatorRedisCommands,
     private val objectMapper: ObjectMapper,
     private val properties: CoordinatorProperties,

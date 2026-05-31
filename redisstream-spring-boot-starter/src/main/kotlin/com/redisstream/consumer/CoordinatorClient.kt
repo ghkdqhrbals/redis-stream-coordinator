@@ -57,7 +57,15 @@ class RestClientCoordinatorClient(
 /**
  * Builds the shared coordinator HTTP client from the single public starter property.
  */
-fun coordinatorRestClient(coordinatorBaseUrl: String): RestClient =
-    RestClient.builder()
+fun coordinatorRestClient(
+    coordinatorBaseUrl: String,
+    username: String = "",
+    password: String = "",
+): RestClient {
+    val builder = RestClient.builder()
         .baseUrl(coordinatorBaseUrl)
-        .build()
+    if (username.isNotBlank() || password.isNotBlank()) {
+        builder.defaultHeaders { headers -> headers.setBasicAuth(username, password) }
+    }
+    return builder.build()
+}

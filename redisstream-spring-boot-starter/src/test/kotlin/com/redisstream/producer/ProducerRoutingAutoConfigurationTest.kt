@@ -1,6 +1,7 @@
 package com.redisstream.producer
 
 import com.redisstream.RedisStreamCoordinatorAutoConfiguration
+import com.redisstream.RedisStreamCoordinatorProperties
 import com.redisstream.consumer.CoordinatorClient
 import com.redisstream.consumer.HeartbeatRequest
 import com.redisstream.consumer.HeartbeatResponse
@@ -50,6 +51,24 @@ class ProducerRoutingAutoConfigurationTest {
             .run { context ->
                 assertTrue(context.containsBean("producerRoutingCache"))
                 assertEquals(1, context.getBeanNamesForType(CoordinatorClient::class.java).size)
+            }
+    }
+
+    @Test
+    fun `coordinator client binds optional basic auth properties`() {
+        contextRunner
+            .withPropertyValues(
+                "redis-stream-coordinator.coordinator-base-url=http://coordinator:8080",
+                "redis-stream-coordinator.username=admin",
+                "redis-stream-coordinator.password=password",
+            )
+            .run { context ->
+                val properties = context.getBean(RedisStreamCoordinatorProperties::class.java)
+
+                assertEquals("http://coordinator:8080", properties.coordinatorBaseUrl)
+                assertEquals("admin", properties.username)
+                assertEquals("password", properties.password)
+                assertTrue(context.containsBean("coordinatorClient"))
             }
     }
 

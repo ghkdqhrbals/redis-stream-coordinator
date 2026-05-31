@@ -30,6 +30,7 @@ import java.time.Instant
         "coordinator.streams.provisioning-enabled=true",
         "coordinator.defaults.initial-shard-count=2",
         "coordinator.defaults.consumer-max-concurrency=4",
+        "spring.data.redis.cluster.nodes=127.0.0.1:7101,127.0.0.1:7102,127.0.0.1:7103",
     ],
 )
 class RedisCoordinatorStateStoreIntegrationTest {

@@ -31,6 +31,8 @@ spring:
 
 redis-stream-coordinator:
   coordinator-base-url: ${COORDINATOR_BASE_URL:http://localhost:8080}
+  username: ${COORDINATOR_USERNAME:}
+  password: ${COORDINATOR_PASSWORD:}
 
 sample:
   publisher:

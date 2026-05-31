@@ -1,7 +1,7 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.redis
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.dao.DataAccessException
@@ -20,6 +20,12 @@ class CoordinatorRedisCommands(
     private val redisTemplate: StringRedisTemplate? = null,
     private val redisConnectionFactory: RedisConnectionFactory? = null,
 ) {
+    /**
+     * Returns whether both template and connection access are available for Redis-backed features.
+     */
+    fun isConfigured(): Boolean =
+        redisTemplate != null && redisConnectionFactory != null
+
     /**
      * Reads whether a Redis key exists.
      */
@@ -112,13 +118,12 @@ class CoordinatorRedisCommands(
 @Configuration
 class CoordinatorRedisCommandsConfig {
     @Bean
-    @ConditionalOnBean(RedisConnectionFactory::class)
     @ConditionalOnMissingBean
     fun coordinatorRedisCommands(
-        redisTemplate: org.springframework.beans.factory.ObjectProvider<StringRedisTemplate>,
-        redisConnectionFactory: RedisConnectionFactory,
+        redisTemplate: ObjectProvider<StringRedisTemplate>,
+        redisConnectionFactory: ObjectProvider<RedisConnectionFactory>,
     ): CoordinatorRedisCommands =
-        CoordinatorRedisCommands(redisTemplate.ifAvailable, redisConnectionFactory)
+        CoordinatorRedisCommands(redisTemplate.ifAvailable, redisConnectionFactory.ifAvailable)
 }
 
 fun Throwable.isRedisBusyGroup(): Boolean =

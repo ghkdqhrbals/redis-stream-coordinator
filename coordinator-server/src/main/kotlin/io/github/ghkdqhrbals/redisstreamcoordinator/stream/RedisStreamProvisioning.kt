@@ -35,7 +35,7 @@ class RedisStreamShardProvisioner(
             return
         }
 
-        val commands = redisCommands.ifAvailable
+        val commands = redisCommands.ifAvailable?.takeIf { it.isConfigured() }
             ?: throw CoordinatorException(CoordinatorError.REDIS_NOT_CONFIGURED)
 
         plan.shardKeys.forEach { shardKey ->

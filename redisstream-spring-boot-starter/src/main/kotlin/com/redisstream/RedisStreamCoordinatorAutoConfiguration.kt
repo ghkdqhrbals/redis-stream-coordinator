@@ -14,5 +14,11 @@ class RedisStreamCoordinatorAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun coordinatorClient(properties: RedisStreamCoordinatorProperties): CoordinatorClient =
-        RestClientCoordinatorClient(coordinatorRestClient(properties.coordinatorBaseUrl))
+        RestClientCoordinatorClient(
+            coordinatorRestClient(
+                coordinatorBaseUrl = properties.coordinatorBaseUrl,
+                username = properties.username,
+                password = properties.password,
+            ),
+        )
 }
