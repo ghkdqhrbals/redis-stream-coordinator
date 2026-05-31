@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html" aria-current="page">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
@@ -360,23 +361,46 @@
 <li>new enum values only when old clients ignore unknown values safely,</li>
 <li>new monitoring endpoints.</li>
 </ul>
-<h2 id="heartbeat-protocol-version">Heartbeat Protocol Version</h2>
-<p>Heartbeat requests include <code>protocolVersion</code>.</p>
-<p>The coordinator configuration defines an accepted range, for example:</p>
-<pre><code class="language-yaml">coordinator:
-  protocol:
-    min-supported-version: &quot;1.0&quot;
-    max-supported-version: &quot;1.1&quot;
-</code></pre>
+<h2 id="coordination-version">Coordination Version</h2>
+<p>Heartbeat requests include <code>protocolVersion</code>, but the value represents the coordinator-module coordination version. It is not a heartbeat-only version.</p>
+<p>The supported coordination version range is provided by the coordinator and starter modules, not by user YAML. Operators must not widen the accepted range manually because that can allow a version that the running code cannot actually parse or enforce.</p>
+<p>Each coordination version entry must declare release lifecycle metadata with semantic release fields:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>introducedIn.major/minor/patch</code></td>
+<td data-label="Meaning">First artifact release that introduced the version.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>deprecatedIn.major/minor/patch</code></td>
+<td data-label="Meaning">First release that deprecates the version, or <code>null</code> while active.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>minimumSupportedUntil.major/minor/patch</code></td>
+<td data-label="Meaning">Earliest release before which the version must not be removed.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>removedIn.major/minor/patch</code></td>
+<td data-label="Meaning">Release that removes the version, or <code>null</code> until removal is scheduled.</td>
+</tr>
+</tbody>
+</table>
+<p>Current coordinator and starter modules declare coordination version <code>1</code> as introduced in <code>0.1.0</code> and supported at least until <code>1.0.0</code>.</p>
 <p>Policy:</p>
 <ul>
-<li>A coordinator must reject unsupported protocol versions with a clear error.</li>
+<li>A coordinator must reject unsupported coordination versions with a clear error.</li>
 <li>Minor protocol additions must be optional.</li>
 <li>Required field changes require a major version.</li>
-<li>Rolling upgrades should support N/N-1 client and server coexistence.</li>
+<li>Rolling upgrades should support N/N-1 client and server coexistence through module-defined compatibility constants and release notes.</li>
 </ul>
-<h2 id="redis-metadata-schema-version">Redis Metadata Schema Version</h2>
-<p>Redis aggregate state includes <code>schemaVersion</code>.</p>
+<h2 id="metadata-schema-version">Metadata Schema Version</h2>
+<p>The persisted DB aggregate JSON includes <code>schemaVersion</code>. Redis-backed metadata mode uses the same aggregate schema for development and tests.</p>
 <p>Policy:</p>
 <ul>
 <li>The coordinator validates schema version before reading or writing.</li>
@@ -404,12 +428,12 @@
 <h2 id="upgrade-policy">Upgrade Policy</h2>
 <p>Recommended rolling upgrade order:</p>
 <ol>
-<li>Upgrade coordinator server to a version that supports both old and new heartbeat protocols.</li>
+<li>Upgrade coordinator server to a version that supports both old and new coordination versions.</li>
 <li>Upgrade consumer applications.</li>
 <li>Upgrade producer applications.</li>
 <li>Remove old protocol support only in a later major release.</li>
 </ol>
-<p>Rollback should be possible while Redis metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.</p>
+<p>Rollback should be possible while metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.</p>
 <h2 id="compatibility-test-matrix">Compatibility Test Matrix</h2>
 <p>Required tests:</p>
 <ul>

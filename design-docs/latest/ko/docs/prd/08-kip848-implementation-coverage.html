@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">구현 상태</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
@@ -425,7 +426,7 @@
 <tr>
 <td data-label="Area">Coordinator placement</td>
 <td data-label="KIP-848">Kafka broker group coordinator가 <code>__consumer_offsets</code> 기반 state machine으로 관리한다.</td>
-<td data-label="Redis Stream Coordinator">별도 lightweight Coordinator API server가 Redis metadata store를 사용한다.</td>
+<td data-label="Redis Stream Coordinator">별도 lightweight Coordinator API server가 Redis metadata store를 사용한다. Redis Stream은 data plane이다.</td>
 </tr>
 <tr>
 <td data-label="Area">Wire protocol</td>
@@ -520,7 +521,7 @@
 <li>Monitoring API response를 Kafka <code>ConsumerGroupDescribe</code>와 유사한 형태로 맞출지, Redis 운영에 필요한 custom summary로 고정할지.</li>
 </ul>
 <h2 id="coverage-notes">Coverage Notes</h2>
-<p>KIP-848 says the new protocol moves complexity from clients to the group coordinator, removes a global synchronization barrier, stores target/current assignment, and uses heartbeat to carry member state and assignment. This design implements those parts directly, then replaces Kafka-specific broker, partition, offset, and protocol concerns with Redis metadata keys, stream version migration, and member data-plane boundaries.</p>
+<p>KIP-848 says the new protocol moves complexity from clients to the group coordinator, removes a global synchronization barrier, stores target/current assignment, and uses heartbeat to carry member state and assignment. This design implements those parts directly, then replaces Kafka-specific broker, partition, offset, and protocol concerns with Redis-backed coordinator metadata, Redis Stream version migration, and member data-plane boundaries.</p>
       </main>
     </div>
   </body>

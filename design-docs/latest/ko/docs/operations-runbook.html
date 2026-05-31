@@ -325,6 +325,7 @@
           <a href="prd/09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="implementation-status.html">구현 상태</a>
           <a href="operations-runbook.html" aria-current="page">운영 Runbook</a>
           <a href="testing.html">테스트 가이드</a>
@@ -415,18 +416,46 @@
 <h2 id="upgrade-procedure">Upgrade Procedure</h2>
 <ol>
 <li>Release note와 compatibility matrix를 읽는다.</li>
-<li>Coordinator가 기존 consumer의 heartbeat protocol range를 지원하는지 확인한다.</li>
-<li>Redis metadata key를 backup한다.</li>
+<li>Coordinator가 기존 consumer의 coordination version range를 지원하는지 확인한다.</li>
+<li>Coordinator Redis metadata key를 backup한다.</li>
 <li>새 coordinator version을 배포한다.</li>
 <li><code>/coord/v1/monitoring/health</code>를 확인한다.</li>
 <li>Consumer application을 점진적으로 rolling한다.</li>
 <li>Member expiry, rebalance duration, revoke pending, invariant metrics를 관찰한다.</li>
 </ol>
 <h2 id="redis-metadata-backup">Redis Metadata Backup</h2>
-<p>Coordinator keys use one Redis Cluster hash tag per group:</p>
-<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:*
+<p>Coordinator metadata는 group별 Redis hash key 하나에 저장한다.</p>
+<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:metadata
 </code></pre>
-<p>Schema-changing upgrade 전에는 configured <code>coordinator.store.key-prefix</code> 아래 key를 backup한다.</p>
+<p>Schema-changing upgrade와 수동 repair 전에는 coordinator metadata key를 backup한다.</p>
+<h2 id="metadata-durability">Metadata Durability</h2>
+<p>Redis metadata key가 해당 group의 coordinator source of truth이다. Consumer가 Redis에 저장된 값보다 높은 <code>metadataVersion</code>을 보고하더라도 coordinator는 그 값을 신뢰하지 않는다. 대신 현재 Redis metadata로 맞추도록 retry-safe <code>SYNC_METADATA</code> 응답을 내려준다. Consumer가 현재 version을 보고한 뒤에도 revoke/drain이 handoff를 막고 있으면 <code>REVOKE_PENDING</code>을 받고, 신규 shard read가 가능한 시점에만 <code>OK</code>를 받는다.</p>
+<p>Production 권장사항:</p>
+<ol>
+<li>Deployment에 맞는 Redis persistence와 backup을 사용한다.</li>
+<li>Coordinator metadata key를 전용 <code>coordinator.store.key-prefix</code> 아래에 둔다.</li>
+<li>Application runtime user가 coordinator metadata key를 delete할 수 없게 한다.</li>
+<li>Schema-changing upgrade나 수동 maintenance 전에는 coordinator metadata key를 backup한다.</li>
+<li>오래된 Redis backup restore는 일반 retry가 아니라 disaster recovery로 취급한다.</li>
+</ol>
+<p>Metadata rollback signal은 다음과 같다.</p>
+<ol>
+<li>Consumer heartbeat가 coordinator에 저장된 값보다 높은 <code>metadataVersion</code>, <code>assignmentEpoch</code>, <code>memberEpoch</code>를 이미 관측했다고 보고한다.</li>
+<li>Producer routing cache가 coordinator response보다 높은 <code>metadataVersion</code>을 이미 관측했다.</li>
+<li>Coordinator metric에서 metadata version regression 또는 store revision regression이 발생했다.</li>
+<li>Rebalance state가 새 assignment epoch 없이 released에서 revoking으로 돌아가는 등 이전 상태로 되돌아간다.</li>
+</ol>
+<p>Redis metadata에는 이 한계가 남는다. Redis가 rollback됐지만 더 높은 version을 보고할 살아있는 consumer 또는 producer가 없다면 coordinator는 rollback을 감지하지 못할 수 있다.</p>
+<p>Source-of-truth metadata key가 사라졌거나 Redis가 오래된 backup으로 restore됐다면:</p>
+<ol>
+<li>해당 group의 admin mutation을 중단한다.</li>
+<li>key가 delete, corruption, 오래된 backup restore 중 무엇으로 사라지거나 rollback됐는지 확인한다.</li>
+<li>가능하면 backup에서 metadata를 restore한다.</li>
+<li>backup이 없거나 client가 관측한 최고 version보다 오래된 backup뿐이라면 기대 shard layout으로 group을 명시적으로 재생성하고, consumer/producer를 새 group lifecycle로 취급한다.</li>
+<li>Consumer heartbeat, producer routing cache, stale local state로 group metadata를 자동 재구성하지 않는다.</li>
+<li>Client를 낮은 metadata version으로 강제 downgrade하지 않는다. Repair 또는 recreation이 끝날 때까지 fail closed한다.</li>
+<li>Rollback된 version 숫자만 증가시켜 repair하지 않는다. 유실된 transition에는 drain, release, shard scale, routing decision이 포함될 수 있고 이를 안전하게 추론할 수 없다.</li>
+</ol>
       </main>
     </div>
   </body>

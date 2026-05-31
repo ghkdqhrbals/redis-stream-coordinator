@@ -325,6 +325,7 @@
           <a href="docs/prd/09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="docs/prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="docs/implementation-status.html">Implementation Status</a>
           <a href="docs/operations-runbook.html">Operations Runbook</a>
           <a href="docs/testing.html">Testing Guide</a>
@@ -346,6 +347,7 @@
 <li><a href="docs/prd/09-api-endpoints.html">Coordinator API Endpoints</a></li>
 <li><a href="docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a></li>
 <li><a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a></li>
+<li><a href="docs/prd/12-failure-modes-edge-cases.html">Failure Modes and Edge Cases</a></li>
 </ol>
 <h2 id="product-summary">Product Summary</h2>
 <p>Redis Stream Coordinator is a control-plane server that centrally manages Redis Stream shard ownership. Consumer runtime members send heartbeats to the coordinator API, report their current ownership, and receive the target assignment they should converge to. The coordinator recalculates target assignment when membership, capacity, shard count, or stream version metadata changes.</p>
@@ -364,11 +366,14 @@
 <li>Treat consumer <code>maxConcurrency</code> as local worker capacity, not as shard count.</li>
 <li>Keep coordinator YAML limited to Redis connectivity, security, event-loop defaults, and operational defaults.</li>
 <li>Store per-group shard count and consumer concurrency policy in coordinator metadata.</li>
+<li>Store each group aggregate in one Redis metadata key and use store revision CAS for updates.</li>
+<li>If a consumer reports a higher metadata version than Redis currently stores, the coordinator repeatedly sends <code>SYNC_METADATA</code> until the consumer heartbeats with the current Redis metadata version.</li>
+<li>During metadata correction, consumers drain removed shards and receive <code>REVOKE_PENDING</code> until conflicting previous owners are released; only <code>OK</code> permits starting newly assigned shards.</li>
 <li>Provide Spring Boot integration while leaving business message processing and Redis Stream acknowledgement policy under application control.</li>
 <li>Use at-least-once processing as the baseline. Producer retry, consumer crash, pending recovery, and resharding can create duplicate attempts.</li>
 <li>Do not claim exactly-once side effects. Business side effects cannot be committed atomically with Redis Stream ACK across arbitrary databases, Redis writes, HTTP calls, or external APIs.</li>
 <li>The same partition key can route to a different Redis Stream shard after shard count or active stream version changes.</li>
-<li>Version public APIs, heartbeat protocol, and Redis metadata schema explicitly.</li>
+<li>Version public APIs, coordinator-module compatibility, and metadata schema explicitly.</li>
 </ul>
 <h2 id="success-criteria">Success Criteria</h2>
 <ul>
@@ -382,12 +387,12 @@
 <li>Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.</li>
 </ul>
 <h2 id="current-implementation-snapshot">Current Implementation Snapshot</h2>
-<p>Last reviewed: 2026-05-29.</p>
+<p>Last reviewed: 2026-06-01.</p>
 <p>Implemented:</p>
 <ul>
 <li>Spring Boot 4 / Kotlin / Java 24 Gradle multi-module project.</li>
 <li><code>coordinator-server</code> with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, member expiration, resharding, rollback, monitoring APIs, Redis-backed state mutex, ACL, audit logging, admin mutation rate limiting, and coordinator-owned Micrometer metrics.</li>
-<li>Memory and Redis-backed coordinator state stores with Redis Cluster-safe key layout, Redis metadata schema guards, Lua-backed aggregate/projection writes, store revision checks, and optional Redis Stream shard provisioning.</li>
+<li>Memory and Redis-backed coordinator state stores with Redis Cluster-safe single metadata key layout, metadata schema guards, Lua-backed aggregate writes, store revision checks, and optional Redis Stream shard provisioning.</li>
 <li><code>com.redisstream:redisstream-spring-boot-starter</code> with consumer heartbeat lifecycle, shard lifecycle callbacks, runtime capacity/progress reporting, optional Redis Stream polling, producer routing cache, publisher stale-cache refresh, graceful leave, and shared Redis command templates.</li>
 <li>Local Redis Cluster Docker Compose, AWS public Redis test profile, coordinator Dockerfile, sample consumer/publisher pods, Docker smoke workflow, manual GHCR publish workflow, and gated Redis integration tests.</li>
 <li>Open source documentation for testing, Docker, operations, security, contribution, and versioning.</li>

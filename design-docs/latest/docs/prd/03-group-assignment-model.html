@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
@@ -379,7 +380,7 @@
 </tr>
 <tr>
 <td data-label="Entity">Store Revision</td>
-<td data-label="Description">Optimistic write guard for Redis-backed state updates</td>
+<td data-label="Description">Durable compare-and-set guard for metadata state updates</td>
 </tr>
 </tbody>
 </table>
@@ -431,7 +432,7 @@
 <h3 id="member-epoch">Member Epoch</h3>
 <p><code>memberEpoch</code> increments when the coordinator needs to fence stale member state or acknowledge a new member lifecycle. A member that sends a heartbeat with an old epoch can be fenced and required to rejoin.</p>
 <h3 id="store-revision">Store Revision</h3>
-<p><code>storeRevision</code> protects Redis state from stale overwrites. Even with the Redis state mutex, it remains useful as a final compare-and-set guard when a process resumes with an old snapshot.</p>
+<p><code>storeRevision</code> protects Redis-backed group metadata from stale overwrites. It is incremented only with committed metadata updates and remains the final compare-and-set guard when a process resumes with an old snapshot.</p>
 <h2 id="sticky-assignment">Sticky Assignment</h2>
 <p>The assignment algorithm prefers stability:</p>
 <ol>

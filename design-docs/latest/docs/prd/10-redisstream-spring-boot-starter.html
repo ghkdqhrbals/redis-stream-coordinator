@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html" aria-current="page">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
@@ -335,16 +336,81 @@
 <h2 id="purpose">Purpose</h2>
 <p><code>com.redisstream:redisstream-spring-boot-starter</code> provides the runtime pieces that application developers need to connect to Redis Stream Coordinator.</p>
 <p>The starter intentionally does not hide the processing model. Applications can use the shard lifecycle API directly or opt into the built-in Redis Stream polling adapter.</p>
-<h2 id="consumer-integration">Consumer Integration</h2>
-<p>Applications configure a coordinator endpoint and group identity:</p>
-<pre><code class="language-yaml">redis-stream-coordinator:
-  consumer:
-    coordinator-base-url: http://localhost:8080
-    stream-prefix: orders
-    consumer-group: orders-consumer
-    member-name: orders-worker
-    runtime-max-concurrency: 4
+<h2 id="public-integration-surface">Public Integration Surface</h2>
+<p>Application modules should only depend on the Spring Boot starter package. Coordinator server internals such as mutex guards, aspects, and critical-section annotations are implementation details and are not part of the public API.</p>
+<p>The main application-facing functions are:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>API</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="API"><code>CoordinatorConsumerProperties.consumer(...)</code></td>
+<td data-label="Purpose">Register a managed consumer for one <code>{streamPrefix, consumerGroupName}</code> pair.</td>
+</tr>
+<tr>
+<td data-label="API"><code>ProducerRoutingProperties.producer(...)</code></td>
+<td data-label="Purpose">Register a producer routing cache for one <code>{streamPrefix, consumerGroupName}</code> pair.</td>
+</tr>
+<tr>
+<td data-label="API"><code>RedisStreamPublisher.publish(...)</code></td>
+<td data-label="Purpose">Route a partition key and append a record to the active Redis Stream shard.</td>
+</tr>
+<tr>
+<td data-label="API"><code>CoordinatorShardLifecycle</code></td>
+<td data-label="Purpose">Receive shard assign/revoke callbacks when the application owns its own read workers.</td>
+</tr>
+<tr>
+<td data-label="API"><code>RedisStreamMessageHandler</code></td>
+<td data-label="Purpose">Let the built-in polling adapter execute business handling and ACK after success.</td>
+</tr>
+</tbody>
+</table>
+<p>Minimal consumer and producer registration:</p>
+<pre><code class="language-kotlin">@Bean
+fun ordersConsumer(): CoordinatorConsumerProperties =
+    CoordinatorConsumerProperties.consumer(&quot;orders&quot;, &quot;orders-consumer&quot;) {
+        runtimeMaxConcurrency = 4
+    }
+
+@Bean
+fun ordersProducer(): ProducerRoutingProperties =
+    ProducerRoutingProperties.producer(&quot;orders&quot;, &quot;orders-consumer&quot;) {
+        xadd.maxLen = 100_000
+    }
 </code></pre>
+<p>Minimal publish call:</p>
+<pre><code class="language-kotlin">redisStreamPublisher.publish(
+    partitionKey = &quot;order-123&quot;,
+    fields = mapOf(&quot;eventId&quot; to &quot;evt-1&quot;, &quot;payload&quot; to payload),
+)
+</code></pre>
+<h2 id="consumer-integration">Consumer Integration</h2>
+<p>Applications configure only the coordinator endpoint through official starter YAML:</p>
+<pre><code class="language-yaml">redis-stream-coordinator:
+  coordinator-base-url: http://localhost:8080
+</code></pre>
+<p>Consumer group identity and runtime behavior are code-defined so applications can create multiple consumers, derive settings from their own config system, and version the integration contract explicitly:</p>
+<pre><code class="language-kotlin">@Configuration(proxyBeanMethods = false)
+class OrdersConsumerConfiguration {
+    @Bean
+    fun ordersConsumerProperties(): CoordinatorConsumerProperties =
+        CoordinatorConsumerProperties.consumer(
+            streamPrefix = &quot;orders&quot;,
+            consumerGroupName = &quot;orders-consumer&quot;,
+        ) {
+            memberId = System.getenv(&quot;HOSTNAME&quot;) ?: UUID.randomUUID().toString()
+            runtimeMaxConcurrency = 4
+            heartbeatInterval = Duration.ofSeconds(3)
+            rebalanceTimeout = Duration.ofSeconds(60)
+        }
+}
+</code></pre>
+<p><code>consumerGroupName</code> is the public name for the logical Redis Stream consumer group. The starter does not expose <code>member-name</code> as a YAML property; heartbeat compatibility fields are derived internally from <code>consumerGroupName</code>.</p>
+<p>When a managed consumer bean is created, the starter fetches coordinator routing metadata for the configured <code>streamPrefix</code> and <code>consumerGroupName</code>. If the group does not exist, <code>shardCount</code> is zero, or active shard metadata is incomplete, application startup fails immediately.</p>
 <p>The starter:</p>
 <ul>
 <li>creates or loads a member ID,</li>
@@ -355,6 +421,37 @@
 <li>reports runtime capacity and optional progress,</li>
 <li>handles fencing responses.</li>
 </ul>
+<p>Heartbeat status handling:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Status</th>
+<th>Starter behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Status"><code>OK</code></td>
+<td data-label="Starter behavior">Applies assignment and starts newly assigned shards.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>SYNC_METADATA</code></td>
+<td data-label="Starter behavior">Updates local metadata version, keeps only currently owned shards that the coordinator still marks assigned, revokes the rest, and does not start new shards.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>REVOKE_PENDING</code></td>
+<td data-label="Starter behavior">Continues revoke/drain and keeps new shards pending until a later <code>OK</code>.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>RETRY</code></td>
+<td data-label="Starter behavior">Keeps local ownership and retries with full state.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>UNKNOWN_MEMBER_ID</code> / <code>FENCED_MEMBER_EPOCH</code></td>
+<td data-label="Starter behavior">Stops local ownership and rejoins.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="shard-lifecycle-api">Shard Lifecycle API</h2>
 <p>Applications can implement <code>CoordinatorShardLifecycle</code>:</p>
 <pre><code class="language-kotlin">@Component
@@ -377,14 +474,21 @@ class OrdersShardLifecycle : CoordinatorShardLifecycle {
 </code></pre>
 <p>Lifecycle callbacks should be idempotent. The same assignment can be delivered more than once after retry or reconnect.</p>
 <h2 id="optional-redis-stream-polling-adapter">Optional Redis Stream Polling Adapter</h2>
-<p>Applications that want the starter to perform Redis Stream reads can enable the polling adapter:</p>
-<pre><code class="language-yaml">redis-stream-coordinator:
-  consumer:
-    redis:
-      enabled: true
-      poll-batch-size: 10
-      poll-timeout: 1s
-      ack-mode: xackdel
+<p>Applications that want the starter to perform Redis Stream reads provide a <code>RedisStreamMessageHandler</code> bean and set polling options in code:</p>
+<pre><code class="language-kotlin">@Configuration(proxyBeanMethods = false)
+class OrdersPollingConfiguration {
+    @Bean
+    fun ordersConsumerProperties(): CoordinatorConsumerProperties =
+        CoordinatorConsumerProperties.consumer(
+            streamPrefix = &quot;orders&quot;,
+            consumerGroupName = &quot;orders-consumer&quot;,
+        ) {
+            redis.pollBatchSize = 10
+            redis.pollTimeout = Duration.ofSeconds(1)
+            redis.ack.mode = RedisStreamAckMode.AUTO
+            redis.failure.mode = RedisStreamFailureMode.LEAVE_PENDING
+        }
+}
 </code></pre>
 <p>Supported ACK modes:</p>
 <table class="responsive-table">
@@ -396,19 +500,20 @@ class OrdersShardLifecycle : CoordinatorShardLifecycle {
 </thead>
 <tbody>
 <tr>
-<td data-label="Mode"><code>xackdel</code></td>
+<td data-label="Mode"><code>AUTO</code></td>
+<td data-label="Behavior">Use <code>XACKDEL</code> when the connected Redis server supports it, otherwise <code>XACK</code></td>
+</tr>
+<tr>
+<td data-label="Mode"><code>XACKDEL</code></td>
 <td data-label="Behavior">ACK and delete after successful handler execution</td>
 </tr>
 <tr>
-<td data-label="Mode"><code>xack</code></td>
+<td data-label="Mode"><code>XACK</code></td>
 <td data-label="Behavior">ACK after successful handler execution</td>
-</tr>
-<tr>
-<td data-label="Mode"><code>xnack</code></td>
-<td data-label="Behavior">Do not ACK automatically; leave retry handling to application policy</td>
 </tr>
 </tbody>
 </table>
+<p>Failed-message handling is configured separately through <code>redis.failure.mode</code>. The default <code>LEAVE_PENDING</code> preserves classic Redis Stream retry behavior. <code>XNACK</code> is only used when explicitly configured and the connected Redis version supports it.</p>
 <p>Applications provide a handler:</p>
 <pre><code class="language-kotlin">@Component
 class OrdersMessageHandler : RedisStreamMessageHandler {
@@ -429,16 +534,24 @@ class OrdersMessageHandler : RedisStreamMessageHandler {
 </ul>
 <p>The coordinator uses this for monitoring and drain decisions. It does not use progress as an exactly-once guarantee.</p>
 <h2 id="producer-integration">Producer Integration</h2>
-<p>Producer applications configure coordinator routing and Redis connectivity:</p>
-<pre><code class="language-yaml">redis-stream-coordinator:
-  producer:
-    coordinator-base-url: http://localhost:8080
-    stream-prefix: orders
-    consumer-group: orders-consumer
-    routing-cache-ttl: 5s
-    maxlen: 100000
-    approximate-trimming: true
+<p>Producer applications also use only the shared coordinator endpoint in YAML. Routing identity and producer behavior are code-defined:</p>
+<pre><code class="language-kotlin">@Configuration(proxyBeanMethods = false)
+class OrdersProducerConfiguration {
+    @Bean
+    fun ordersProducerProperties(): ProducerRoutingProperties =
+        ProducerRoutingProperties.producer(
+            streamPrefix = &quot;orders&quot;,
+            consumerGroupName = &quot;orders-consumer&quot;,
+        ) {
+            routingRefreshInterval = Duration.ofSeconds(5)
+            publishMaxAttempts = 1
+            xadd.maxLen = 100_000
+            xadd.approximateTrimming = true
+        }
+}
 </code></pre>
+<p>When a <code>ProducerRoutingCache</code> bean is created, it performs the same initial metadata validation and seeds the local routing cache. Missing prefix/group shard metadata is a startup error, not a first-publish error.</p>
+<p>The producer does not send heartbeats. Shard additions, shard-count changes, and active write-version changes reach producers through periodic routing metadata refresh. <code>routingRefreshInterval</code> bounds normal propagation delay; the routing cache lease bounds how long a producer may keep publishing without a successful coordinator refresh. If the cache lease expires and refresh still fails, publish must fail closed instead of using stale routing indefinitely.</p>
 <p>Applications publish through <code>RedisStreamPublisher</code>:</p>
 <pre><code class="language-kotlin">redisStreamPublisher.publish(
     partitionKey = &quot;order-123&quot;,
@@ -478,7 +591,8 @@ class OrdersMessageHandler : RedisStreamMessageHandler {
 <h2 id="metrics-boundary">Metrics Boundary</h2>
 <p>Shared ownership, routing, and progress metrics belong to the coordinator. Consumer and producer modules can expose local application metrics if an application chooses to add them, but the starter should avoid defining a second public metric surface for coordinator-owned state.</p>
 <h2 id="compatibility-contract">Compatibility Contract</h2>
-<p>The starter must send <code>protocolVersion</code> in heartbeat requests. Coordinator servers accept a configured protocol version range so old and new clients can coexist during rolling upgrades.</p>
+<p>The starter sends its module-defined <code>protocolVersion</code> in heartbeat requests. That field represents the coordinator-module coordination version, not a heartbeat-only version. Coordinator servers accept the module-defined supported coordination version range so old and new clients can coexist during rolling upgrades. Applications must not configure coordination versions directly.</p>
+<p>The starter also exposes coordination version release lifecycle metadata. Each coordination version declares the semantic release that introduced it, the earliest release it is guaranteed through, and optional deprecation/removal releases.</p>
 <p>Breaking changes require:</p>
 <ul>
 <li>major version bump,</li>

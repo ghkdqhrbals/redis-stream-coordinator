@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">구현 상태</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
@@ -398,7 +399,7 @@
 <ul>
 <li>target assignment write와 member current assignment 처리 순서가 꼬이면 stale member가 잘못된 owner로 남을 수 있다. Coordinator는 heartbeat ownership report를 target/current assignment 기준으로 검증하고 unauthorized ownership report를 fencing한다.</li>
 <li>member lease TTL이 너무 짧으면 일시적 네트워크 지연에도 EXPIRED 처리가 발생할 수 있다.</li>
-<li>Redis outage 시 coordinator와 data plane이 함께 영향받는다.</li>
+<li>Redis outage 시 coordinator control plane, stream data plane, optional provisioning이 영향받는다.</li>
 <li>assignment state가 손상되면 수동 복구 runbook이 필요하다.</li>
 <li>shard count migration 중 old/new key ordering이 깨질 수 있다.</li>
 <li>shard scale-out/in 중 producer가 같은 event id를 old routing metadata와 new routing metadata로 각각 publish하면 duplicate message가 발생할 수 있다. 중복에 민감한 workload는 scale 전 producer quiescence가 필요하다.</li>
@@ -424,7 +425,7 @@
 </ul>
 <h2 id="maintainability-improvements">Maintainability Improvements</h2>
 <ul>
-<li>heartbeat schema는 <code>protocolVersion</code>으로 관리한다. 호환되지 않는 request/response 변경은 major version bump로 처리하고, optional field 추가만 같은 version에서 허용한다. 상세 정책은 <a href="11-versioning-compatibility.html"><code>11-versioning-compatibility.md</code></a>에서 관리한다.</li>
+<li>coordinator와 support module 간 compatibility는 <code>protocolVersion</code>으로 관리한다. 호환되지 않는 request/response 변경은 major version bump로 처리하고, optional field 추가만 같은 version에서 허용한다. 상세 정책은 <a href="11-versioning-compatibility.html"><code>11-versioning-compatibility.md</code></a>에서 관리한다.</li>
 <li>coordinator event loop에는 invariant checker를 둔다. target assignment 중복 owner, missing owner, stale member epoch을 감지하면 metric과 structured log를 남긴다.</li>
 <li><code>EXPIRED</code> member와 migration metadata는 삭제하지 않고 장기간 유지한다. 정리가 필요하면 별도 운영 작업으로 다룬다.</li>
 <li>Admin API mutation은 audit log를 필수로 남긴다. 운영자가 누가 언제 group metadata를 바꿨는지 추적할 수 있어야 한다.</li>
@@ -435,7 +436,7 @@
 <ul>
 <li>member UUID를 member runtime이 직접 생성하는 방식을 유지할지, coordinator가 registration ack와 함께 부여할지?</li>
 <li>shard 분배 가중치는 MVP에서 동일 가중치로 고정할지?</li>
-<li>Redis key update는 Lua CAS만 쓸지, Redis Streams event log를 둘지?</li>
+<li>Metadata update에 별도 audit/history stream을 둘지?</li>
 <li>KIP-848과 다른 잔여 gap은 <a href="08-kip848-implementation-coverage.html"><code>08-kip848-implementation-coverage.md</code></a>의 <code>Residual Gaps To Decide</code>에서 관리한다.</li>
 </ul>
 <h2 id="decision-needed">Decision Needed</h2>
@@ -443,7 +444,7 @@
 <li>MVP coordinator deployment: direct Coordinator API control plane</li>
 <li>MVP assignment: sticky partition 고정</li>
 <li>MVP member identity: member-runtime-generated UUID</li>
-<li>MVP state store: Redis HASH/JSON + Lua CAS</li>
+<li>MVP state store: Redis metadata hash + JSON aggregate + storeRevision CAS</li>
 <li>MVP access control: Basic Auth <code>admin/password</code></li>
 <li>MVP rebalance style: coordinator-driven incremental reconciliation</li>
 <li>MVP shard count source of truth: Coordinator Admin API로 생성/변경된 coordinator metadata</li>

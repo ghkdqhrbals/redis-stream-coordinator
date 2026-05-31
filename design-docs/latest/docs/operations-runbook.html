@@ -325,6 +325,7 @@
           <a href="prd/09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="implementation-status.html">Implementation Status</a>
           <a href="operations-runbook.html" aria-current="page">Operations Runbook</a>
           <a href="testing.html">Testing Guide</a>
@@ -421,18 +422,46 @@
 <h2 id="upgrade-procedure">Upgrade Procedure</h2>
 <ol>
 <li>Read the release notes and compatibility matrix.</li>
-<li>Confirm the coordinator supports the heartbeat protocol range used by existing consumers.</li>
-<li>Back up Redis metadata keys under the configured <code>coordinator.store.key-prefix</code>.</li>
+<li>Confirm the coordinator supports the coordination version range used by existing consumers.</li>
+<li>Back up coordinator Redis metadata keys.</li>
 <li>Deploy the new coordinator version.</li>
 <li>Verify <code>/coord/v1/monitoring/health</code>.</li>
 <li>Roll consumer applications gradually.</li>
 <li>Watch member expiry, rebalance duration, revoke pending, and invariant metrics.</li>
 </ol>
 <h2 id="redis-metadata-backup">Redis Metadata Backup</h2>
-<p>Coordinator keys use one Redis Cluster hash tag per group:</p>
-<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:*
+<p>Coordinator metadata lives in one Redis hash key per group:</p>
+<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:metadata
 </code></pre>
-<p>Back up all keys under <code>coordinator.store.key-prefix</code> before schema-changing upgrades.</p>
+<p>Back up coordinator metadata keys before schema-changing upgrades and before manual repair operations.</p>
+<h2 id="metadata-durability">Metadata Durability</h2>
+<p>The Redis metadata key is the coordinator source of truth for a group. The coordinator treats client-reported versions as observations only. If a consumer reports a higher <code>metadataVersion</code> than Redis currently stores, the coordinator asks consumers to synchronize down to the current Redis metadata with retry-safe <code>SYNC_METADATA</code> instead of trusting the client version. After the consumer reports the current version, it receives <code>REVOKE_PENDING</code> while revoke/drain is still blocking handoff and receives <code>OK</code> only when newly assigned shards may be started.</p>
+<p>Recommended production controls:</p>
+<ol>
+<li>Use managed Redis persistence and backups appropriate for the deployment.</li>
+<li>Keep coordinator metadata keys under a dedicated <code>coordinator.store.key-prefix</code>.</li>
+<li>Do not let application runtime users delete coordinator metadata keys.</li>
+<li>Back up coordinator metadata keys before schema-changing upgrades or manual maintenance.</li>
+<li>Treat Redis restore to an older backup as disaster recovery, not as a normal retry path.</li>
+</ol>
+<p>Watch for metadata rollback signals:</p>
+<ol>
+<li>A consumer heartbeat reports a higher previously seen <code>metadataVersion</code>, <code>assignmentEpoch</code>, or <code>memberEpoch</code> than the coordinator currently stores.</li>
+<li>A producer routing cache has observed a higher <code>metadataVersion</code> than the coordinator returns.</li>
+<li>Coordinator metrics report metadata version regression or store revision regression.</li>
+<li>Rebalance state appears to move backward, such as a shard returning from released to revoking without a new assignment epoch.</li>
+</ol>
+<p>Redis metadata has an important limitation: if Redis rolls back and no surviving consumer or producer can report the higher observed version, the rollback can be invisible to the coordinator.</p>
+<p>If a source-of-truth metadata key is lost or Redis is restored to an older backup:</p>
+<ol>
+<li>Stop admin mutations for the affected group.</li>
+<li>Confirm whether the key was deleted, corrupted, or restored from an older backup.</li>
+<li>Restore metadata from backup when possible.</li>
+<li>If backup is unavailable or older than the highest client-observed version, explicitly recreate the group with the expected shard layout and treat consumers/producers as a new group lifecycle.</li>
+<li>Do not rely on consumer heartbeats, producer routing caches, or stale local state to reconstruct group metadata automatically.</li>
+<li>Do not force clients to downgrade to a lower metadata version; fail closed until repair or recreation is complete.</li>
+<li>Do not repair by only incrementing the rolled-back version number. The lost transition contents may include drain, release, shard scale, or routing decisions that cannot be inferred safely.</li>
+</ol>
       </main>
     </div>
   </body>

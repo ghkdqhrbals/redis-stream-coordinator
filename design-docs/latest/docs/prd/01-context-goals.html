@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
@@ -371,8 +372,8 @@
 <ul>
 <li>Applications can choose a stable partition key for producer routing.</li>
 <li>Duplicate delivery is acceptable at the infrastructure layer and must be handled by application idempotency where needed.</li>
-<li>Operators can run the coordinator server with access to the Redis metadata store.</li>
-<li>Redis Cluster deployments should use hash-tagged coordinator metadata keys so related metadata lives in one slot.</li>
+<li>Operators can run the coordinator server with access to a durable metadata database.</li>
+<li>Redis Cluster is used for the Redis Stream data plane. Redis-backed coordinator metadata is allowed only for development, tests, or non-critical deployments.</li>
 <li>Redis Stream data-plane reads, handler retries, DLQ policy, and ACK policy remain application-owned unless the optional starter polling adapter is enabled.</li>
 </ul>
 <h2 id="user-facing-modules">User-Facing Modules</h2>

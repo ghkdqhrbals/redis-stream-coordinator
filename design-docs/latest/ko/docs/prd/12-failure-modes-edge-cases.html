@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Failure Handling and Edge Case Design</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+        --sidebar: #fbfcfd;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .topbar {
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: 12px clamp(14px, 2.2vw, 24px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .site-title {
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .site-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+      .language-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+      .language-switch a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .language-switch a[aria-current="true"] {
+        color: var(--fg);
+        font-weight: 700;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1180px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
+      }
+      .sidebar {
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }
+      .doc-index {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
+      }
+      .doc-index a {
+        color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {
+        background: var(--code);
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+        padding-bottom: 56px;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .responsive-table {
+        width: 100%;
+        max-width: 100%;
+        border-collapse: collapse;
+        margin: 0.8rem 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .layout {
+          display: block;
+        }
+        .topbar {
+          display: block;
+        }
+        .language-switch {
+          margin-top: 8px;
+        }
+        .sidebar {
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }
+        .doc-index {
+          max-height: 220px;
+          overflow: auto;
+        }
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+      </style>
+
+    <script>
+      (() => {
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "en") {
+          const target = new URL("../../../docs/prd/12-failure-modes-edge-cases.html", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <div>
+          <div class="site-title">Redis Stream Coordinator</div>
+          <div class="site-subtitle">Design docs</div>
+        </div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/12-failure-modes-edge-cases.html">English</a><span aria-hidden="true">/</span><a href="12-failure-modes-edge-cases.html" aria-current="true">한국어</a></div>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+          <a href="../PRD.html">Redis Stream Coordinator Design</a>
+          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+          <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+          <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+          <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+          <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html" aria-current="page">Failure Handling and Edge Case Design</a>
+          <a href="../implementation-status.html">구현 상태</a>
+          <a href="../operations-runbook.html">운영 Runbook</a>
+          <a href="../testing.html">테스트 가이드</a>
+        </nav>
+      </aside>
+      <main>
+<h1 id="failure-handling-and-edge-case-design">Failure Handling and Edge Case Design</h1>
+<p>이 문서는 개별 장애 목록만 나열하지 않고, Redis Stream Coordinator가 실패 상황을 어떤 원칙으로 처리해야 하는지 정의한다. 핵심 원칙은 모든 coordinator workflow가 Redis group metadata key와 client retry만으로 lease 범위 안에서 복구 가능해야 한다는 점이다.</p>
+<p>Coordinator는 Redis Stream message processing을 소유하지 않는다. Coordinator가 소유하는 것은 group metadata, member epoch, target assignment, current assignment report, resharding metadata, producer routing metadata이다.</p>
+<h2 id="design-goals">Design Goals</h2>
+<ul>
+<li>짧은 coordinator 장애가 healthy consumer/producer를 즉시 멈추면 안 된다.</li>
+<li>긴 coordinator 장애는 split ownership이나 무기한 stale producer routing이 생기기 전에 fail closed해야 한다.</li>
+<li>새 coordinator pod는 old pod의 memory가 아니라 Redis에 기록된 metadata에서 이어서 시작해야 한다.</li>
+<li>Heartbeat response는 잃어버리면 끝나는 일회성 command가 아니라 commit된 최신 assignment state의 반복 가능한 view여야 한다.</li>
+<li>Redis metadata는 최근 write loss가 가능하다. Consumer가 Redis 현재 version보다 높은 metadata version을 보고하면 coordinator는 현재 Redis version으로 metadata sync round를 시작해야 한다.</li>
+<li>지원하지 않는 Redis command는 fail fast하거나 문서화된 fallback만 사용한다.</li>
+</ul>
+<h2 id="core-model">Core Model</h2>
+<h3 id="redis-recorded-state-machine">Redis-Recorded State Machine</h3>
+<p>모든 coordinator workflow는 Redis-recorded state machine이다. Response는 현재 group metadata key에서만 파생한다.</p>
+<pre><code class="language-text">request or tick
+  -&gt; acquire Redis mutex
+  -&gt; load group metadata hash
+  -&gt; validate input
+  -&gt; compute next state
+  -&gt; write metadata with storeRevision CAS
+  -&gt; return response derived from the written metadata
+</code></pre>
+<p>Coordinator는 client에게 행동을 요구하는 응답을 보내기 전에 해당 행동의 근거가 되는 next state를 먼저 Redis metadata에 기록해야 한다. 기록 전에 coordinator가 죽으면 client retry는 이전 state를 본다. 기록 후 response가 client에게 도달하기 전에 coordinator가 죽으면 Redis가 해당 version을 유지하는 동안 다음 heartbeat 또는 routing refresh가 같은 recorded decision을 다시 반환한다.</p>
+<h3 id="metadata-version-correction">Metadata Version Correction</h3>
+<p>Client에게 반환된 metadata version은 이후 Redis에서 사라질 수 있다. 예를 들어 coordinator가 metadata version <code>10</code>을 Redis에 쓰고 heartbeat response로 반환했는데, 직후 Redis failover 또는 restore로 version <code>9</code> 상태로 돌아갈 수 있다. 이 경우 client는 Redis가 현재 저장한 값보다 더 최신 state를 이미 관측한 것이다.</p>
+<p>Redis를 source of truth로 유지한다. 더 높은 client version은 Redis state를 복구할 권한이 아니라, client가 stale local view를 들고 있을 수 있다는 신호로 취급한다.</p>
+<ul>
+<li>Coordinator response는 현재 <code>metadataVersion</code>, <code>assignmentEpoch</code>, 관련 member epoch를 포함한다.</li>
+<li>Consumer와 producer는 현재 process lifetime 동안 관측한 최고 version을 기억한다. 더 강한 rollback detection이 필요한 deployment는 module SPI를 통해 작은 local 또는 external persistent version store를 제공해야 한다.</li>
+<li>모든 heartbeat와 routing refresh는 client가 관측한 최고 version을 포함한다.</li>
+<li>Coordinator가 <code>clientMaxObservedVersion &gt; storedMetadataVersion</code>을 보면 metadata regression으로 보고 metadata correction round를 시작한다. 단, coordinator가 metadata schema나 coordination version을 해석할 수 없으면 fail closed한다.</li>
+<li>Coordinator는 rollback된 Redis version을 단순히 증가시켜 문제를 "복구"하면 안 된다. 유실된 state transition의 내용이 무엇인지 알 수 없기 때문이다.</li>
+<li><code>request.metadataVersion &gt; group.metadataVersion</code>이면 coordinator는 metadata correction round를 시작하고 <code>SYNC_METADATA</code>를 반환한다.</li>
+<li><code>SYNC_METADATA</code>는 현재 Redis <code>metadataVersion</code>, <code>assignmentEpoch</code>, 계속 유지 가능한 assigned shard, pending target shard를 포함한다.</li>
+<li>Consumer는 response를 현재 metadata truth로 적용하고, 이미 읽고 있던 shard 중 <code>assignedShards</code>에 남은 shard만 유지한다. 나머지는 신규 read를 중단하고 revoke/drain한다.</li>
+<li>Correction round가 활성화된 동안 coordinator는 현재 Redis metadata version과 다른 heartbeat를 보내는 모든 known consumer에게 <code>SYNC_METADATA</code>를 반환한다.</li>
+<li>Consumer가 현재 metadata version으로 heartbeat했지만 local revoke/drain 또는 다른 member의 revoke 때문에 target shard가 아직 막혀 있으면 coordinator는 <code>REVOKE_PENDING</code>을 반환한다.</li>
+<li><code>REVOKE_PENDING</code>도 멱등적이다. Consumer는 drain을 계속하고, 나중에 <code>OK</code>를 받을 때까지 신규 shard read를 시작하지 않는다.</li>
+<li>신규 shard read는 <code>OK</code>에서만 시작한다.</li>
+<li>Coordinator는 consumer report로 Redis metadata를 재구성하지 않고, client version에 맞추려고 Redis version만 증가시키지도 않는다.</li>
+</ul>
+<p>Correction sequence:</p>
+<pre><code class="language-text">higher-version heartbeat
+  -&gt; member가 Redis metadata version으로 heartbeat할 때까지 SYNC_METADATA 반복
+  -&gt; local revoke/drain 또는 다른 member revoke가 target shard를 막는 동안 REVOKE_PENDING
+  -&gt; 모든 live member가 동기화되고 충돌 이전 owner가 release, expire, fence된 뒤 OK
+</code></pre>
+<h3 id="client-lease">Client Lease</h3>
+<p>Consumer와 producer는 bounded local lease 안에서만 coordinator 없이 동작한다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Lease</th>
+<th>유효한 동안</th>
+<th>만료 후</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Client">Consumer</td>
+<td data-label="Lease">성공한 heartbeat로 갱신되는 assignment lease</td>
+<td data-label="유효한 동안">기존 assigned shard를 계속 처리하고 heartbeat retry</td>
+<td data-label="만료 후">read 중단, ownership 주장 중단, coordinator 복구 후 rejoin</td>
+</tr>
+<tr>
+<td data-label="Client">Producer</td>
+<td data-label="Lease">producer routing metadata로 갱신되는 routing cache lease</td>
+<td data-label="유효한 동안">cached route로 publish</td>
+<td data-label="만료 후">routing refresh 성공 전까지 publish fail</td>
+</tr>
+</tbody>
+</table>
+<p>Consumer assignment lease는 coordinator의 member lease TTL보다 짧거나 같아야 한다. 그래야 coordinator가 member를 expired 처리하고 shard를 재할당한 뒤에도 기존 consumer가 계속 read하는 split ownership을 막을 수 있다.</p>
+<h3 id="idempotent-retry">Idempotent Retry</h3>
+<p>모든 coordinator interaction은 retry를 허용해야 한다.</p>
+<ul>
+<li>Heartbeat는 같은 <code>memberId</code>, <code>memberEpoch</code>, <code>assignmentEpoch</code>, owned shard, revoking shard에 대해 idempotent해야 한다.</li>
+<li>Revoke ack는 idempotent해야 한다. 이미 release된 shard에 대한 중복 <code>REVOKED</code> report는 무해하게 무시한다.</li>
+<li>Producer routing refresh는 <code>metadataVersion</code> 기준으로 idempotent해야 한다.</li>
+<li>Admin mutation은 store revision check를 사용하며, 더 최신 metadata를 조용히 덮어쓰면 안 된다.</li>
+</ul>
+<h2 id="generic-failure-checkpoints">Generic Failure Checkpoints</h2>
+<p>모든 workflow는 아래 checkpoint 기준으로 분석한다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Checkpoint</th>
+<th>예시</th>
+<th>목표 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Checkpoint">요청이 coordinator에 도달하지 않음</td>
+<td data-label="예시">client timeout, network drop</td>
+<td data-label="목표 동작">client는 local lease/cache가 유효한 동안 retry</td>
+</tr>
+<tr>
+<td data-label="Checkpoint">coordinator가 특정 metadata write boundary 전에 실패</td>
+<td data-label="예시"><code>save()</code> 전 process crash</td>
+<td data-label="목표 동작">Redis는 이전 recorded workflow state 그대로이다. client retry 또는 이후 reconciliation이 그 상태에서 이어간다</td>
+</tr>
+<tr>
+<td data-label="Checkpoint">coordinator가 metadata write 후 response 전에 실패</td>
+<td data-label="예시"><code>save()</code> 후 HTTP response 전 crash</td>
+<td data-label="목표 동작">Redis가 해당 version을 유지하면 다음 heartbeat/routing refresh가 recorded decision 반환</td>
+</tr>
+<tr>
+<td data-label="Checkpoint">client가 response를 받았지만 coordinator가 down</td>
+<td data-label="예시">consumer가 DRAIN을 받은 직후 coordinator outage</td>
+<td data-label="목표 동작">client는 local action을 계속하고 progress 보고를 retry</td>
+</tr>
+<tr>
+<td data-label="Checkpoint">client가 완료 보고를 보냈지만 response가 손실</td>
+<td data-label="예시">consumer가 <code>REVOKED</code> 전송, coordinator metadata write 후 response 손실</td>
+<td data-label="목표 동작">다음 heartbeat가 다음 recorded assignment state를 확인</td>
+</tr>
+<tr>
+<td data-label="Checkpoint">새 coordinator 시작</td>
+<td data-label="예시">rolling update, crash recovery</td>
+<td data-label="목표 동작">새 coordinator는 Redis metadata를 load하고 recorded workflow만 advance</td>
+</tr>
+<tr>
+<td data-label="Checkpoint">Redis-backed store가 write를 수락했지만 이후 유실</td>
+<td data-label="예시">client는 metadata version <code>10</code>을 받았는데 Redis는 이후 version <code>9</code>로 복구</td>
+<td data-label="목표 동작">non-production mode 전용이다. 가능하면 regression을 감지하고 fail closed</td>
+</tr>
+<tr>
+<td data-label="Checkpoint">Redis metadata missing/corrupt</td>
+<td data-label="예시">key delete, invalid JSON, missing revision</td>
+<td data-label="목표 동작">fail closed. stale client/projection에서 source-of-truth 재구성 금지</td>
+</tr>
+</tbody>
+</table>
+<p>이 checkpoint model이 새로운 엣지케이스를 처리하는 기본 도구이다. 새 기능은 Redis-recorded handoff point, client retry behavior, lease expiry behavior, repair path를 정의해야 한다.</p>
+<p>Before-write failure는 반드시 어떤 write boundary 전인지 명시해야 한다. "metadata write 전"은 하나의 상태가 아니다. 해당 workflow의 다음 state transition을 Redis에 기록하기 전에 실패했다는 뜻이다.</p>
+<h2 id="rebalance-drain-failure-scenario">Rebalance Drain Failure Scenario</h2>
+<p>가장 중요한 rebalance flow는 다음이다.</p>
+<pre><code class="language-text">member A owns shard S
+member C joins or capacity changes
+coordinator computes target owner B/C for shard S
+coordinator asks member A to drain shard S through heartbeat response
+member A stops new reads, drains in-flight work, then reports REVOKED
+coordinator assigns shard S to the new target only after release is accepted
+</code></pre>
+<p>DRAIN instruction은 휘발성 message가 아니다. DRAIN은 Redis에 기록된 metadata에서 파생된 heartbeat response이다.</p>
+<ul>
+<li>target assignment는 shard <code>S</code>가 더 이상 member <code>A</code> 소유가 아니라고 말한다.</li>
+<li>current assignment는 member <code>A</code>를 current 또는 revoking owner로 기록한다.</li>
+<li>member <code>B</code> 또는 <code>C</code>는 release가 수락될 때까지 shard <code>S</code>를 pending으로만 받는다.</li>
+<li>assignment epoch가 이 판단을 식별한다.</li>
+</ul>
+<h3 id="sequence">Sequence</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant A as Consumer A
+    participant C as Coordinator
+    participant R as Redis Metadata
+    participant B as Consumer B
+
+    A-&gt;&gt;C: heartbeat owned=[S]
+    C-&gt;&gt;R: write target owner B, A must revoke S
+    C--&gt;&gt;A: heartbeat response assigned=[], pending=[], revoke/drain S
+    A-&gt;&gt;A: stop new reads for S, drain in-flight work
+    B-&gt;&gt;C: heartbeat
+    C--&gt;&gt;B: pending=[S], do not read yet
+    A-&gt;&gt;C: heartbeat revoking=[S:REVOKED]
+    C-&gt;&gt;R: write S released from A
+    C--&gt;&gt;B: next heartbeat assigned=[S]
+    B-&gt;&gt;B: start reads for S
+</code></pre>
+<h3 id="drain-response-coordinator-down">DRAIN Response 이후 Coordinator Down</h3>
+<p>Member <code>A</code>가 DRAIN instruction을 받은 뒤 coordinator가 down되면 다음 정책을 따른다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Actor</th>
+<th>목표 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Actor">Consumer A</td>
+<td data-label="목표 동작">shard <code>S</code>를 local revoking state로 유지한다. <code>S</code> read를 재개하지 않는다. In-flight work를 끝내고 <code>revokingShards=[S:DRAINING or REVOKED]</code> heartbeat를 계속 retry한다</td>
+</tr>
+<tr>
+<td data-label="Actor">Consumer B</td>
+<td data-label="목표 동작">shard <code>S</code>를 pending으로만 취급한다. 이후 heartbeat에서 <code>assignedShards</code>로 받을 때까지 read하지 않는다</td>
+</tr>
+<tr>
+<td data-label="Actor">New coordinator</td>
+<td data-label="목표 동작">metadata를 reload하고 target owner/current owner/revoking owner를 기준으로 revoke-before-assign을 계속 진행한다</td>
+</tr>
+<tr>
+<td data-label="Actor">Metadata store</td>
+<td data-label="목표 동작">group metadata key에 target/current assignment와 assignment epoch를 유지한다</td>
+</tr>
+</tbody>
+</table>
+<p>세부 failure point:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Failure point</th>
+<th>Expected outcome</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Failure point">target assignment write 전에 coordinator 사망</td>
+<td data-label="Expected outcome">기록된 DRAIN instruction이 없다. A는 기존 assignment로 동작하고, 이후 heartbeat/tick에서 다시 계산된다</td>
+</tr>
+<tr>
+<td data-label="Failure point">target assignment write 후 DRAIN response 손실</td>
+<td data-label="Expected outcome">A는 다음 heartbeat 전까지 기존 local assignment를 유지한다. Coordinator는 Redis metadata에서 같은 DRAIN decision을 다시 반환한다</td>
+</tr>
+<tr>
+<td data-label="Failure point">A가 DRAIN을 받은 뒤 coordinator 사망</td>
+<td data-label="Expected outcome">A는 신규 read를 멈추고 drain한다. Coordinator 복구 후 progress를 보고한다</td>
+</tr>
+<tr>
+<td data-label="Failure point">A가 <code>REVOKED</code>를 보냈지만 metadata write 전 coordinator 사망</td>
+<td data-label="Expected outcome">A는 <code>REVOKED</code>를 retry한다. B는 계속 pending 상태이다</td>
+</tr>
+<tr>
+<td data-label="Failure point">A의 <code>REVOKED</code>가 Redis에 기록됐지만 response 손실</td>
+<td data-label="Expected outcome">다음 heartbeat가 released state를 확인한다. B는 recorded metadata에서 assignment를 받을 수 있다</td>
+</tr>
+<tr>
+<td data-label="Failure point">A가 draining 중 crash</td>
+<td data-label="Expected outcome">Coordinator는 member lease TTL 또는 rebalance timeout 이후 A를 expire/fence하고 reassignment를 허용한다. Duplicate processing은 가능하며 at-least-once 범위이다</td>
+</tr>
+<tr>
+<td data-label="Failure point">A가 DRAIN 후 local revoking memory 없이 재시작</td>
+<td data-label="Expected outcome">A는 <code>memberEpoch=0</code>으로 rejoin한다. Coordinator는 Redis에 기록된 target/current state 기준으로 rejoin을 검증하고, 필요하면 fencing 또는 full reconciliation을 요구한다</td>
+</tr>
+</tbody>
+</table>
+<p>Write boundary별 Redis-recorded state:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>도달하지 못한 boundary</th>
+<th>Redis-recorded group/shard state</th>
+<th>New coordinator behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="도달하지 못한 boundary">join/capacity change가 기록되지 않음</td>
+<td data-label="Redis-recorded group/shard state">새 member/capacity가 metadata에 없음. group은 여전히 <code>STABLE</code>일 수 있음</td>
+<td data-label="New coordinator behavior">member heartbeat 또는 capacity request retry를 기다림</td>
+</tr>
+<tr>
+<td data-label="도달하지 못한 boundary">join/capacity change는 기록됐지만 target assignment는 기록되지 않음</td>
+<td data-label="Redis-recorded group/shard state">새 member/capacity는 metadata에 있지만 shard <code>S</code>는 target/current assignment에서 여전히 A 소유</td>
+<td data-label="New coordinator behavior">다음 heartbeat 또는 reconciliation loop에서 target assignment 재계산</td>
+</tr>
+<tr>
+<td data-label="도달하지 못한 boundary">target assignment는 기록됐지만 DRAIN response가 손실됨</td>
+<td data-label="Redis-recorded group/shard state">group은 <code>RECONCILING</code>; target owner는 B; A는 current/revoking owner; B는 <code>S</code>를 pending으로 봄</td>
+<td data-label="New coordinator behavior">A heartbeat에 같은 DRAIN decision 반환, B는 pending 유지</td>
+</tr>
+<tr>
+<td data-label="도달하지 못한 boundary">A의 <code>REVOKED</code> report는 받았지만 release write가 기록되지 않음</td>
+<td data-label="Redis-recorded group/shard state">group은 여전히 <code>RECONCILING</code>; A가 current/revoking owner; B는 pending</td>
+<td data-label="New coordinator behavior">A의 <code>REVOKED</code> retry를 기다리거나 timeout 후 A expire/fence</td>
+</tr>
+<tr>
+<td data-label="도달하지 못한 boundary">release write는 기록됐지만 assignment response가 손실됨</td>
+<td data-label="Redis-recorded group/shard state">A는 더 이상 <code>S</code>를 block하지 않음. B는 <code>S</code>를 assigned로 받을 수 있음</td>
+<td data-label="New coordinator behavior">다음 heartbeat에서 B에게 <code>S</code> assign</td>
+</tr>
+</tbody>
+</table>
+<p>Consumer rule: shard가 local revoking state에 들어가면 heartbeat가 일시적으로 실패한다는 이유만으로 read를 재개하면 안 된다. 이후 coordinator가 다시 assigned로 내려줄 때만 read 가능하다.</p>
+<p>Coordinator rule: 새 owner에게 pending shard를 assigned로 바꾸려면 아래 중 하나가 먼저 성립해야 한다.</p>
+<ul>
+<li>previous owner가 in-flight work 없이 <code>REVOKED</code>를 보고했다.</li>
+<li>previous owner가 member lease TTL로 expired 처리됐다.</li>
+<li>previous owner가 rebalance timeout을 초과해 fenced 처리됐다.</li>
+</ul>
+<h2 id="coordinator-rolling-update-coordinator">Coordinator Rolling Update와 일시적 Coordinator 손실</h2>
+<p>이 섹션은 <code>replicas=1</code>에서 rolling update 중 순간적으로 다음 형태가 되는 상황을 다룬다.</p>
+<pre><code class="language-text">1 coordinator -&gt; 2 coordinators -&gt; 1 coordinator
+</code></pre>
+<p>또한 일시적 coordinator 손실도 다룬다.</p>
+<pre><code class="language-text">1 coordinator -&gt; 0 reachable coordinators -&gt; 1 coordinator
+</code></pre>
+<p>Coordinator는 Kubernetes readiness, service endpoint propagation, external load balancer를 직접 제어하지 않는다. Coordinator가 소유하는 것은 process-local terminating state와 Redis critical section이다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Edge case</th>
+<th>위험</th>
+<th>목표 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Edge case">old/new coordinator가 동시에 traffic을 받음</td>
+<td data-label="위험">동시 metadata mutation</td>
+<td data-label="목표 동작">두 coordinator 모두 같은 Redis mutex와 store revision CAS 사용</td>
+</tr>
+<tr>
+<td data-label="Edge case">old process shutdown 시작</td>
+<td data-label="위험">request가 중간에 끊길 수 있음</td>
+<td data-label="목표 동작">terminating mode 진입, tick 중지, 신규 critical section 거절, mutex를 보유한 짧은 in-flight critical section만 완료</td>
+</tr>
+<tr>
+<td data-label="Edge case">terminating process로 traffic 유입</td>
+<td data-label="위험">draining process가 신규 작업 처리</td>
+<td data-label="목표 동작">terminating mode 이후 신규 작업은 retryable error 반환</td>
+</tr>
+<tr>
+<td data-label="Edge case">process가 mutex를 잡고 사망</td>
+<td data-label="위험">new coordinator 대기</td>
+<td data-label="목표 동작">Redis mutex TTL이 eventually ownership release</td>
+</tr>
+<tr>
+<td data-label="Edge case">store revision conflict</td>
+<td data-label="위험">다른 coordinator가 먼저 commit</td>
+<td data-label="목표 동작">reload 후 retry 또는 retryable conflict 반환</td>
+</tr>
+<tr>
+<td data-label="Edge case">reachable coordinator 없음</td>
+<td data-label="위험">heartbeat와 routing refresh 실패</td>
+<td data-label="목표 동작">consumer/producer는 valid lease/cache 안에서 동작하고 이후 fail closed</td>
+</tr>
+<tr>
+<td data-label="Edge case">tick skip</td>
+<td data-label="위험">expiration 또는 drain advancement 지연</td>
+<td data-label="목표 동작">다음 request 또는 tick이 Redis-recorded metadata 기준으로 재계산</td>
+</tr>
+</tbody>
+</table>
+<p>새 coordinator는 old stack frame을 이어받지 않는다. Redis-recorded metadata에서 이어받는다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Workflow</th>
+<th>Redis-recorded handoff point</th>
+<th>New coordinator continuation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Workflow">Heartbeat</td>
+<td data-label="Redis-recorded handoff point">member metadata, epoch, current report, target assignment</td>
+<td data-label="New coordinator continuation">retry 시 현재 recorded assignment decision 반환</td>
+</tr>
+<tr>
+<td data-label="Workflow">Expiration</td>
+<td data-label="Redis-recorded handoff point">last heartbeat timestamp, member state</td>
+<td data-label="New coordinator continuation">request 또는 tick에서 expiration 재계산</td>
+</tr>
+<tr>
+<td data-label="Workflow">Rebalance</td>
+<td data-label="Redis-recorded handoff point">target/current assignment, revoking shards, assignment epoch</td>
+<td data-label="New coordinator continuation">revoke-before-assign 계속 진행</td>
+</tr>
+<tr>
+<td data-label="Workflow">Graceful leave</td>
+<td data-label="Redis-recorded handoff point"><code>LEAVING</code> state와 revoking shards</td>
+<td data-label="New coordinator continuation">revoke ack, timeout, expiration 대기</td>
+</tr>
+<tr>
+<td data-label="Workflow">Resharding</td>
+<td data-label="Redis-recorded handoff point">resharding state, stream version, active write version, drain progress</td>
+<td data-label="New coordinator continuation">provisioning, activation, drain, rollback 계속 진행</td>
+</tr>
+<tr>
+<td data-label="Workflow">Producer routing</td>
+<td data-label="Redis-recorded handoff point">metadata version, active write version</td>
+<td data-label="New coordinator continuation">최신 recorded routing metadata 반환</td>
+</tr>
+</tbody>
+</table>
+<h2 id="consumer-join-rejoin-leave-expiration">Consumer Join, Rejoin, Leave, Expiration</h2>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Edge case</th>
+<th>위험</th>
+<th>Coordinator 동작</th>
+<th>Consumer 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Edge case">새 consumer join</td>
+<td data-label="위험">불필요한 full rebalance</td>
+<td data-label="Coordinator 동작">member 등록, epoch 발급, 필요할 때만 sticky target assignment 재계산</td>
+<td data-label="Consumer 동작">heartbeat response의 assigned/pending shard 적용</td>
+</tr>
+<tr>
+<td data-label="Edge case">기존 consumer가 <code>memberEpoch=0</code>으로 rejoin</td>
+<td data-label="위험">stale ownership report</td>
+<td data-label="Coordinator 동작">rejoin 처리 후 target/current assignment 기준으로 ownership 검증</td>
+<td data-label="Consumer 동작">coordinator가 반환하지 않은 shard 중단</td>
+</tr>
+<tr>
+<td data-label="Edge case">consumer가 unassigned shard를 owned로 보고</td>
+<td data-label="위험">split ownership</td>
+<td data-label="Coordinator 동작">stale report 거절 또는 fence</td>
+<td data-label="Consumer 동작">read 중단 후 rejoin</td>
+</tr>
+<tr>
+<td data-label="Edge case">graceful leave</td>
+<td data-label="위험">shard가 너무 일찍 재할당될 수 있음</td>
+<td data-label="Coordinator 동작"><code>LEAVING</code> 표시, release 전까지 새 owner에는 pending 유지</td>
+<td data-label="Consumer 동작">read 중단, drain, <code>REVOKED</code> 보고</td>
+</tr>
+<tr>
+<td data-label="Edge case">leave 없이 crash</td>
+<td data-label="위험">timeout까지 shard stuck</td>
+<td data-label="Coordinator 동작">member lease TTL 이후 expire하고 assignment 재계산</td>
+<td data-label="Consumer 동작">복구 process는 <code>memberEpoch=0</code>으로 rejoin</td>
+</tr>
+<tr>
+<td data-label="Edge case">duplicate member ID</td>
+<td data-label="위험">두 process가 같은 identity 주장</td>
+<td data-label="Coordinator 동작">epoch와 ownership validation으로 한쪽 fence</td>
+<td data-label="Consumer 동작">accepted epoch만 계속 처리</td>
+</tr>
+<tr>
+<td data-label="Edge case">긴 revoke drain</td>
+<td data-label="위험">rebalance stall</td>
+<td data-label="Coordinator 동작">rebalance timeout 이후 fence/expire</td>
+<td data-label="Consumer 동작">fenced되면 read 중단, application은 duplicate attempt 처리</td>
+</tr>
+</tbody>
+</table>
+<h2 id="producer-routing-during-failures">Producer Routing During Failures</h2>
+<p>Producer는 heartbeat를 보내지 않는다. Producer는 routing metadata refresh만 수행한다.</p>
+<p>Producer에는 heartbeat channel이 없기 때문에 shard count 변경과 <code>activeWriteVersion</code> 변경은 routing metadata refresh로만 전파된다. 따라서 producer 모듈은 publish가 정상적으로 성공하고 있더라도 routing metadata를 주기적으로 refresh해야 한다. Refresh interval과 routing cache TTL은 coordinator가 shard를 추가하거나 새 write version을 activate한 뒤 producer가 old shard layout을 계속 사용할 수 있는 최대 시간을 결정한다.</p>
+<p>Refresh 규칙:</p>
+<ul>
+<li>Local routing cache가 만료되기 전에 주기적으로 refresh한다.</li>
+<li>Publish path에서 stale routing 또는 metadata-version mismatch를 감지하면 즉시 refresh한다.</li>
+<li>Refresh된 <code>metadataVersion</code>이 더 최신일 때만 cache를 교체한다.</li>
+<li>Refresh가 실패했지만 cache lease가 아직 유효하면 기존 cache를 유지한다.</li>
+<li>Cache lease가 만료된 뒤 refresh가 실패하면 publish를 실패시킨다.</li>
+</ul>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Edge case</th>
+<th>위험</th>
+<th>Producer 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Edge case">coordinator unavailable + routing cache valid</td>
+<td data-label="위험">불필요한 publish 중단</td>
+<td data-label="Producer 동작">cached routing metadata로 계속 publish</td>
+</tr>
+<tr>
+<td data-label="Edge case">coordinator unavailable + routing cache expired</td>
+<td data-label="위험">stale routing이 무기한 지속</td>
+<td data-label="Producer 동작">retryable coordinator-unavailable error로 publish fail</td>
+</tr>
+<tr>
+<td data-label="Edge case">coordinator가 shard를 추가했지만 producer가 아직 refresh하지 않음</td>
+<td data-label="위험">producer가 old shard layout으로 계속 write</td>
+<td data-label="Producer 동작">refresh 전까지 cached route 사용. refresh interval/cache TTL이 전파 지연 상한</td>
+</tr>
+<tr>
+<td data-label="Edge case">낮은 <code>metadataVersion</code> 응답</td>
+<td data-label="위험">Redis metadata rollback 또는 stale coordinator response</td>
+<td data-label="Producer 동작">coordinator가 명시적으로 current routing metadata를 반환할 때만 downgrade한다</td>
+</tr>
+<tr>
+<td data-label="Edge case">높은 <code>metadataVersion</code> 응답</td>
+<td data-label="위험">local route stale</td>
+<td data-label="Producer 동작">cache 교체</td>
+</tr>
+<tr>
+<td data-label="Edge case">불확실한 <code>XADD</code> 이후 publish 실패</td>
+<td data-label="위험">retry 시 duplicate record</td>
+<td data-label="Producer 동작">기본 publish attempt는 보수적으로 유지, application event idempotency 필요</td>
+</tr>
+<tr>
+<td data-label="Edge case">produce 중 shard scale</td>
+<td data-label="위험">같은 partition key가 다르게 route 가능</td>
+<td data-label="Producer 동작">중복 민감 workload는 scale 전 producer quiescence 필요</td>
+</tr>
+</tbody>
+</table>
+<h2 id="redis-metadata-volatility-and-corruption">Redis Metadata Volatility and Corruption</h2>
+<p>Coordinator metadata는 group별 단일 Redis hash key에 저장한다.</p>
+<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:metadata
+</code></pre>
+<p>권장 hash field:</p>
+<pre><code class="language-text">aggregate      -&gt; GroupMetadata JSON
+revision       -&gt; storeRevision
+schemaVersion  -&gt; metadata JSON schema version
+layoutVersion  -&gt; Redis metadata layout version
+updatedAt      -&gt; last successful metadata write time
+</code></pre>
+<p>Redis는 휘발 가능하다고 취급한다. Key는 operator error, eviction policy, failover data loss, restore 실패, 잘못된 logical database, 잘못된 key prefix, accidental delete로 사라질 수 있다. 또한 Redis는 write를 성공으로 응답한 뒤에도 failover, restore, persistence lag로 최근 몇 초의 metadata 변경을 잃을 수 있다.</p>
+<p>Index는 rebuild 가능한 보조 데이터일 뿐이다.</p>
+<pre><code class="language-text">redis-stream:coord:groups
+</code></pre>
+<p>목표 동작:</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Edge case</th>
+<th>위험</th>
+<th>목표 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Edge case">metadata key 삭제</td>
+<td data-label="위험">source of truth 손실</td>
+<td data-label="목표 동작">해당 group fail closed. Heartbeat, routing cache, local state, index에서 재구성 금지</td>
+</tr>
+<tr>
+<td data-label="Edge case">최근 metadata write 유실</td>
+<td data-label="위험">Redis state가 이전 version으로 되돌아감</td>
+<td data-label="목표 동작">heartbeat가 더 높은 version을 보고하면 metadata correction round를 시작하고 현재 Redis version의 <code>SYNC_METADATA</code> 반환</td>
+</tr>
+<tr>
+<td data-label="Edge case">group index 삭제</td>
+<td data-label="위험"><code>list()</code>와 tick scan에서 group 누락</td>
+<td data-label="목표 동작">제어된 repair path로 metadata key scan 후 index rebuild</td>
+</tr>
+<tr>
+<td data-label="Edge case">index가 없는 metadata를 가리킴</td>
+<td data-label="위험">phantom group</td>
+<td data-label="목표 동작">stale index entry skip, 필요 시 제거</td>
+</tr>
+<tr>
+<td data-label="Edge case">revision field 삭제</td>
+<td data-label="위험">CAS 보호 상실</td>
+<td data-label="목표 동작">corruption으로 보고 fail closed</td>
+</tr>
+<tr>
+<td data-label="Edge case">aggregate JSON 손상</td>
+<td data-label="위험">assignment 계산 불가</td>
+<td data-label="목표 동작">group unhealthy 처리 후 restore 또는 repair 요구</td>
+</tr>
+<tr>
+<td data-label="Edge case">schema/layout version 미지원</td>
+<td data-label="위험">coordinator가 안전하게 해석 불가</td>
+<td data-label="목표 동작">fail fast, overwrite 금지</td>
+</tr>
+</tbody>
+</table>
+<p>운영 제어:</p>
+<ul>
+<li>Metadata key에는 TTL을 설정하지 않는다.</li>
+<li>Redis snapshot/AOF 또는 managed backup을 활성화한다. 이 설정은 recovery loss를 
+  줄일 뿐, 최근 write loss 가능성을 제거하지 않는다.</li>
+<li>Production Redis는 metadata에 대해 <code>noeviction</code> 같은 memory policy를 사용한다.</li>
+<li>Coordinator ACL user에는 <code>FLUSHDB</code>, <code>FLUSHALL</code>, broad key deletion 권한을 주지 않는다.</li>
+<li>Client가 관측한 metadata version이 coordinator에 저장된 version보다 높으면 반드시 alert해야 한다.</li>
+</ul>
+<h2 id="redis-version-command-set">미지원 Redis Version 또는 Command Set</h2>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Edge case</th>
+<th>영향 모듈</th>
+<th>목표 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Edge case">Redis가 <code>XACKDEL</code> 미지원</td>
+<td data-label="영향 모듈">Consumer polling adapter</td>
+<td data-label="목표 동작"><code>AUTO</code>는 <code>XACK</code> fallback. 명시적 <code>XACKDEL</code>은 fail fast</td>
+</tr>
+<tr>
+<td data-label="Edge case">Redis가 <code>XNACK</code> 미지원</td>
+<td data-label="영향 모듈">Consumer polling adapter</td>
+<td data-label="목표 동작">기본 <code>LEAVE_PENDING</code> 사용. 명시적 <code>XNACK</code>은 fail fast</td>
+</tr>
+<tr>
+<td data-label="Edge case">Redis version 확인 불가</td>
+<td data-label="영향 모듈">Consumer/producer module</td>
+<td data-label="목표 동작">설정 feature가 version detection을 요구하면 startup fail</td>
+</tr>
+<tr>
+<td data-label="Edge case">Cluster redirect가 unreachable address 반환</td>
+<td data-label="영향 모듈">Coordinator, consumer, producer</td>
+<td data-label="목표 동작">configured node mapping 사용 또는 clear connection error</td>
+</tr>
+<tr>
+<td data-label="Edge case">ACL에 stream command 권한 없음</td>
+<td data-label="영향 모듈">Consumer 또는 producer</td>
+<td data-label="목표 동작">startup 또는 첫 command에서 명확히 실패</td>
+</tr>
+<tr>
+<td data-label="Edge case">ACL에 metadata command 권한 없음</td>
+<td data-label="영향 모듈">Coordinator</td>
+<td data-label="목표 동작">health degraded, mutation 거절</td>
+</tr>
+<tr>
+<td data-label="Edge case">standalone/cluster mode mismatch</td>
+<td data-label="영향 모듈">모든 Redis client</td>
+<td data-label="목표 동작">clear mode mismatch로 startup fail</td>
+</tr>
+</tbody>
+</table>
+<h2 id="new-edge-case-design-checklist">New Edge Case Design Checklist</h2>
+<p>새 coordinator 기능은 구현 전에 아래 질문에 답해야 한다.</p>
+<ol>
+<li>Redis-recorded state machine state는 무엇인가?</li>
+<li>Response 전에 어떤 metadata field를 Redis에 기록하는가?</li>
+<li>Response가 손실되어도 반복 가능한가?</li>
+<li>Coordinator unavailable 동안 client는 무엇을 하는가?</li>
+<li>어떤 local lease/cache가 client 동작을 제한하는가?</li>
+<li>Lease 만료 후 어떤 동작을 하는가?</li>
+<li>어떤 epoch, revision, version이 stale report를 거절하는가?</li>
+<li>새 coordinator가 Redis metadata와 client retry만으로 state를 재구성할 수 있는가?</li>
+<li>Metadata key가 사라지면 어떻게 하는가?</li>
+<li>Consumer가 Redis 현재 값보다 높은 <code>metadataVersion</code>을 보고하면 어떻게 하는가?</li>
+<li>어떤 client request가 client가 관측한 최고 version을 전달하는가?</li>
+<li>어떤 metric과 runbook이 이 실패를 드러내는가?</li>
+</ol>
+<h2 id="test-matrix">Test Matrix</h2>
+<p>구현은 세 수준의 시나리오 테스트를 가져야 한다.</p>
+<table class="responsive-table">
+<thead>
+<tr>
+<th>Level</th>
+<th>목적</th>
+<th>예시</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Level">Unit</td>
+<td data-label="목적">단일 state transition 검증</td>
+<td data-label="예시">target assignment 계산, ownership validation, stale epoch rejection</td>
+</tr>
+<tr>
+<td data-label="Level">Flow</td>
+<td data-label="목적">하나의 Redis-recorded workflow 검증</td>
+<td data-label="예시">DRAIN 전달 후 coordinator unavailable, revoke ack lost, drain 중 member expiration</td>
+</tr>
+<tr>
+<td data-label="Level">Integration</td>
+<td data-label="목적">Redis와 모듈 동작 검증</td>
+<td data-label="예시">Metadata key deletion, revision conflict, rolling update handoff, unsupported Redis command</td>
+</tr>
+</tbody>
+</table>
+<p>우선순위 테스트:</p>
+<ul>
+<li>DRAIN response state가 Redis에 기록됐고 response가 손실되면 다음 heartbeat가 같은 DRAIN을 반환한다.</li>
+<li>DRAIN 전달 후 coordinator unavailable이면 consumer가 shard를 revoking 상태로 유지하고 read를 재개하지 않는다.</li>
+<li><code>REVOKED</code> ack가 Redis에 기록됐지만 response가 손실되면 다음 heartbeat에서 새 owner가 assignment를 받는다.</li>
+<li>Previous owner가 draining 중 expire되면 expiration 이후 새 owner가 assignment를 받는다.</li>
+<li>Metadata key가 삭제되면 coordinator는 fail closed하고 heartbeat로 재구성하지 않는다.</li>
+<li>Client가 metadata version <code>N</code>을 받은 뒤 Redis가 <code>N-1</code>로 되돌아가면 다음 heartbeat가 <code>SYNC_METADATA</code>를 받는다.</li>
+<li><code>SYNC_METADATA</code> response가 유실되면 다음 high-version heartbeat가 같은 <code>SYNC_METADATA</code>를 다시 받는다.</li>
+<li>Consumer가 <code>SYNC_METADATA</code>를 받고 제거된 shard를 drain하기 시작하면, <code>REVOKED</code> 보고와 다른 owner blocking 해소 전까지 <code>REVOKE_PENDING</code>을 받는다.</li>
+<li>Metadata correction round 중 여러 consumer가 stale revoke를 동시에 보고해도 coordinator는 현재 Redis target/current ownership과 일치하는 revoke만 반영한다.</li>
+<li>Coordinator outage 중 producer cache가 만료되면 publish fail closed한다.</li>
+<li>Old coordinator crash 후 new coordinator가 Redis-recorded metadata에서 rebalance를 이어간다.</li>
+</ul>
+<h2 id="monitoring-runbook">Monitoring과 Runbook 요구사항</h2>
+<p>필요 signal:</p>
+<ul>
+<li>coordinator terminating state</li>
+<li>Redis mutex latency와 revision conflict count</li>
+<li>heartbeat success/failure by status</li>
+<li>member heartbeat age</li>
+<li>metadata version regression count</li>
+<li>client가 보고한 max metadata version이 coordinator에 저장된 version보다 높은 횟수</li>
+<li>consumer assignment lease remaining time</li>
+<li>member revoking shard count</li>
+<li>producer routing cache age와 refresh failure</li>
+<li>metadata revision conflict count</li>
+<li>metadata schema/layout error count</li>
+<li>Redis command compatibility failure count</li>
+</ul>
+<p>Runbook은 다음 상황을 다뤄야 한다.</p>
+<ul>
+<li>DRAIN은 발급됐지만 revoke ack가 진행되지 않음</li>
+<li>heartbeat 중 coordinator unreachable</li>
+<li>rolling update handoff stall</li>
+<li>member lease expiration과 rejoin</li>
+<li>Redis metadata key loss 또는 corruption</li>
+<li>unsupported Redis command configuration</li>
+<li>coordinator outage 중 producer routing cache expiry</li>
+</ul>
+      </main>
+    </div>
+  </body>
+</html>

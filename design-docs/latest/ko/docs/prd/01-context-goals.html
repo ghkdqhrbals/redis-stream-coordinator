@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">구현 상태</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
@@ -367,10 +368,10 @@
 </ul>
 <h2 id="assumptions">Assumptions</h2>
 <ul>
-<li>Redis는 stream data plane과 coordinator metadata store로 사용한다.</li>
-<li>coordinator metadata key는 Redis persistence 또는 운영 백업 정책으로 보호한다.</li>
+<li>Redis는 stream data plane으로 사용한다.</li>
+<li>Coordinator metadata store는 Redis-backed 단일 metadata key이다.</li>
 <li>각 member는 runtime 시작 시 UUID <code>memberId</code>를 직접 생성한다.</li>
-<li>producer와 consumer는 metadata store의 active stream version을 source of truth로 사용한다.</li>
+<li>producer와 consumer는 coordinator가 Redis metadata key 기준으로 내려준 active stream version을 source of truth로 사용한다.</li>
 <li>producer retry, network failure, consumer pending recovery, shard migration은 중복 message 또는 중복 처리 시도를 만들 수 있다.</li>
 <li>동일 partition key는 같은 routing metadata 안에서만 같은 shard로 route된다. shard count나 active stream version이 바뀌면 다른 shard로 route될 수 있다.</li>
 <li>한 <code>streamPrefix + consumerGroup</code>에는 동시에 하나의 active migration만 허용한다.</li>

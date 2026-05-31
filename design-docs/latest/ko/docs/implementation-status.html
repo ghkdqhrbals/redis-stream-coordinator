@@ -325,6 +325,7 @@
           <a href="prd/09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="implementation-status.html" aria-current="page">구현 상태</a>
           <a href="operations-runbook.html">운영 Runbook</a>
           <a href="testing.html">테스트 가이드</a>
@@ -395,14 +396,25 @@
 <li>[x] Host-to-Docker Redis Cluster redirect를 위한 Lettuce node address mapping</li>
 <li>[x] Memory state store</li>
 <li>[x] Redis state store</li>
-<li>[x] Redis projection keys for members, target assignment, current assignment, migrations, active migration, revision</li>
+<li>[x] Redis group별 단일 metadata hash key</li>
 <li>[x] Redis state mutex key</li>
 <li>[x] Redis store revision compare-and-set</li>
 <li>[x] Redis metadata <code>schemaVersion</code> guard</li>
-<li>[x] Lua aggregate/projection update</li>
+<li>[x] Redis group별 단일 metadata hash key</li>
+<li>[x] Lua metadata hash update</li>
 <li>[x] Redis Cluster hash-slot-safe coordinator keys</li>
 <li>[x] Optional Redis Stream shard and consumer-group provisioning</li>
 <li>[x] Coordinator Redis command template</li>
+</ul>
+<h3 id="redis-metadata-correction">Redis Metadata Correction</h3>
+<ul>
+<li>[x] <code>{streamPrefix, consumerGroup}</code>당 하나의 canonical Redis metadata key 사용</li>
+<li>[x] Consumer heartbeat가 Redis metadata보다 높은 <code>metadataVersion</code>을 보고하면 coordinator가 감지</li>
+<li>[x] Coordinator가 <code>SYNC_METADATA</code> 응답으로 consumer의 local metadata view를 현재 Redis metadata로 수정 요청</li>
+<li>[x] <code>SYNC_METADATA</code>는 retry-safe drain-only 응답이며, 신규 shard read는 이후 <code>OK</code>까지 차단</li>
+<li>[x] <code>REVOKE_PENDING</code>으로 metadata correction 완료 전 revoke-before-assign 대기 상태 분리</li>
+<li>[x] Live member들이 target metadata version으로 heartbeat할 때까지 correction round 유지</li>
+<li>[x] 폐기된 상위 metadata view에서 온 stale revoke report 무시</li>
 </ul>
 <h3 id="security-audit-observability">Security, Audit, Observability</h3>
 <ul>
@@ -458,6 +470,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
 <li>[ ] 첫 public Docker image release</li>
 <li>[ ] 외부 배포 예제와 release automation hardening</li>
 <li>[ ] Redis version compatibility guide 보강</li>
+<li>[ ] 오래된 metadata JSON과 client coordination version compatibility fixture 보강</li>
 <li>[ ] 운영 dashboard/alert 예제 보강</li>
 </ol>
       </main>

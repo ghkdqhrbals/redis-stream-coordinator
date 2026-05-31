@@ -325,6 +325,7 @@
           <a href="prd/09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="implementation-status.html" aria-current="page">Implementation Status</a>
           <a href="operations-runbook.html">Operations Runbook</a>
           <a href="testing.html">Testing Guide</a>
@@ -384,7 +385,7 @@
 <tr>
 <td data-label="Area">Redis state store</td>
 <td data-label="Status">Done</td>
-<td data-label="Notes">Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua aggregate/projection updates.</td>
+<td data-label="Notes">Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua metadata-hash updates.</td>
 </tr>
 <tr>
 <td data-label="Area">Redis Stream shard provisioning</td>
@@ -490,16 +491,26 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 <li>[x] <code>CoordinatorStateStore</code> abstraction.</li>
 <li>[x] In-memory state store.</li>
 <li>[x] Redis state store for aggregate group metadata.</li>
-<li>[x] Redis projection keys for members, target assignment, current assignment, migrations, active migration, and revision.</li>
+<li>[x] Redis single metadata hash key per group.</li>
 <li>[x] Redis state mutex key for request-level coordinator critical-section serialization.</li>
 <li>[x] Redis store revision compare-and-set for stale write detection.</li>
 <li>[x] Redis metadata <code>schemaVersion</code> guard for persisted group aggregate reads and writes.</li>
-<li>[x] Lua aggregate/projection updates to avoid reader-visible partial writes.</li>
+<li>[x] Lua metadata hash updates to avoid stale writer overwrites.</li>
 <li>[x] Redis Cluster hash-slot-safe coordinator keys.</li>
 <li>[x] Redis Stream shard key helper and hash-slot distribution helper.</li>
 <li>[x] Optional Redis Stream shard and consumer-group provisioning.</li>
 <li>[x] Redis Stream provisioning idempotent retry coverage after partial Redis failure.</li>
 <li>[x] Centralized coordinator Redis command template for state, mutex, audit, health, and stream provisioning commands.</li>
+</ul>
+<h3 id="redis-metadata-correction">Redis Metadata Correction</h3>
+<ul>
+<li>[x] One canonical Redis metadata key per <code>{streamPrefix, consumerGroup}</code>.</li>
+<li>[x] Coordinator detects heartbeats that report a higher local <code>metadataVersion</code> than the Redis metadata key.</li>
+<li>[x] Coordinator returns <code>SYNC_METADATA</code> so consumers discard the higher local view and use the current coordinator metadata.</li>
+<li>[x] <code>SYNC_METADATA</code> is retry-safe and drain-only; new shard reads are blocked until a later <code>OK</code>.</li>
+<li>[x] <code>REVOKE_PENDING</code> separates corrected metadata from unfinished revoke-before-assign handoff.</li>
+<li>[x] Metadata correction remains active until live members heartbeat with the target metadata version.</li>
+<li>[x] Stale revoke reports from discarded higher metadata views are ignored during correction.</li>
 </ul>
 <h3 id="security-audit-and-observability">Security, Audit, And Observability</h3>
 <ul>
@@ -559,7 +570,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 <li>[x] Optional <code>CoordinatorShardProgressProvider</code> for coordinator-reported shard progress.</li>
 <li>[x] Built-in Redis Stream polling lifecycle reports in-flight handler capacity.</li>
 <li>[x] Built-in Redis Stream polling lifecycle reports last delivered and last acked Redis Stream ids.</li>
-<li>[x] Consumer-side heartbeat protocol validation.</li>
+<li>[x] Consumer-side coordination version validation.</li>
 <li>[x] Spring Boot auto-configuration.</li>
 <li>[x] Opt-in Redis Stream polling adapter.</li>
 <li>[x] Handler-success-only <code>XACK</code> behavior.</li>
@@ -605,7 +616,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 <li>Rebalance timeout fencing.</li>
 <li>Stale ownership fencing for premature pending ownership and foreign active-owner shard reports.</li>
 <li>Scale migration, producer routing refresh, rollback, and migration drain completion.</li>
-<li>Redis state projection and stale snapshot rejection.</li>
+<li>Redis single-key metadata store and stale snapshot rejection.</li>
 <li>Stream shard key validation and Redis Cluster slot distribution.</li>
 <li>Stream provisioning success, idempotent retry, and failure ordering.</li>
 <li>ACL enforcement and admin audit events.</li>
@@ -703,6 +714,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 <p>Priority order:</p>
 <ol>
 <li>[ ] Cut the first public Docker image release through the manual GHCR workflow.</li>
+<li>[ ] Add a compatibility fixture suite for old metadata JSON and old client coordination versions.</li>
 </ol>
 <p>Still intentionally out of coordinator scope:</p>
 <ul>

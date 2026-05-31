@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
@@ -335,40 +336,41 @@
 <h2 id="scope">Scope</h2>
 <p>Redis Stream Coordinator is a rebalance control plane. It manages group metadata, member liveness, target/current assignment, routing metadata, resharding state, audit records, and monitoring projections.</p>
 <p>It does not own data-plane processing state such as handler retry counters, business idempotency records, local caches, or application DLQ state.</p>
-<h2 id="redis-key-layout">Redis Key Layout</h2>
-<p>Coordinator-owned metadata uses Redis Cluster-safe hash tags so the aggregate keys for one group can live in the same hash slot.</p>
-<p>Example key pattern:</p>
+<h2 id="redis-metadata-store">Redis Metadata Store</h2>
+<p>The Redis metadata store keeps one Redis hash key per <code>{streamPrefix, consumerGroup}</code>:</p>
+<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:metadata
+</code></pre>
+<p>Hash fields:</p>
 <table class="responsive-table">
 <thead>
 <tr>
-<th>Key</th>
+<th>Field</th>
 <th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td data-label="Key"><code>redis-stream:coord:{group}:state</code></td>
-<td data-label="Purpose">group aggregate metadata</td>
+<td data-label="Field"><code>aggregate</code></td>
+<td data-label="Purpose">Canonical <code>GroupMetadata</code> JSON aggregate</td>
 </tr>
 <tr>
-<td data-label="Key"><code>redis-stream:coord:{group}:projection</code></td>
-<td data-label="Purpose">monitoring projection</td>
+<td data-label="Field"><code>revision</code></td>
+<td data-label="Purpose"><code>storeRevision</code> compare-and-set guard</td>
 </tr>
 <tr>
-<td data-label="Key"><code>redis-stream:coord:{group}:audit</code></td>
-<td data-label="Purpose">admin mutation audit events</td>
+<td data-label="Field"><code>schemaVersion</code></td>
+<td data-label="Purpose">JSON aggregate schema version</td>
 </tr>
 <tr>
-<td data-label="Key"><code>redis-stream:coord:{group}:mutex</code></td>
-<td data-label="Purpose">state mutex</td>
+<td data-label="Field"><code>layoutVersion</code></td>
+<td data-label="Purpose">Redis metadata layout version</td>
 </tr>
 <tr>
-<td data-label="Key"><code>redis-stream:coord:groups</code></td>
-<td data-label="Purpose">global group index</td>
+<td data-label="Field"><code>updatedAt</code></td>
+<td data-label="Purpose">Last metadata write timestamp</td>
 </tr>
 </tbody>
 </table>
-<p><code>redis-stream:coord:groups</code> is an index used to discover configured groups. Group-scoped metadata remains under hash-tagged group keys.</p>
 <h2 id="configuration-boundary">Configuration Boundary</h2>
 <p>Coordinator YAML should contain infrastructure and operational defaults only:</p>
 <ul>
@@ -417,9 +419,9 @@
       interval: 1s
     state-mutex:
       enabled: true
-      lease-ttl: 5s
-      wait-timeout: 2s
-      retry-interval: 100ms
+      ttl-ms: 30000
+      acquire-timeout-ms: 5000
+      retry-interval-ms: 100
   defaults:
     initial-shard-count: 4
     max-concurrency: 4
@@ -439,14 +441,14 @@
 </ul>
 <p>Critical section order:</p>
 <pre><code class="language-text">acquire mutex
-  -&gt; read latest Redis state
+  -&gt; read latest Redis metadata hash
   -&gt; validate/process/reconcile
   -&gt; save with storeRevision compare-and-set
   -&gt; release mutex
 </code></pre>
-<p>The mutex is not intended to implement active-active concurrent write semantics. It is intended to make open source deployments safer when multiple coordinator pods accidentally or intentionally run against the same Redis metadata store.</p>
+<p>The mutex serializes short coordinator critical sections. Store revision checks remain as the final stale-write guard.</p>
 <h2 id="store-revision">Store Revision</h2>
-<p>Every Redis aggregate update carries an expected <code>storeRevision</code>.</p>
+<p>Every metadata aggregate update carries an expected <code>storeRevision</code>.</p>
 <p>If the expected revision does not match the current revision, the write fails and the coordinator reloads and retries or returns a conflict depending on the operation.</p>
 <p>This prevents stale snapshots from overwriting fresh heartbeat, assignment, or resharding updates.</p>
 <h2 id="acl">ACL</h2>
@@ -526,7 +528,8 @@
 <li>producer routing requests by group,</li>
 <li>stale producer routing refreshes,</li>
 <li>store revision conflicts,</li>
-<li>mutex acquire latency and timeout count,</li>
+<li>Redis metadata write latency,</li>
+<li>mutex acquire latency and timeout count for Redis-backed development mode,</li>
 <li>admin mutation count and failure count.</li>
 </ul>
 <h2 id="alerts">Alerts</h2>
@@ -537,8 +540,8 @@
 <li>group epoch changed but assignment epoch does not progress,</li>
 <li>duplicate owner invariant violation,</li>
 <li>active resharding remains in progress too long,</li>
-<li>Redis state mutex acquire failures,</li>
-<li>Redis state store revision conflict spike,</li>
+<li>Redis metadata write failures,</li>
+<li>store revision conflict spike,</li>
 <li>monitoring projection refresh failures,</li>
 <li>producer stale routing refresh spike.</li>
 </ul>

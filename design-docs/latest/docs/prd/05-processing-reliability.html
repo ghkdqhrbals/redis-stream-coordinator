@@ -325,6 +325,7 @@
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
@@ -392,6 +393,7 @@
 <li>remove the shard from local active workers.</li>
 </ol>
 <p>The coordinator accepts the revoke acknowledgement and can assign the shard to the next target member.</p>
+<p>During metadata correction, <code>SYNC_METADATA</code> and <code>REVOKE_PENDING</code> are drain-only responses. A member may keep shards it already owns and that remain in <code>assignment.assignedShards</code>, but it must not start shards that appear for the first time until a later <code>OK</code> response.</p>
 <h2 id="fencing-flow">Fencing Flow</h2>
 <p>If the coordinator returns a fencing status or rejects stale ownership:</p>
 <ol>
