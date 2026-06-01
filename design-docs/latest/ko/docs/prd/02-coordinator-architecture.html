@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,9 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
-          <a href="../implementation-status.html">구현 상태</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
+          <a href="../../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
@@ -486,7 +508,7 @@ steps:
 }
 </code></pre>
 <h3 id="heartbeat-request-fields">Heartbeat Request Fields</h3>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -546,9 +568,9 @@ steps:
 <td data-label="Role">consumer가 coordinator metrics용으로 보고하는 Redis Stream progress이다. coordinator가 허용한 owned/revoking shard만 저장하며, 임의 shard progress는 fencing 대상이다.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="heartbeat-response-fields">Heartbeat Response Fields</h3>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -623,7 +645,7 @@ steps:
 <td data-label="Role">assignment와 함께 적용할 metadata version이다.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="heartbeat-reconciliation-rules">Heartbeat Reconciliation Rules</h3>
 <p>KIP-848처럼 member는 response의 assignment와 자신의 local owned shard를 비교해서 수렴한다.</p>
 <ul>
@@ -644,7 +666,7 @@ steps:
 </ul>
 <h3 id="heartbeat-enums">Heartbeat Enums</h3>
 <p><code>MemberLifecycleState</code>는 coordinator 내부 상태이다. heartbeat request의 source of truth는 <code>memberEpoch</code>이다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Value</th>
@@ -677,9 +699,9 @@ steps:
 <td data-label="Role">coordinator가 이 member epoch을 더 이상 유효하지 않게 만든 상태. member는 read/ack를 중단해야 한다.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><code>ShardAssignmentState</code>:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Value</th>
@@ -704,9 +726,9 @@ steps:
 <td data-label="Role">local in-flight가 0이고 member가 더 이상 소유하지 않는 shard. 다음 heartbeat에서 ack로 보고한다.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p><code>HeartbeatStatus</code>:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Value</th>
@@ -751,7 +773,7 @@ steps:
 <td data-label="Role">group 접근 권한이 없다.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="member-scale-out-sequence">Member Scale-Out Sequence</h2>
 <p>새 member가 추가되면 coordinator는 sticky partition 기준으로 필요한 shard만 이동시킨다. 기존 owner가 revoke ack를 보내기 전까지 새 member는 해당 shard를 assign받지 않는다.</p>
 <pre><code class="language-mermaid">sequenceDiagram

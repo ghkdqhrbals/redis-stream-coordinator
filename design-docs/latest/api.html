@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Redis Stream Coordinator API Reference</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #172026;
+        background: #ffffff;
+      }
+      .api-topbar {
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 10px clamp(14px, 2.2vw, 24px);
+        border-bottom: 1px solid #d6dde3;
+        background: #f7f9fb;
+      }
+      .api-title {
+        font-size: 1rem;
+        font-weight: 700;
+      }
+      .api-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        white-space: nowrap;
+      }
+      .api-actions a,
+      .language-switch a {
+        color: #1428a0;
+        text-decoration: none;
+      }
+      .language-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #5f6c75;
+        font-size: 0.86rem;
+      }
+      .language-switch a[aria-current="true"] {
+        color: #172026;
+        font-weight: 700;
+      }
+      #api-reference {
+        min-height: calc(100vh - 58px);
+      }
+      @media (max-width: 640px) {
+        .api-topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .api-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
+      }
+    </style>
+
+    <script>
+      (() => {
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "ko") {
+          const target = new URL("ko/api.html", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header class="api-topbar">
+      <div class="api-title">Redis Stream Coordinator API Reference</div>
+      <div class="api-actions">
+        <a href="docs/PRD.html">Design Docs</a>
+        <div class="language-switch" aria-label="Language switch"><a href="api.html" aria-current="true">English</a><span aria-hidden="true">/</span><a href="ko/api.html">한국어</a></div>
+      </div>
+    </header>
+    <div id="api-reference"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    <script>
+      Scalar.createApiReference("#api-reference", {
+        url: "openapi/coordinator.v1.yaml",
+        layout: "modern",
+        theme: "default",
+        hideModels: false,
+        hideTestRequestButton: false,
+        showOperationId: true,
+        defaultHttpClient: {
+          target: "shell",
+          client: "curl"
+        }
+      });
+    </script>
+  </body>
+</html>

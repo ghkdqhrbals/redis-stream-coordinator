@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,9 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
-          <a href="../implementation-status.html">구현 상태</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
+          <a href="../../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
@@ -359,7 +381,7 @@ Stream version 값은 정수이며 prefix 문자열을 붙이지 않는다.</p>
 </ul>
 <h2 id="group-state">Group State</h2>
 <p><code>state</code>는 group이 target assignment에 어느 정도 수렴했는지를 나타낸다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>State</th>
@@ -384,7 +406,7 @@ Stream version 값은 정수이며 prefix 문자열을 붙이지 않는다.</p>
 <td data-label="Meaning">모든 active member의 current assignment가 target assignment와 같은 epoch으로 수렴했다.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Stream version migration의 <code>PREPARING</code>, <code>ACTIVE</code>, <code>DRAINING</code>, <code>DEPRECATED</code>는 group state가 아니라 stream version state이다.</p>
 <p>State transition:</p>
 <pre><code class="language-text">EMPTY
@@ -404,7 +426,7 @@ RECONCILING
 </code></pre>
 <h2 id="epoch-model">Epoch Model</h2>
 <p><code>epoch</code>은 시간이 아니라 stale actor를 막기 위한 세대 번호이다. coordinator는 epoch을 단조 증가시키고, member는 자신이 들고 있는 epoch이 최신인지 검증한 뒤 assignment를 적용한다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Epoch</th>
@@ -433,7 +455,7 @@ RECONCILING
 <td data-label="Used For">stale member heartbeat/read/ack 차단</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Invariant:</p>
 <ul>
 <li><code>assignmentEpoch</code>은 target assignment를 계산한 <code>groupEpoch</code>과 같아야 한다.</li>

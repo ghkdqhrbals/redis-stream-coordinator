@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,9 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html" aria-current="page">Failure Handling and Edge Case Design</a>
-          <a href="../implementation-status.html">구현 상태</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
+          <a href="../../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
@@ -382,7 +404,7 @@
 </code></pre>
 <h3 id="client-lease">Client Lease</h3>
 <p>Consumer와 producer는 bounded local lease 안에서만 coordinator 없이 동작한다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Client</th>
@@ -405,7 +427,7 @@
 <td data-label="만료 후">routing refresh 성공 전까지 publish fail</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Consumer assignment lease는 coordinator의 member lease TTL보다 짧거나 같아야 한다. 그래야 coordinator가 member를 expired 처리하고 shard를 재할당한 뒤에도 기존 consumer가 계속 read하는 split ownership을 막을 수 있다.</p>
 <h3 id="idempotent-retry">Idempotent Retry</h3>
 <p>모든 coordinator interaction은 retry를 허용해야 한다.</p>
@@ -417,7 +439,7 @@
 </ul>
 <h2 id="generic-failure-checkpoints">Generic Failure Checkpoints</h2>
 <p>모든 workflow는 아래 checkpoint 기준으로 분석한다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Checkpoint</th>
@@ -467,7 +489,7 @@
 <td data-label="목표 동작">fail closed. stale client/projection에서 source-of-truth 재구성 금지</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>이 checkpoint model이 새로운 엣지케이스를 처리하는 기본 도구이다. 새 기능은 Redis-recorded handoff point, client retry behavior, lease expiry behavior, repair path를 정의해야 한다.</p>
 <p>Before-write failure는 반드시 어떤 write boundary 전인지 명시해야 한다. "metadata write 전"은 하나의 상태가 아니다. 해당 workflow의 다음 state transition을 Redis에 기록하기 전에 실패했다는 뜻이다.</p>
 <h2 id="rebalance-drain-failure-scenario">Rebalance Drain Failure Scenario</h2>
@@ -507,7 +529,7 @@ coordinator assigns shard S to the new target only after release is accepted
 </code></pre>
 <h3 id="drain-response-coordinator-down">DRAIN Response 이후 Coordinator Down</h3>
 <p>Member <code>A</code>가 DRAIN instruction을 받은 뒤 coordinator가 down되면 다음 정책을 따른다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Actor</th>
@@ -532,9 +554,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="목표 동작">group metadata key에 target/current assignment와 assignment epoch를 유지한다</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>세부 failure point:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Failure point</th>
@@ -571,9 +593,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Expected outcome">A는 <code>memberEpoch=0</code>으로 rejoin한다. Coordinator는 Redis에 기록된 target/current state 기준으로 rejoin을 검증하고, 필요하면 fencing 또는 full reconciliation을 요구한다</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Write boundary별 Redis-recorded state:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>도달하지 못한 boundary</th>
@@ -608,7 +630,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="New coordinator behavior">다음 heartbeat에서 B에게 <code>S</code> assign</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Consumer rule: shard가 local revoking state에 들어가면 heartbeat가 일시적으로 실패한다는 이유만으로 read를 재개하면 안 된다. 이후 coordinator가 다시 assigned로 내려줄 때만 read 가능하다.</p>
 <p>Coordinator rule: 새 owner에게 pending shard를 assigned로 바꾸려면 아래 중 하나가 먼저 성립해야 한다.</p>
 <ul>
@@ -624,7 +646,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <pre><code class="language-text">1 coordinator -&gt; 0 reachable coordinators -&gt; 1 coordinator
 </code></pre>
 <p>Coordinator는 Kubernetes readiness, service endpoint propagation, external load balancer를 직접 제어하지 않는다. Coordinator가 소유하는 것은 process-local terminating state와 Redis critical section이다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -669,9 +691,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="목표 동작">다음 request 또는 tick이 Redis-recorded metadata 기준으로 재계산</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>새 coordinator는 old stack frame을 이어받지 않는다. Redis-recorded metadata에서 이어받는다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Workflow</th>
@@ -711,9 +733,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="New coordinator continuation">최신 recorded routing metadata 반환</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="consumer-join-rejoin-leave-expiration">Consumer Join, Rejoin, Leave, Expiration</h2>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -766,7 +788,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Consumer 동작">fenced되면 read 중단, application은 duplicate attempt 처리</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="producer-routing-during-failures">Producer Routing During Failures</h2>
 <p>Producer는 heartbeat를 보내지 않는다. Producer는 routing metadata refresh만 수행한다.</p>
 <p>Producer에는 heartbeat channel이 없기 때문에 shard count 변경과 <code>activeWriteVersion</code> 변경은 routing metadata refresh로만 전파된다. 따라서 producer 모듈은 publish가 정상적으로 성공하고 있더라도 routing metadata를 주기적으로 refresh해야 한다. Refresh interval과 routing cache TTL은 coordinator가 shard를 추가하거나 새 write version을 activate한 뒤 producer가 old shard layout을 계속 사용할 수 있는 최대 시간을 결정한다.</p>
@@ -778,7 +800,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <li>Refresh가 실패했지만 cache lease가 아직 유효하면 기존 cache를 유지한다.</li>
 <li>Cache lease가 만료된 뒤 refresh가 실패하면 publish를 실패시킨다.</li>
 </ul>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -823,7 +845,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Producer 동작">중복 민감 workload는 scale 전 producer quiescence 필요</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="redis-metadata-volatility-and-corruption">Redis Metadata Volatility and Corruption</h2>
 <p>Coordinator metadata는 group별 단일 Redis hash key에 저장한다.</p>
 <pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:metadata
@@ -840,7 +862,7 @@ updatedAt      -&gt; last successful metadata write time
 <pre><code class="language-text">redis-stream:coord:groups
 </code></pre>
 <p>목표 동작:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -885,7 +907,7 @@ updatedAt      -&gt; last successful metadata write time
 <td data-label="목표 동작">fail fast, overwrite 금지</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>운영 제어:</p>
 <ul>
 <li>Metadata key에는 TTL을 설정하지 않는다.</li>
@@ -896,7 +918,7 @@ updatedAt      -&gt; last successful metadata write time
 <li>Client가 관측한 metadata version이 coordinator에 저장된 version보다 높으면 반드시 alert해야 한다.</li>
 </ul>
 <h2 id="redis-version-command-set">미지원 Redis Version 또는 Command Set</h2>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -941,7 +963,7 @@ updatedAt      -&gt; last successful metadata write time
 <td data-label="목표 동작">clear mode mismatch로 startup fail</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="new-edge-case-design-checklist">New Edge Case Design Checklist</h2>
 <p>새 coordinator 기능은 구현 전에 아래 질문에 답해야 한다.</p>
 <ol>
@@ -960,7 +982,7 @@ updatedAt      -&gt; last successful metadata write time
 </ol>
 <h2 id="test-matrix">Test Matrix</h2>
 <p>구현은 세 수준의 시나리오 테스트를 가져야 한다.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Level</th>
@@ -985,7 +1007,7 @@ updatedAt      -&gt; last successful metadata write time
 <td data-label="예시">Metadata key deletion, revision conflict, rolling update handoff, unsupported Redis command</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>우선순위 테스트:</p>
 <ul>
 <li>DRAIN response state가 Redis에 기록됐고 response가 손실되면 다음 heartbeat가 같은 DRAIN을 반환한다.</li>

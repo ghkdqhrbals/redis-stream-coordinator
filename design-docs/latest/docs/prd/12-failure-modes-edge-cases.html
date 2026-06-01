@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,9 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html" aria-current="page">Failure Handling and Edge Case Design</a>
-          <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
+          <a href="../../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
@@ -379,7 +401,7 @@
 </code></pre>
 <h3 id="client-leases">Client Leases</h3>
 <p>Consumers and producers keep operating only within bounded local leases:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Client</th>
@@ -402,7 +424,7 @@
 <td data-label="After expiry">Fail publish until routing refresh succeeds</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>The consumer assignment lease must be shorter than or equal to the coordinator member lease TTL. This prevents a consumer from reading after the coordinator has expired it and reassigned its shards.</p>
 <h3 id="idempotent-retry">Idempotent Retry</h3>
 <p>All coordinator interactions must tolerate retries:</p>
@@ -414,7 +436,7 @@
 </ul>
 <h2 id="generic-failure-checkpoints">Generic Failure Checkpoints</h2>
 <p>Every workflow should be analyzed at these checkpoints.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Checkpoint</th>
@@ -464,7 +486,7 @@
 <td data-label="Required behavior">Fail closed. Do not reconstruct source-of-truth from stale clients or projections</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>This checkpoint model is the main tool for handling new edge cases. New features must define their Redis-recorded handoff point, client retry behavior, lease expiry behavior, and repair path.</p>
 <p>Before-write failure must always name the write boundary. "Before metadata write" is not one state. It means the coordinator failed before recording the next state transition for that workflow.</p>
 <h2 id="rebalance-drain-failure-scenario">Rebalance Drain Failure Scenario</h2>
@@ -504,7 +526,7 @@ coordinator assigns shard S to the new target only after release is accepted
 </code></pre>
 <h3 id="coordinator-down-after-drain-response">Coordinator Down After DRAIN Response</h3>
 <p>If the coordinator goes down after member <code>A</code> receives the DRAIN instruction:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Actor</th>
@@ -529,9 +551,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Required behavior">Keep target/current assignment and assignment epoch in the group metadata key</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Failure subcases:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Failure point</th>
@@ -568,9 +590,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Expected outcome">A rejoins with <code>memberEpoch=0</code>. Coordinator validates the rejoin against Redis-recorded target/current state and either keeps it fenced or requires full reconciliation</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Recorded state by write boundary:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Boundary not reached</th>
@@ -605,7 +627,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="New coordinator behavior">Assign <code>S</code> to B on the next heartbeat</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Consumer rule: once a shard enters local revoking state, the consumer must not resume reads for that shard just because heartbeat is temporarily failing. Only a later coordinator assignment can make the shard readable again.</p>
 <p>Coordinator rule: a shard must not move from pending to assigned for the new owner until one of these is true:</p>
 <ul>
@@ -621,7 +643,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <pre><code class="language-text">1 coordinator -&gt; 0 reachable coordinators -&gt; 1 coordinator
 </code></pre>
 <p>The coordinator cannot control Kubernetes readiness, service endpoint propagation, or external load balancers. It only owns process-local terminating state and Redis critical sections.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -666,9 +688,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Required behavior">Next request or tick recomputes from Redis-recorded metadata</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>The new coordinator does not resume old stack frames. It resumes from Redis-recorded metadata:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Workflow</th>
@@ -708,9 +730,9 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="New coordinator continuation">Return latest recorded routing metadata</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="consumer-join-rejoin-leave-and-expiration">Consumer Join, Rejoin, Leave, and Expiration</h2>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -763,7 +785,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Consumer behavior">Stop reads when fenced; application handles duplicate attempts</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="producer-routing-during-failures">Producer Routing During Failures</h2>
 <p>Producer does not heartbeat. It uses routing metadata refresh.</p>
 <p>Because producer has no heartbeat channel, shard-count changes and <code>activeWriteVersion</code> changes are propagated only through routing metadata refresh. The producer module must therefore refresh routing metadata periodically even if publishes are succeeding. The refresh interval and routing cache TTL define the maximum time a producer can keep using an older shard layout after the coordinator adds shards or activates a new write version.</p>
@@ -775,7 +797,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <li>Keep the current cache when refresh fails and the cache lease is still valid.</li>
 <li>Fail publish when refresh fails after the cache lease has expired.</li>
 </ul>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -820,7 +842,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Producer behavior">Duplicate-sensitive workloads must quiesce producers before scale</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="redis-metadata-volatility-and-corruption">Redis Metadata Volatility and Corruption</h2>
 <p>Coordinator metadata is stored in one Redis hash key per group:</p>
 <pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:metadata
@@ -833,7 +855,7 @@ layoutVersion  -&gt; Redis metadata layout version
 updatedAt      -&gt; last successful metadata write time
 </code></pre>
 <p>Required behavior:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -873,7 +895,7 @@ updatedAt      -&gt; last successful metadata write time
 <td data-label="Required behavior">Reload and retry or return a retryable conflict</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Operational controls:</p>
 <ul>
 <li>Metadata keys must not have TTL.</li>
@@ -885,7 +907,7 @@ updatedAt      -&gt; last successful metadata write time
 <pre><code class="language-text">redis-stream:coord:groups
 </code></pre>
 <p>Additional index behavior:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -905,9 +927,9 @@ updatedAt      -&gt; last successful metadata write time
 <td data-label="Required behavior">Skip stale index entry and optionally remove it</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="unsupported-redis-version-or-command-set">Unsupported Redis Version or Command Set</h2>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Edge case</th>
@@ -952,7 +974,7 @@ updatedAt      -&gt; last successful metadata write time
 <td data-label="Required behavior">Fail startup with clear mode mismatch</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="design-checklist-for-new-edge-cases">Design Checklist for New Edge Cases</h2>
 <p>Every new coordinator feature must answer these questions before implementation:</p>
 <ol>
@@ -971,7 +993,7 @@ updatedAt      -&gt; last successful metadata write time
 </ol>
 <h2 id="test-matrix">Test Matrix</h2>
 <p>The implementation should include scenario tests at three levels.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Level</th>
@@ -996,7 +1018,7 @@ updatedAt      -&gt; last successful metadata write time
 <td data-label="Examples">Metadata key deletion, revision conflict, rolling update handoff, unsupported Redis command</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Priority tests:</p>
 <ul>
 <li>DRAIN response state written to Redis, response lost, next heartbeat returns same DRAIN.</li>

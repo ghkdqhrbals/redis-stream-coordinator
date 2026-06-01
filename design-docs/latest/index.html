@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,20 +348,21 @@
           <a href="docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="docs/prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
-          <a href="docs/implementation-status.html">Implementation Status</a>
           <a href="docs/operations-runbook.html">Operations Runbook</a>
           <a href="docs/testing.html">Testing Guide</a>
+          <a href="api.html">API Reference</a>
         </nav>
       </aside>
       <main>
 <h1 id="redis-stream-coordinator-design">Redis Stream Coordinator Design</h1>
-<p>This document describes a Redis Stream sharding system that adapts the coordinator role from KIP-848 to Redis Stream consumer ownership. The project provides a dedicated coordinator server, a Spring Boot consumer integration module, and a Spring Boot producer routing/publishing module.</p>
+<p>Redis Stream Coordinator adapts the coordinator-managed consumer rebalance idea from Kafka KIP-848 to Redis Stream sharding. The project provides a dedicated coordinator server, a Spring Boot consumer integration module, a Spring Boot producer routing/publishing module, and monitoring/API documentation for operating the system.</p>
+<p>The reason for this module is practical: Redis Stream is useful as a lightweight log, but a single stream key can become a BigKey and a single Redis Cluster hash-slot hotspot. Redis itself does not provide a broker-side coordinator that owns shard assignment, membership, producer routing metadata, revoke-before-assign handoff, and resharding protocol for a logical stream. There are also very few public references that combine Redis Stream BigKey mitigation, Redis Cluster slot distribution, and consumer ownership coordination. This project fills that gap with a reusable open-source control plane and Spring Boot integration.</p>
 <h2 id="design-index">Design Index</h2>
 <ol>
 <li><a href="docs/prd/01-context-goals.html">Context, Goals, Non-Goals</a></li>
 <li><a href="docs/prd/02-coordinator-architecture.html">Coordinator Architecture</a></li>
 <li><a href="docs/prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a></li>
-<li><a href="docs/prd/04-stream-version-migration.html">Stream Version Migration, Routing, and Admin API</a></li>
+<li><a href="prd/04-resharding-routing.md">Resharding, Routing, and Admin API</a></li>
 <li><a href="docs/prd/05-processing-reliability.html">Member Data-Plane Boundary</a></li>
 <li><a href="docs/prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a></li>
 <li><a href="docs/prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a></li>
@@ -348,11 +371,16 @@
 <li><a href="docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a></li>
 <li><a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a></li>
 <li><a href="docs/prd/12-failure-modes-edge-cases.html">Failure Modes and Edge Cases</a></li>
+<li><a href="api.html">Scalar API Reference</a></li>
 </ol>
+<h2 id="why-this-exists">Why This Exists</h2>
+<p>Redis Stream applications often start with one stream key per topic. That is simple, but it concentrates stream entries, pending-entry metadata, consumer-group metadata, and write/read traffic on one Redis key. In Redis Cluster, that one key maps to one hash slot and one primary node, so adding more cluster nodes does not automatically distribute a hot stream.</p>
+<p>The usual mitigation is to split one logical stream into many physical stream shard keys. Once that happens, the application needs a control plane: producers need the current shard layout, consumers need ownership assignment, and operators need a way to scale shard count without two consumers processing the same shard at the same time.</p>
+<p>This project provides that missing control plane. It keeps Redis Stream as the data plane and adds coordinator-owned metadata, heartbeat-driven assignment, revoke-before-assign handoff, routing metadata for producers, and monitoring APIs for operators.</p>
 <h2 id="product-summary">Product Summary</h2>
-<p>Redis Stream Coordinator is a control-plane server that centrally manages Redis Stream shard ownership. Consumer runtime members send heartbeats to the coordinator API, report their current ownership, and receive the target assignment they should converge to. The coordinator recalculates target assignment when membership, capacity, shard count, or stream version metadata changes.</p>
+<p>Redis Stream Coordinator is a control-plane server that centrally manages Redis Stream shard ownership. Consumer runtime members send heartbeats to the coordinator API, report their current ownership, and receive the target assignment they should converge to. The coordinator recalculates target assignment when membership, capacity, shard count, or shard metadata changes.</p>
 <p>The consumer module connects Spring Boot applications to coordinator heartbeat, assignment, revocation, fencing, and optional Redis Stream polling. The producer module resolves coordinator-managed routing metadata and publishes records to the active Redis Stream shard.</p>
-<p>The system is designed for Redis Stream workloads that need to avoid single-stream BigKey growth and distribute traffic across Redis Cluster hash slots while retaining a Kafka-like coordinator-managed rebalance model.</p>
+<p>The system is designed for Redis Stream workloads that need to avoid single-stream BigKey growth and distribute traffic across Redis Cluster hash slots while retaining a coordinator-managed rebalance model.</p>
 <h2 id="core-decisions">Core Decisions</h2>
 <ul>
 <li>Use a central Group Coordinator.</li>
@@ -372,7 +400,7 @@
 <li>Provide Spring Boot integration while leaving business message processing and Redis Stream acknowledgement policy under application control.</li>
 <li>Use at-least-once processing as the baseline. Producer retry, consumer crash, pending recovery, and resharding can create duplicate attempts.</li>
 <li>Do not claim exactly-once side effects. Business side effects cannot be committed atomically with Redis Stream ACK across arbitrary databases, Redis writes, HTTP calls, or external APIs.</li>
-<li>The same partition key can route to a different Redis Stream shard after shard count or active stream version changes.</li>
+<li>The same partition key can route to a different Redis Stream shard after shard count changes.</li>
 <li>Version public APIs, coordinator-module compatibility, and metadata schema explicitly.</li>
 </ul>
 <h2 id="success-criteria">Success Criteria</h2>
@@ -380,33 +408,16 @@
 <li>When a member joins, leaves, or expires, only affected shards move.</li>
 <li>A shard ownership handoff follows <code>revoke ack -&gt; target install -&gt; assign</code>.</li>
 <li>Coordinator monitoring APIs show group epoch, assignment epoch, member epoch, target/current assignment, revoke progress, consumer progress, and active resharding state.</li>
-<li>Producer routing uses the active stream version and shard count returned by the coordinator.</li>
-<li>Shard count changes use a next-version stream migration instead of in-place key rewriting.</li>
+<li>Producer routing uses the shard count returned by the coordinator.</li>
+<li>Shard count changes use coordinator-managed resharding instead of in-place key rewriting.</li>
 <li>Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.</li>
 <li>Spring Boot applications can integrate by adding the starter and implementing <code>CoordinatorShardLifecycle</code> or the built-in Redis Stream polling handler.</li>
 <li>Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.</li>
 </ul>
-<h2 id="current-implementation-snapshot">Current Implementation Snapshot</h2>
-<p>Last reviewed: 2026-06-01.</p>
-<p>Implemented:</p>
-<ul>
-<li>Spring Boot 4 / Kotlin / Java 24 Gradle multi-module project.</li>
-<li><code>coordinator-server</code> with group creation, heartbeat reconciliation, sticky assignment, revoke-before-assign, member expiration, resharding, rollback, monitoring APIs, Redis-backed state mutex, ACL, audit logging, admin mutation rate limiting, and coordinator-owned Micrometer metrics.</li>
-<li>Memory and Redis-backed coordinator state stores with Redis Cluster-safe single metadata key layout, metadata schema guards, Lua-backed aggregate writes, store revision checks, and optional Redis Stream shard provisioning.</li>
-<li><code>com.redisstream:redisstream-spring-boot-starter</code> with consumer heartbeat lifecycle, shard lifecycle callbacks, runtime capacity/progress reporting, optional Redis Stream polling, producer routing cache, publisher stale-cache refresh, graceful leave, and shared Redis command templates.</li>
-<li>Local Redis Cluster Docker Compose, AWS public Redis test profile, coordinator Dockerfile, sample consumer/publisher pods, Docker smoke workflow, manual GHCR publish workflow, and gated Redis integration tests.</li>
-<li>Open source documentation for testing, Docker, operations, security, contribution, and versioning.</li>
-</ul>
-<p>Not yet complete:</p>
-<ul>
-<li>First public Docker image release.</li>
-<li>Production hardening around external deployment examples and release automation.</li>
-</ul>
-<p>Detailed progress is tracked in <a href="docs/implementation-status.html">Implementation Status</a>.</p>
 <h2 id="guarantee-boundaries">Guarantee Boundaries</h2>
 <ul>
-<li>Routing determinism is guaranteed only for the same routing protocol, <code>activeWriteVersion</code>, <code>shardCount</code>, and partition key.</li>
-<li>Shard scale-out/in changes the routing domain. The same partition key can route to different shard indexes between old and new stream versions.</li>
+<li>Routing determinism is guaranteed only for the same routing protocol, <code>shardCount</code>, and partition key.</li>
+<li>Shard scale-out/in changes the routing domain. The same partition key can route to different shard indexes between old and new shard counts.</li>
 <li>The baseline processing model is at-least-once.</li>
 <li>Single processing and exactly-once side effects are not guaranteed.</li>
 <li>Applications must handle duplicate side effects through domain-level idempotency, deduplication, unique constraints, or compensation.</li>

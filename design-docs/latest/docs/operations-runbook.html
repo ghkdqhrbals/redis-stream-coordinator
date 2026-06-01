@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,9 +348,9 @@
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
-          <a href="implementation-status.html">Implementation Status</a>
           <a href="operations-runbook.html" aria-current="page">Operations Runbook</a>
           <a href="testing.html">Testing Guide</a>
+          <a href="../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
@@ -340,7 +362,7 @@
   http://localhost:8080/coord/v1/monitoring/health
 </code></pre>
 <p>Interpretation:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -361,7 +383,7 @@
 <td data-label="Meaning">Redis is not required by the active coordinator configuration, or no Redis connection factory is configured.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="common-operator-checks">Common Operator Checks</h2>
 <p>List groups:</p>
 <pre><code class="language-bash">curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \

@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,9 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html" aria-current="page">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
-          <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
+          <a href="../../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
@@ -339,7 +361,7 @@
 <h2 id="public-integration-surface">Public Integration Surface</h2>
 <p>Application modules should only depend on the Spring Boot starter package. Coordinator server internals such as mutex guards, aspects, and critical-section annotations are implementation details and are not part of the public API.</p>
 <p>The main application-facing functions are:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>API</th>
@@ -368,7 +390,7 @@
 <td data-label="Purpose">Let the built-in polling adapter execute business handling and ACK after success.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Minimal consumer and producer registration:</p>
 <pre><code class="language-kotlin">@Bean
 fun ordersConsumer(): CoordinatorConsumerProperties =
@@ -422,7 +444,7 @@ class OrdersConsumerConfiguration {
 <li>handles fencing responses.</li>
 </ul>
 <p>Heartbeat status handling:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Status</th>
@@ -451,7 +473,7 @@ class OrdersConsumerConfiguration {
 <td data-label="Starter behavior">Stops local ownership and rejoins.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="shard-lifecycle-api">Shard Lifecycle API</h2>
 <p>Applications can implement <code>CoordinatorShardLifecycle</code>:</p>
 <pre><code class="language-kotlin">@Component
@@ -491,7 +513,7 @@ class OrdersPollingConfiguration {
 }
 </code></pre>
 <p>Supported ACK modes:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Mode</th>
@@ -512,7 +534,7 @@ class OrdersPollingConfiguration {
 <td data-label="Behavior">ACK after successful handler execution</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Failed-message handling is configured separately through <code>redis.failure.mode</code>. The default <code>LEAVE_PENDING</code> preserves classic Redis Stream retry behavior. <code>XNACK</code> is only used when explicitly configured and the connected Redis version supports it.</p>
 <p>Applications provide a handler:</p>
 <pre><code class="language-kotlin">@Component

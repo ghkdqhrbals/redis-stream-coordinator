@@ -35,7 +35,7 @@
         background: var(--panel);
       }
       .topbar {
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -72,9 +72,9 @@
       }
       .layout {
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -101,7 +101,7 @@
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {
@@ -151,11 +151,17 @@
         color: var(--accent);
         overflow-wrap: anywhere;
       }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
       .responsive-table {
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }
@@ -163,7 +169,12 @@
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
       }
       th {
         background: var(--panel);
@@ -173,6 +184,10 @@
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
       }
       pre {
         max-width: 100%;
@@ -228,6 +243,11 @@
           display: block;
           width: 100%;
         }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
         .responsive-table {
           border: 1px solid var(--border);
         }
@@ -252,6 +272,8 @@
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .responsive-table td:first-child {
           border-top: 0;
@@ -326,20 +348,21 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
-          <a href="../implementation-status.html">Implementation Status</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
+          <a href="../../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
 <h1 id="coordinator-api-endpoints">Coordinator API Endpoints</h1>
 <h2 id="scope">Scope</h2>
 <p>This document is the HTTP API catalog for Redis Stream Coordinator. It lists endpoint paths, auth expectations, mutation behavior, idempotency expectations, and the most important request and response fields.</p>
+<p>Use the <a href="../../api.html">Scalar API Reference</a> for interactive endpoint search, schemas, examples, and curl snippets. This Markdown page remains the design-level contract summary.</p>
 <p>Detailed behavior is defined in these documents:</p>
 <ul>
 <li>heartbeat and reconciliation flow: <a href="02-coordinator-architecture.html">02-coordinator-architecture.md</a></li>
 <li>group state and assignment model: <a href="03-group-assignment-model.html">03-group-assignment-model.md</a></li>
-<li>shard scaling and stream version migration: <a href="04-stream-version-migration.html">04-stream-version-migration.md</a></li>
+<li>shard scaling and routing: <a href="04-resharding-routing.md">04-resharding-routing.md</a></li>
 <li>configuration, monitoring, and metrics: <a href="06-data-config-observability.html">06-data-config-observability.md</a></li>
 </ul>
 <h2 id="base-contract">Base Contract</h2>
@@ -352,7 +375,7 @@ Accept: application/json
 Authorization: Basic &lt;base64(admin:password)&gt;
 </code></pre>
 <p>Path parameters:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Parameter</th>
@@ -374,12 +397,12 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </tr>
 <tr>
 <td data-label="Parameter"><code>reshardingId</code></td>
-<td data-label="Meaning">Coordinator-generated stream version migration id.</td>
+<td data-label="Meaning">Coordinator-generated resharding id.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Auth policy:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>API Area</th>
@@ -400,7 +423,7 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Auth">Optional, enabled by <code>coordinator.api.authenticate-member-api</code>.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Common error response:</p>
 <pre><code class="language-json">{
   &quot;status&quot;: &quot;CONFLICT&quot;,
@@ -409,7 +432,7 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 }
 </code></pre>
 <p>Common status codes:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>HTTP Status</th>
@@ -462,9 +485,9 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Meaning">Redis, stream provisioning, or coordinator state mutex is unavailable.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="endpoint-index">Endpoint Index</h2>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Area</th>
@@ -588,14 +611,14 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Mutates State">no</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="admin-api">Admin API</h2>
 <h3 id="create-group">Create Group</h3>
 <pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 </code></pre>
-<p>Creates initial group metadata and stream version <code>1</code>. Member startup, local YAML, producers, and consumers cannot create group metadata directly.</p>
+<p>Creates initial group metadata and the configured shard count. Member startup, local YAML, producers, and consumers cannot create group metadata directly.</p>
 <p>Request body:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -608,11 +631,6 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Field"><code>initialShardCount</code></td>
 <td data-label="Required">no</td>
 <td data-label="Meaning">Initial shard count. If omitted, coordinator defaults are used.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>versionPolicy</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Stream version naming policy. MVP default is <code>AUTO_INCREMENT</code>.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>consumerConcurrencyPolicy.defaultMaxConcurrency</code></td>
@@ -635,10 +653,10 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Meaning">Human-readable change reason.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Response: <code>201 Created</code> with <code>GroupResponse</code>.</p>
 <p>Important response fields:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -667,23 +685,15 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Meaning">Coordinator metadata version.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>activeWriteVersion</code></td>
-<td data-label="Meaning">Integer stream version producers must write to.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>readableVersions</code></td>
-<td data-label="Meaning">Integer stream versions consumers may read.</td>
-</tr>
-<tr>
 <td data-label="Field"><code>shardCount</code></td>
-<td data-label="Meaning">Active write version shard count.</td>
+<td data-label="Meaning">Stored shard count.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
 <td data-label="Meaning">Stored server-side consumer concurrency policy.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Duplicate request behavior:</p>
 <ul>
 <li>If the group already exists, the coordinator returns <code>409 Conflict</code> with <code>GROUP_ALREADY_EXISTS</code>.</li>
@@ -700,12 +710,12 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <p>Returns read-only metadata required by producers to route partition keys to Redis Stream shard keys. This endpoint does not create streams, change shard counts, or mutate assignment.</p>
 <p>Routing scope:</p>
 <pre><code class="language-text">shardIndex = routeV1(partitionKey, shardCount)
-streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
+streamKey = format(streamKeyPattern, shardIndex)
 </code></pre>
-<p>Routing is deterministic only for the returned <code>activeWriteVersion</code>, <code>shardCount</code>, routing protocol, and partition key. After shard scale-out or scale-in, the same partition key can route to a different stream key.</p>
+<p>Routing is deterministic only for the returned <code>shardCount</code>, routing protocol, and partition key. After shard scale-out or scale-in, the same partition key can route to a different stream key.</p>
 <p>Response: <code>200 OK</code> with <code>ProducerRoutingResponse</code>.</p>
 <p>Important response fields:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -718,12 +728,8 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Coordinator metadata version for producer cache invalidation.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>activeWriteVersion</code></td>
-<td data-label="Meaning">Integer stream version producers must write to.</td>
-</tr>
-<tr>
 <td data-label="Field"><code>shardCount</code></td>
-<td data-label="Meaning">Active write version shard count.</td>
+<td data-label="Meaning">Shard count producers must route against.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>streamKeyPattern</code></td>
@@ -731,17 +737,17 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 </tr>
 <tr>
 <td data-label="Field"><code>shards[]</code></td>
-<td data-label="Meaning">Concrete active-version shard keys and Redis Cluster slots.</td>
+<td data-label="Meaning">Concrete shard keys and Redis Cluster slots.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="scale-group">Scale Group</h3>
 <pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
 </code></pre>
-<p>Starts shard scale-out or scale-in by creating a next stream version migration. This is the only supported shard count mutation path.</p>
-<p>For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across stream versions and shards.</p>
+<p>Starts shard scale-out or scale-in by creating a next resharding. This is the only supported shard count mutation path.</p>
+<p>For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across shards.</p>
 <p>Request body:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -778,13 +784,13 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <tr>
 <td data-label="Field"><code>deprecatedAfter</code></td>
 <td data-label="Required">no</td>
-<td data-label="Meaning">Operational hint for old version deprecation timing.</td>
+<td data-label="Meaning">Operational hint for rollback/drain timing.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Response: <code>202 Accepted</code> with <code>Migration</code>.</p>
 <p>Important response fields:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -795,10 +801,6 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <tr>
 <td data-label="Field"><code>reshardingId</code></td>
 <td data-label="Meaning">Created migration id.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>fromVersion</code> / <code>toVersion</code></td>
-<td data-label="Meaning">Old and new integer stream versions.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>fromShardCount</code> / <code>toShardCount</code></td>
@@ -813,7 +815,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Metadata timestamps.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Conflict behavior:</p>
 <ul>
 <li>If another migration is active, the coordinator returns <code>409 Conflict</code> with <code>ACTIVE_MIGRATION_EXISTS</code>.</li>
@@ -822,9 +824,9 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <h3 id="update-consumer-concurrency">Update Consumer Concurrency</h3>
 <pre><code class="language-http">PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
 </code></pre>
-<p>Updates the server-side consumer worker capacity policy. This does not change shard count and does not create a new stream version.</p>
+<p>Updates the server-side consumer worker capacity policy. This does not change shard count.</p>
 <p>Request body:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -854,10 +856,10 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Human-readable change reason.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Response: <code>200 OK</code> with <code>ConsumerConcurrencyResponse</code>.</p>
 <p>Important response fields:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -882,18 +884,18 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Members whose assigned max concurrency changed.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="get-migration">Get Migration</h3>
 <pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
 </code></pre>
-<p>Returns one recorded stream version migration.</p>
+<p>Returns one recorded resharding.</p>
 <p>Response: <code>200 OK</code> with <code>Migration</code>.</p>
 <h3 id="rollback-migration">Rollback Migration</h3>
 <pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
 </code></pre>
-<p>Requests rollback of a migration when rollback is still allowed. Messages already written to the new version must be handled by the application or operator drain/replay policy.</p>
+<p>Requests rollback of a migration when rollback is still allowed. Messages already written to newly added shard indexes must be handled by the application or operator drain/replay policy.</p>
 <p>Request body:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -913,7 +915,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Human-readable rollback reason.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Response: <code>202 Accepted</code> with <code>Migration</code>.</p>
 <p>Failure behavior:</p>
 <ul>
@@ -926,7 +928,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 </code></pre>
 <p>Reports member liveness, owned shards, runtime capacity, revoke progress, and optional shard consumption progress. The coordinator returns assignment in the same response. There is no separate assignment polling endpoint.</p>
 <p>Request body:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -961,11 +963,6 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning"><code>0</code> means join/rejoin, <code>-1</code> means graceful leave, positive means active member epoch.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>rebalanceTimeoutMs</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Maximum revoke/drain time this member requests.</td>
-</tr>
-<tr>
 <td data-label="Field"><code>metadataVersion</code></td>
 <td data-label="Required">yes</td>
 <td data-label="Meaning">Member local metadata version.</td>
@@ -996,10 +993,10 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Redis Stream progress for assigned or revoking shards.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Response: <code>200 OK</code> with <code>HeartbeatResponse</code>.</p>
 <p>Important response fields:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -1022,6 +1019,10 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <tr>
 <td data-label="Field"><code>heartbeatIntervalMs</code></td>
 <td data-label="Meaning">Recommended next heartbeat interval.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>rebalanceTimeoutMs</code></td>
+<td data-label="Meaning">Coordinator-owned maximum revoke/drain wait before the coordinator may fence this member and reassign shards.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>groupEpoch</code></td>
@@ -1052,9 +1053,9 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Metadata version tied to this assignment.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Status behavior:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Status</th>
@@ -1095,7 +1096,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Member action">Stop or fail fast. The request violates the contract.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Mutation behavior:</p>
 <ul>
 <li>Updates member liveness and lease expiration.</li>
@@ -1110,7 +1111,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <pre><code class="language-http">GET /coord/v1/monitoring/health
 </code></pre>
 <p>Response: <code>200 OK</code> with <code>HealthResponse</code>.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -1135,12 +1136,12 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Coordinator loop health.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="compatibility">Compatibility</h3>
 <pre><code class="language-http">GET /coord/v1/monitoring/compatibility
 </code></pre>
 <p>Response: <code>200 OK</code> with coordinator-module compatibility metadata.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -1161,7 +1162,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Release lifecycle metadata for each known version.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="list-groups">List Groups</h3>
 <pre><code class="language-http">GET /coord/v1/monitoring/groups
 </code></pre>
@@ -1175,7 +1176,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 </code></pre>
 <p>Returns <code>MembersResponse</code>.</p>
 <p>Important fields in each member:</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -1212,12 +1213,12 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Last reported consumption progress.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="get-assignments">Get Assignments</h3>
 <pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments
 </code></pre>
 <p>Returns <code>AssignmentsResponse</code>.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -1242,12 +1243,12 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Duplicate owner, missing owner, stale epoch, or unknown member references.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="get-consumption-progress">Get Consumption Progress</h3>
 <pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption
 </code></pre>
 <p>Returns flattened per-member, per-shard progress rows.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -1284,12 +1285,12 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Time the member last updated this progress row.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h3 id="list-migrations">List Migrations</h3>
 <pre><code class="language-http">GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations
 </code></pre>
 <p>Returns <code>MigrationsResponse</code>.</p>
-<table class="responsive-table">
+<div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
 <th>Field</th>
@@ -1306,7 +1307,7 @@ streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
 <td data-label="Meaning">Active migration id or null.</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <h2 id="explicitly-unsupported-endpoints">Explicitly Unsupported Endpoints</h2>
 <p>The coordinator does not provide these API surfaces in the MVP:</p>
 <ul>
