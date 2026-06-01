@@ -4,11 +4,13 @@
 
 This document is the HTTP API catalog for Redis Stream Coordinator. It lists endpoint paths, auth expectations, mutation behavior, idempotency expectations, and the most important request and response fields.
 
+Use the [Scalar API Reference](../../api.html) for interactive endpoint search, schemas, examples, and curl snippets. This Markdown page remains the design-level contract summary.
+
 Detailed behavior is defined in these documents:
 
 * heartbeat and reconciliation flow: [02-coordinator-architecture.md](02-coordinator-architecture.md)
 * group state and assignment model: [03-group-assignment-model.md](03-group-assignment-model.md)
-* shard scaling and stream version migration: [04-stream-version-migration.md](04-stream-version-migration.md)
+* shard scaling and routing: [04-resharding-routing.md](04-resharding-routing.md)
 * configuration, monitoring, and metrics: [06-data-config-observability.md](06-data-config-observability.md)
 
 ## Base Contract
@@ -34,7 +36,7 @@ Path parameters:
 | `streamPrefix` | Logical Redis Stream prefix managed by the coordinator. |
 | `consumerGroup` | Logical Redis Stream consumer group name. |
 | `memberId` | Runtime-generated member id, normally a UUID. |
-| `reshardingId` | Coordinator-generated stream version migration id. |
+| `reshardingId` | Coordinator-generated resharding id. |
 
 Auth policy:
 
@@ -99,14 +101,13 @@ Common status codes:
 POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 ```
 
-Creates initial group metadata and stream version `1`. Member startup, local YAML, producers, and consumers cannot create group metadata directly.
+Creates initial group metadata and the configured shard count. Member startup, local YAML, producers, and consumers cannot create group metadata directly.
 
 Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `initialShardCount` | no | Initial shard count. If omitted, coordinator defaults are used. |
-| `versionPolicy` | no | Stream version naming policy. MVP default is `AUTO_INCREMENT`. |
 | `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Default member worker limit. If omitted, coordinator defaults are used. |
 | `consumerConcurrencyPolicy.memberOverrides` | no | Optional per-member-name worker limit override. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
@@ -123,9 +124,7 @@ Important response fields:
 | `groupEpoch` | Group metadata epoch. |
 | `assignmentEpoch` | Target assignment epoch. |
 | `metadataVersion` | Coordinator metadata version. |
-| `activeWriteVersion` | Integer stream version producers must write to. |
-| `readableVersions` | Integer stream versions consumers may read. |
-| `shardCount` | Active write version shard count. |
+| `shardCount` | Stored shard count. |
 | `consumerConcurrencyPolicy` | Stored server-side consumer concurrency policy. |
 
 Duplicate request behavior:
@@ -155,10 +154,10 @@ Routing scope:
 
 ```text
 shardIndex = routeV1(partitionKey, shardCount)
-streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
+streamKey = format(streamKeyPattern, shardIndex)
 ```
 
-Routing is deterministic only for the returned `activeWriteVersion`, `shardCount`, routing protocol, and partition key. After shard scale-out or scale-in, the same partition key can route to a different stream key.
+Routing is deterministic only for the returned `shardCount`, routing protocol, and partition key. After shard scale-out or scale-in, the same partition key can route to a different stream key.
 
 Response: `200 OK` with `ProducerRoutingResponse`.
 
@@ -167,10 +166,9 @@ Important response fields:
 | Field | Meaning |
 | --- | --- |
 | `metadataVersion` | Coordinator metadata version for producer cache invalidation. |
-| `activeWriteVersion` | Integer stream version producers must write to. |
-| `shardCount` | Active write version shard count. |
+| `shardCount` | Shard count producers must route against. |
 | `streamKeyPattern` | Redis Stream key pattern. |
-| `shards[]` | Concrete active-version shard keys and Redis Cluster slots. |
+| `shards[]` | Concrete shard keys and Redis Cluster slots. |
 
 ### Scale Group
 
@@ -178,9 +176,9 @@ Important response fields:
 POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
 ```
 
-Starts shard scale-out or scale-in by creating a next stream version migration. This is the only supported shard count mutation path.
+Starts shard scale-out or scale-in by creating a next resharding. This is the only supported shard count mutation path.
 
-For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across stream versions and shards.
+For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across shards.
 
 Request body:
 
@@ -191,7 +189,7 @@ Request body:
 | `consumerConcurrencyPolicy.memberOverrides` | no | Optional per-member-name worker limit override. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `reason` | yes | Human-readable change reason. |
-| `deprecatedAfter` | no | Operational hint for old version deprecation timing. |
+| `deprecatedAfter` | no | Operational hint for rollback/drain timing. |
 
 Response: `202 Accepted` with `Migration`.
 
@@ -200,7 +198,6 @@ Important response fields:
 | Field | Meaning |
 | --- | --- |
 | `reshardingId` | Created migration id. |
-| `fromVersion` / `toVersion` | Old and new integer stream versions. |
 | `fromShardCount` / `toShardCount` | Old and new shard counts. |
 | `state` | Migration state. |
 | `createdAt` / `updatedAt` | Metadata timestamps. |
@@ -216,7 +213,7 @@ Conflict behavior:
 PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
 ```
 
-Updates the server-side consumer worker capacity policy. This does not change shard count and does not create a new stream version.
+Updates the server-side consumer worker capacity policy. This does not change shard count.
 
 Request body:
 
@@ -244,7 +241,7 @@ Important response fields:
 GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
 ```
 
-Returns one recorded stream version migration.
+Returns one recorded resharding.
 
 Response: `200 OK` with `Migration`.
 
@@ -254,7 +251,7 @@ Response: `200 OK` with `Migration`.
 POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
 ```
 
-Requests rollback of a migration when rollback is still allowed. Messages already written to the new version must be handled by the application or operator drain/replay policy.
+Requests rollback of a migration when rollback is still allowed. Messages already written to newly added shard indexes must be handled by the application or operator drain/replay policy.
 
 Request body:
 
@@ -289,7 +286,6 @@ Request body:
 | `memberId` | yes | Must match the path parameter. |
 | `memberName` | no | Stable logical member name used for policy overrides. |
 | `memberEpoch` | yes | `0` means join/rejoin, `-1` means graceful leave, positive means active member epoch. |
-| `rebalanceTimeoutMs` | no | Maximum revoke/drain time this member requests. |
 | `metadataVersion` | yes | Member local metadata version. |
 | `runtimeConsumerCapacity.runtimeMaxConcurrency` | yes | Process-local maximum consumer workers. |
 | `runtimeConsumerCapacity.availableConcurrency` | yes | Available local worker capacity. |
@@ -307,6 +303,7 @@ Important response fields:
 | `status` | `OK`, `RETRY`, `SYNC_METADATA`, `REVOKE_PENDING`, `UNKNOWN_MEMBER_ID`, `FENCED_MEMBER_EPOCH`, `UNSUPPORTED_PROTOCOL`, or `INVALID_REQUEST`. |
 | `memberEpoch` | Epoch the member must send on the next heartbeat. |
 | `heartbeatIntervalMs` | Recommended next heartbeat interval. |
+| `rebalanceTimeoutMs` | Coordinator-owned maximum revoke/drain wait before the coordinator may fence this member and reassign shards. |
 | `groupEpoch` | Latest group epoch. |
 | `assignmentEpoch` | Latest assignment epoch. |
 | `metadataVersion` | Latest coordinator metadata version. |

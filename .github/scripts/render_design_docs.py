@@ -16,10 +16,12 @@ import markdown
 
 
 DESIGN_DOC_EXTRA_NAMES = (
-    "implementation-status.md",
     "operations-runbook.md",
     "testing.md",
 )
+
+OPENAPI_SPEC_SOURCE = Path("docs/openapi/coordinator.v1.yaml")
+OPENAPI_SPEC_OUTPUT = Path("openapi/coordinator.v1.yaml")
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,15 @@ def rewrite_markdown_links(
     return re.sub(r'href="([^"]+)"', replace, body)
 
 
+def rewrite_api_reference_links(body: str, current_output: Path, language: str) -> str:
+    api_href = relative_href(current_output, api_output_path(language))
+    return re.sub(
+        r'href="(?:\.\./)*api\.html"',
+        f'href="{html.escape(api_href, quote=True)}"',
+        body,
+    )
+
+
 def render_start_tag(tag: str, attrs: list[tuple[str, str | None]], self_closing: bool = False) -> str:
     rendered_attrs = []
     for name, value in attrs:
@@ -128,6 +139,7 @@ class ResponsiveTableParser(HTMLParser):
             self.headers = []
             self.cell_index = 0
             attrs = add_or_append_class(attrs, "responsive-table")
+            self.output.append('<div class="table-scroll">')
         elif self.in_table and tag == "thead":
             self.in_thead = True
         elif self.in_table and tag == "tr":
@@ -160,6 +172,7 @@ class ResponsiveTableParser(HTMLParser):
             self.header_chunks = []
             self.headers = []
             self.cell_index = 0
+            self.output.append("</div>")
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.output.append(render_start_tag(tag, attrs, self_closing=True))
@@ -293,6 +306,121 @@ def language_switch(current_href: str, alternate_href: str | None, language: str
     )
 
 
+def api_output_path(language: str) -> Path:
+    return Path("ko") / "api.html" if language == "ko" else Path("api.html")
+
+
+def render_scalar_api_page(
+    language: str,
+    current_href: str,
+    alternate_href: str | None,
+    spec_href: str,
+) -> str:
+    title = "Redis Stream Coordinator API Reference"
+    escaped_language = html.escape(language, quote=True)
+    escaped_title = html.escape(title)
+    escaped_spec_href = html.escape(spec_href, quote=True)
+    redirect_script = language_redirect_script(language, alternate_href)
+    switch = language_switch(current_href, alternate_href, language)
+    docs_href = "docs/PRD.html" if language == "en" else "docs/PRD.html"
+    docs_label = "Design Docs" if language == "en" else "설계문서"
+    return f"""<!doctype html>
+<html lang="{escaped_language}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{escaped_title}</title>
+    <style>
+      * {{
+        box-sizing: border-box;
+      }}
+      body {{
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #172026;
+        background: #ffffff;
+      }}
+      .api-topbar {{
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 10px clamp(14px, 2.2vw, 24px);
+        border-bottom: 1px solid #d6dde3;
+        background: #f7f9fb;
+      }}
+      .api-title {{
+        font-size: 1rem;
+        font-weight: 700;
+      }}
+      .api-actions {{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        white-space: nowrap;
+      }}
+      .api-actions a,
+      .language-switch a {{
+        color: #1428a0;
+        text-decoration: none;
+      }}
+      .language-switch {{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #5f6c75;
+        font-size: 0.86rem;
+      }}
+      .language-switch a[aria-current="true"] {{
+        color: #172026;
+        font-weight: 700;
+      }}
+      #api-reference {{
+        min-height: calc(100vh - 58px);
+      }}
+      @media (max-width: 640px) {{
+        .api-topbar {{
+          align-items: flex-start;
+          flex-direction: column;
+        }}
+        .api-actions {{
+          width: 100%;
+          justify-content: space-between;
+        }}
+      }}
+    </style>
+{redirect_script}
+  </head>
+  <body>
+    <header class="api-topbar">
+      <div class="api-title">{escaped_title}</div>
+      <div class="api-actions">
+        <a href="{html.escape(docs_href, quote=True)}">{html.escape(docs_label)}</a>
+        {switch}
+      </div>
+    </header>
+    <div id="api-reference"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    <script>
+      Scalar.createApiReference("#api-reference", {{
+        url: "{escaped_spec_href}",
+        layout: "modern",
+        theme: "default",
+        hideModels: false,
+        hideTestRequestButton: false,
+        showOperationId: true,
+        defaultHttpClient: {{
+          target: "shell",
+          client: "curl"
+        }}
+      }});
+    </script>
+  </body>
+</html>
+"""
+
+
 def render_page(
     title: str,
     body: str,
@@ -342,7 +470,7 @@ def render_page(
         background: var(--panel);
       }}
       .topbar {{
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: 12px clamp(14px, 2.2vw, 24px);
         display: flex;
@@ -379,9 +507,9 @@ def render_page(
       }}
       .layout {{
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
+        grid-template-columns: 280px minmax(0, 1fr);
         gap: clamp(18px, 3vw, 32px);
-        width: min(100%, 1180px);
+        width: min(100%, 1360px);
         margin: 0 auto;
         padding: clamp(14px, 2.6vw, 24px);
         align-items: start;
@@ -408,7 +536,7 @@ def render_page(
         padding: 4px 8px;
         border-radius: 4px;
         text-decoration: none;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
       }}
       .doc-index a:hover,
       .doc-index a[aria-current="page"] {{
@@ -458,11 +586,17 @@ def render_page(
         color: var(--accent);
         overflow-wrap: anywhere;
       }}
+      .table-scroll {{
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }}
       .responsive-table {{
         width: 100%;
-        max-width: 100%;
         border-collapse: collapse;
-        margin: 0.8rem 0;
+        margin: 0;
         font-size: 0.93em;
         table-layout: auto;
       }}
@@ -470,7 +604,12 @@ def render_page(
         border: 1px solid var(--border);
         padding: 6px 8px;
         vertical-align: top;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        word-break: normal;
+      }}
+      .responsive-table th,
+      .responsive-table td {{
+        white-space: nowrap;
       }}
       th {{
         background: var(--panel);
@@ -480,6 +619,10 @@ def render_page(
         border-radius: 4px;
         padding: 0.1rem 0.25rem;
         overflow-wrap: anywhere;
+      }}
+      .responsive-table code {{
+        white-space: nowrap;
+        overflow-wrap: normal;
       }}
       pre {{
         max-width: 100%;
@@ -535,6 +678,11 @@ def render_page(
           display: block;
           width: 100%;
         }}
+        .table-scroll {{
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }}
         .responsive-table {{
           border: 1px solid var(--border);
         }}
@@ -559,6 +707,8 @@ def render_page(
           border: 0;
           border-top: 1px solid var(--border);
           min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }}
         .responsive-table td:first-child {{
           border-top: 0;
@@ -638,6 +788,9 @@ def main() -> None:
 
     output_paths = {page.markdown_path.resolve(): page.output_path for page in pages}
     output_set = {page.output_path for page in pages}
+    has_openapi_spec = (source / OPENAPI_SPEC_SOURCE).exists()
+    if has_openapi_spec:
+        output_set.update({api_output_path("en"), api_output_path("ko")})
     pages_by_language: dict[str, list[Page]] = {}
     for page in pages:
         pages_by_language.setdefault(page.language, []).append(page)
@@ -662,6 +815,14 @@ def main() -> None:
                 f'          <a href="{html.escape(relative_href(current_output, page.output_path))}"{attrs}>'
                 f'{html.escape(page.title)}</a>'
             )
+        if has_openapi_spec:
+            api_path = api_output_path(language)
+            attrs = ' aria-current="page"' if api_path == active else ""
+            api_title = "API Reference" if language == "en" else "API Reference"
+            links.append(
+                f'          <a href="{html.escape(relative_href(current_output, api_path))}"{attrs}>'
+                f'{html.escape(api_title)}</a>'
+            )
         return "\n".join(links)
 
     renderer = markdown.Markdown(extensions=["extra", "tables", "toc", "fenced_code", "sane_lists"])
@@ -673,6 +834,8 @@ def main() -> None:
             page.output_path,
             output_paths,
         )
+        if has_openapi_spec:
+            body = rewrite_api_reference_links(body, page.output_path, page.language)
         body = make_tables_responsive(body)
         target = destination / page.output_path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -689,39 +852,40 @@ def main() -> None:
             encoding="utf-8",
         )
 
-    if not (destination / "index.html").exists():
-        primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "PRD.md"), None)
-        korean_primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "ko" / "PRD.md"), None)
-        if primary_page is not None:
-            text = primary_page.markdown_path.read_text(encoding="utf-8")
-            body = rewrite_markdown_links(
-                renderer.reset().convert(text),
-                primary_page.markdown_path.resolve(),
-                Path("index.html"),
-                output_paths,
-            )
-            body = make_tables_responsive(body)
-            (destination / "index.html").write_text(
-                render_page(
-                    primary_page.title,
-                    body,
-                    nav_for(Path("index.html"), primary_page.language, active_output=primary_page.output_path),
-                    primary_page.language,
-                    "index.html",
-                    "ko/index.html" if korean_primary_page is not None else None,
-                ),
-                encoding="utf-8",
-            )
-        else:
-            first_page = pages[0].output_path
-            (destination / "index.html").write_text(
-                render_page(
-                    "Redis Stream Coordinator Design Docs",
-                    f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page.as_posix())}">Open the design document</a>.</p>',
-                    nav_for(Path("index.html"), "en"),
-                ),
-                encoding="utf-8",
-            )
+    primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "PRD.md"), None)
+    korean_primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "ko" / "PRD.md"), None)
+    if primary_page is not None:
+        text = primary_page.markdown_path.read_text(encoding="utf-8")
+        body = rewrite_markdown_links(
+            renderer.reset().convert(text),
+            primary_page.markdown_path.resolve(),
+            Path("index.html"),
+            output_paths,
+        )
+        if has_openapi_spec:
+            body = rewrite_api_reference_links(body, Path("index.html"), primary_page.language)
+        body = make_tables_responsive(body)
+        (destination / "index.html").write_text(
+            render_page(
+                primary_page.title,
+                body,
+                nav_for(Path("index.html"), primary_page.language, active_output=primary_page.output_path),
+                primary_page.language,
+                "index.html",
+                "ko/index.html" if korean_primary_page is not None else None,
+            ),
+            encoding="utf-8",
+        )
+    elif not (destination / "index.html").exists():
+        first_page = pages[0].output_path
+        (destination / "index.html").write_text(
+            render_page(
+                "Redis Stream Coordinator Design Docs",
+                f'<h1>Redis Stream Coordinator Design Docs</h1><p><a href="{html.escape(first_page.as_posix())}">Open the design document</a>.</p>',
+                nav_for(Path("index.html"), "en"),
+            ),
+            encoding="utf-8",
+        )
 
     korean_primary_page = next((page for page in pages if page.markdown_path == source / "docs" / "ko" / "PRD.md"), None)
     if korean_primary_page is not None:
@@ -733,6 +897,8 @@ def main() -> None:
             korean_index,
             output_paths,
         )
+        if has_openapi_spec:
+            body = rewrite_api_reference_links(body, korean_index, korean_primary_page.language)
         body = make_tables_responsive(body)
         target = destination / korean_index
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -747,6 +913,32 @@ def main() -> None:
             ),
             encoding="utf-8",
         )
+
+    if has_openapi_spec:
+        openapi_source_root = source / "docs" / "openapi"
+        openapi_target_root = destination / "openapi"
+        for spec in openapi_source_root.rglob("*"):
+            if spec.is_file():
+                relative = spec.relative_to(openapi_source_root)
+                target = openapi_target_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(spec.read_bytes())
+
+        english_api = api_output_path("en")
+        korean_api = api_output_path("ko")
+        for language, page_path, alternate_path in (
+            ("en", english_api, korean_api),
+            ("ko", korean_api, english_api),
+        ):
+            target = destination / page_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            current_href = relative_href(page_path, page_path)
+            alternate_href = relative_href(page_path, alternate_path)
+            spec_href = relative_href(page_path, OPENAPI_SPEC_OUTPUT)
+            target.write_text(
+                render_scalar_api_page(language, current_href, alternate_href, spec_href),
+                encoding="utf-8",
+            )
 
     asset_names = {"png", "jpg", "jpeg", "gif", "svg", "webp"}
     for asset in source.rglob("*"):

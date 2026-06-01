@@ -5,7 +5,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      access: unrestricted
 
 springdoc:
   api-docs:
@@ -15,6 +18,20 @@ springdoc:
     try-it-out-enabled: true
     operations-sorter: method
     tags-sorter: alpha
+
+scalar:
+  enabled: true
+  path: /scalar
+  url: /v3/api-docs
+  page-title: Redis Stream Coordinator API
+  layout: modern
+  theme: default
+  document-download-type: both
+  operation-title-source: summary
+  tag-sorter: alpha
+  operation-sorter: method
+  show-operation-id: true
+  hide-test-request-button: false
 
 spring:
   config:
@@ -28,3 +45,5 @@ coordinator:
       ttl-ms: 30000
       acquire-timeout-ms: 5000
       retry-interval-ms: 100
+  health:
+    redis-timeout-ms: 300

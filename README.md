@@ -8,20 +8,20 @@ Redis Stream stores messages under stream keys. As traffic grows, a single strea
 
 In practice, solving this requires application-level sharding: splitting stream keys, routing producer writes, assigning shard ownership to consumers, and safely changing shard counts over time. However, there are very few public references for managing custom Redis Stream sharding specifically to avoid BigKey issues and achieve even distribution in Redis Cluster.
 
-This project was created to fill that gap. It adapts the coordinator-managed rebalance ideas from Kafka KIP-848 to Redis Stream, using a Redis-backed coordinator as the source of truth for shard metadata, stream versions, and consumer assignments.
+This project was created to fill that gap. It adapts the coordinator-managed rebalance ideas from Kafka KIP-848 to Redis Stream, using a Redis-backed coordinator as the source of truth for shard metadata and consumer assignments.
 
 ## Core Ideas
 
 * Split Redis Stream data into shard keys to reduce BigKey risk.
 * Design shard keys so they can be distributed evenly across Redis Cluster hash slots.
-* Route producer writes using active stream version and shard routing metadata.
+* Route producer writes using coordinator-managed shard routing metadata.
 * Let consumer runtime members heartbeat to the coordinator and converge on coordinator-managed target assignments.
 * Rebalance only the shards that need to move when members join, leave, expire, or when shard counts change.
-* Handle shard count changes through next-version stream migration instead of in-place resharding.
+* Handle shard count changes through coordinator-managed resharding instead of local in-place rewrites.
 
 ## Guarantee Boundaries
 
-Routing is deterministic only for a fixed producer-routing metadata snapshot. If shard count or active stream version changes, the same partition key can route to a different Redis Stream shard.
+Routing is deterministic only for a fixed producer-routing metadata snapshot. If shard count changes, the same partition key can route to a different Redis Stream shard.
 
 The project uses at-least-once processing as its baseline. Producer retries, consumer crashes, pending recovery, and shard scaling can all produce duplicate delivery or duplicate business-event attempts.
 
@@ -30,6 +30,7 @@ The project does not provide a single-processing guarantee. Real applications of
 ## Modules
 
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
+* `redisstream-core`: shared coordination protocol contract, version metadata, and versioned timing defaults used by both the coordinator server and support modules.
 * `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
 * `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
 * `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
@@ -56,7 +57,7 @@ Applications can implement `CoordinatorShardLifecycle` directly and keep ownersh
 implementation("com.redisstream:redisstream-spring-boot-starter:<version>")
 ```
 
-For the built-in Redis Stream polling adapter, provide a `RedisStreamMessageHandler` bean and code-defined consumer settings:
+For the built-in Redis Stream polling adapter, the simplest path is `@StreamConfiguration` plus `@StreamListener`:
 
 ```yaml
 redis-stream-coordinator:
@@ -65,8 +66,36 @@ redis-stream-coordinator:
 
 ```kotlin
 import com.redisstream.consumer.ConsumedRedisStreamMessage
+import com.redisstream.consumer.StreamConfiguration
+import com.redisstream.consumer.StreamListener
+
+@StreamConfiguration(
+    pollBatchSize = 10,
+    pollTimeoutMs = 1_000,
+)
+class OrdersConsumer {
+    @StreamListener(
+        id = "orders-consumer-a",
+        streamPrefix = "orders",
+        groupId = "orders-consumer",
+        concurrency = "4",
+    )
+    fun consume(message: ConsumedRedisStreamMessage) {
+        // Run business processing first, then explicitly commit the Redis Stream record.
+        message.ack()
+    }
+}
+```
+
+`concurrency` is both the reported local capacity and the default worker thread count. If the application needs a specific thread pool, declare an `Executor` bean and set `executor = "beanName"` on `@StreamConfiguration` or `@StreamListener`.
+
+For annotation-based consumers, the starter generates the runtime `memberId` automatically. `id` is the listener endpoint identity, not the coordinator member ID.
+
+For advanced configuration, provide a `RedisStreamMessageHandler` bean and code-defined consumer settings directly:
+
+```kotlin
+import com.redisstream.consumer.ConsumedRedisStreamMessage
 import com.redisstream.consumer.CoordinatorConsumerProperties
-import com.redisstream.consumer.RedisStreamAckMode
 import com.redisstream.consumer.RedisStreamMessageHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -76,7 +105,8 @@ import java.time.Duration
 @Component
 class OrdersMessageHandler : RedisStreamMessageHandler {
     override fun handle(message: ConsumedRedisStreamMessage) {
-        // Run business processing. The starter XACKs only after this returns successfully.
+        // Run business processing first, then explicitly commit the Redis Stream record.
+        message.ack()
     }
 }
 
@@ -91,7 +121,6 @@ class OrdersConsumerConfiguration {
             runtimeMaxConcurrency = 4
             redis.pollBatchSize = 10
             redis.pollTimeout = Duration.ofSeconds(1)
-            redis.ack.mode = RedisStreamAckMode.AUTO
         }
 }
 ```
@@ -154,9 +183,10 @@ During Spring bean initialization, both managed consumers and producer routing c
 
 * [Published Design Docs](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html)
 * [Published Design Docs (Korean)](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html?tl=ko)
+* [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
-* [Implementation Status](docs/implementation-status.md)
+* [OpenAPI Spec](docs/openapi/coordinator.v1.yaml)
 * [Docker Guide](docs/docker.md)
 * [Testing Guide](docs/testing.md)
 * [Operations Runbook](docs/operations-runbook.md)
@@ -172,14 +202,37 @@ docker compose --profile coordinator up --build
 curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
 ```
 
-Run a full local pod smoke stack with Redis Cluster, coordinator, two consumer pods, and one auto-publishing pod:
+The coordinator monitoring console is available at `http://localhost:8080/console`. Sign in with the configured coordinator Basic Auth user; the local default is `admin` / `password`.
+
+The runtime API reference is available at `http://localhost:8080/scalar`. The published static API reference is generated from `docs/openapi/coordinator.v1.yaml`.
+
+Run a full pod smoke stack with your configured external Redis, coordinator, two consumer pods, and one auto-publishing pod:
 
 ```bash
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 curl -sS http://localhost:18090/sample/status
 curl -sS http://localhost:18081/sample/events
 curl -sS http://localhost:18082/sample/events
 ```
+
+The pod smoke stack also starts Prometheus and Grafana for coordinator-owned metrics:
+
+* Prometheus: `http://localhost:9091`
+* Grafana: `http://localhost:3001` (`admin` / `admin`)
+* Dashboard: `Redis Stream Coordinator`
+
+Prometheus scrapes `coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and stream message payload tables with cursor-based pagination.
+
+For message pagination in Grafana, use the dashboard variables:
+
+* `Stream`, `Consumer Group`, `Shard`
+* `Message Direction`
+* `Message Limit`
+* `Message Cursor`
+
+The `Stream Messages API` panel displays `Next Cursor`; paste that value into `Message Cursor` and refresh the dashboard to load the next page.
 
 Swagger UI is available for interactive local testing:
 
@@ -192,7 +245,7 @@ Use `admin` / `password` in the coordinator Swagger Authorize dialog for protect
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
+This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, a lightweight monitoring console, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
 
 ## License
 

@@ -4,11 +4,13 @@
 
 이 문서는 Redis Stream Coordinator가 제공하는 HTTP API endpoint catalog이다. Endpoint의 목록, 인증, mutation 여부, 중복 요청 처리, 요청/응답 핵심 필드만 한 곳에 정리한다.
 
+Endpoint 검색, schema, example, curl snippet은 [Scalar API Reference](../../api.html)를 우선 사용한다. 이 Markdown 문서는 설계 관점의 API contract summary로 유지한다.
+
 상세 동작은 다음 문서를 기준으로 한다.
 
 * heartbeat/reconciliation flow: [`02-coordinator-architecture.md`](02-coordinator-architecture.md)
 * group state와 assignment model: [`03-group-assignment-model.md`](03-group-assignment-model.md)
-* shard scale과 stream version migration: [`04-stream-version-migration.md`](04-stream-version-migration.md)
+* shard scale과 routing: [`04-resharding-routing.md`](04-resharding-routing.md)
 * config, monitoring, metrics: [`06-data-config-observability.md`](06-data-config-observability.md)
 
 ## Base Contract
@@ -34,7 +36,7 @@ Path parameters:
 | `streamPrefix` | Coordinator가 관리하는 Redis Stream logical prefix. |
 | `consumerGroup` | Redis Stream consumer group logical name. |
 | `memberId` | member runtime이 생성한 UUID. |
-| `reshardingId` | Coordinator가 생성한 stream version resharding id. |
+| `reshardingId` | Coordinator가 생성한 resharding id. |
 
 Auth policy:
 
@@ -97,14 +99,13 @@ Common status codes:
 POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 ```
 
-Creates initial group metadata and stream version `1`. Stream version values are integers without a `v` prefix. Member startup, local YAML, producer, or consumer cannot create group metadata directly.
+Creates initial group metadata and the configured shard count. Member startup, local YAML, producers, and consumers cannot create group metadata directly.
 
 Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `initialShardCount` | no | Initial shard count. Omitted value uses coordinator `defaults.initial-shard-count`. |
-| `versionPolicy` | no | Stream version naming policy. MVP default is `AUTO_INCREMENT`. |
 | `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Default member consumer worker limit. Omitted value uses coordinator `defaults.consumer-max-concurrency`. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `reason` | no | Human-readable change reason. |
@@ -116,8 +117,6 @@ Response summary:
 | `streamPrefix` / `consumerGroup` | Created group identifier. |
 | `groupEpoch` | Initial group epoch. |
 | `metadataVersion` | Initial metadata version. |
-| `activeWriteVersion` | Integer stream version `1`. |
-| `readableVersions` | Initial readable versions. |
 | `shardCount` | Stored shard count. |
 | `consumerConcurrencyPolicy` | Stored server-side consumer concurrency policy. |
 
@@ -142,8 +141,7 @@ Response summary:
 | `groupEpoch` | Current group metadata epoch. |
 | `assignmentEpoch` | Current target assignment epoch. |
 | `metadataVersion` | Current metadata version. |
-| `activeWriteVersion` | Producer write target integer stream version. |
-| `readableVersions` | Member-readable integer stream versions. |
+| `shardCount` | Stored shard count. |
 | `consumerConcurrencyPolicy` | Server-side consumer concurrency policy. |
 | `activeMigration` | Active migration summary or null. |
 | `targetAssignmentSummary` | Desired ownership summary. |
@@ -155,28 +153,27 @@ Response summary:
 GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 ```
 
-Returns the active write metadata that producers need to route partition keys to Redis Stream shards. This endpoint is read-only and does not create streams, change shard counts, or mutate group assignment.
+Returns the routing metadata that producers need to route partition keys to Redis Stream shards. This endpoint is read-only and does not create streams, change shard counts, or mutate group assignment.
 
 Producer routing formula:
 
 ```text
 shardIndex = routeV1(partitionKey, shardCount)
-streamKey = format(streamKeyPattern, activeWriteVersion, shardIndex)
+streamKey = format(streamKeyPattern, shardIndex)
 ```
 
 `routeV1` is a fixed protocol contract, not group metadata. The starter computes a 32-bit Murmur3 hash and maps it into `[0, shardCount)` using deterministic rejection sampling so `2^32 % shardCount` tail values do not create modulo bias. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.
 
-Routing is deterministic only for the returned `activeWriteVersion` and `shardCount`. After shard scale-out/in, the same partition key may route to a different stream key. The coordinator does not provide global event id deduplication across every shard and stream version.
+Routing is deterministic only for the returned `shardCount`, routing protocol, and partition key. After shard scale-out/in, the same partition key may route to a different stream key. The coordinator does not provide global event id deduplication across every shard.
 
 Response summary:
 
 | Field | Meaning |
 | --- | --- |
 | `metadataVersion` | Coordinator metadata version for producer cache invalidation. |
-| `activeWriteVersion` | Integer stream version that producers must write to. |
-| `shardCount` | Active write version shard count. |
-| `streamKeyPattern` | Redis Stream key pattern with `{streamVersion}` and `{shardIndex}` placeholders. |
-| `shards` | Active write version shard keys and Redis Cluster slots. |
+| `shardCount` | Shard count producers must route against. |
+| `streamKeyPattern` | Redis Stream key pattern with `{shardIndex}` placeholders. |
+| `shards` | Concrete shard keys and Redis Cluster slots. |
 
 ### Scale Group
 
@@ -184,7 +181,7 @@ Response summary:
 POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
 ```
 
-Starts shard scale-out or scale-in by creating a next stream version migration. This is the only supported shard count mutation path. For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.
+Starts shard scale-out or scale-in by creating a next resharding. This is the only supported shard count mutation path. For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.
 
 Request body:
 
@@ -194,14 +191,13 @@ Request body:
 | `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Optional server-side consumer worker limit update in the same metadata change. |
 | `reason` | yes | Human-readable change reason. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
-| `deprecatedAfter` | no | Operational hint for old version deprecation window. |
+| `deprecatedAfter` | no | Operational hint for rollback/drain window. |
 
 Response summary:
 
 | Field | Meaning |
 | --- | --- |
 | `reshardingId` | Created resharding id. |
-| `fromVersion` / `toVersion` | Old/new integer stream versions. |
 | `fromShardCount` / `toShardCount` | Old/new shard counts. |
 | `state` | Initial migration state, usually `PREPARING`. |
 | `groupEpoch` | Group epoch after metadata mutation. |
@@ -218,7 +214,7 @@ Duplicate request behavior:
 PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
 ```
 
-Updates member-side consumer worker limit. This does not change shard count and does not create a new stream version.
+Updates member-side consumer worker limit. This does not change shard count.
 
 Request body:
 
@@ -255,10 +251,9 @@ Response summary:
 | Field | Meaning |
 | --- | --- |
 | `reshardingId` | Resharding id. |
-| `fromVersion` / `toVersion` | Old/new integer stream versions. |
 | `fromShardCount` / `toShardCount` | Old/new shard counts. |
 | `state` | `PREPARING`, `ACTIVE`, `DRAINING`, `DEPRECATED`, or rollback state. |
-| `drainProgress` | Old version drain progress reported by members. |
+| `drainProgress` | Removed-shard drain progress reported by members. |
 | `revokeProgress` | Revoke ack progress for moved shards. |
 | `createdAt` / `updatedAt` | Audit timestamps. |
 
@@ -268,7 +263,7 @@ Response summary:
 POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback
 ```
 
-Requests rollback inside the supported rollback window. Already-written messages in the new version are handled by the operational drain/replay policy.
+Requests rollback inside the supported rollback window. Already-written messages in newly added shard indexes are handled by the operational drain/replay policy.
 
 Request body:
 
@@ -283,8 +278,7 @@ Response summary:
 | --- | --- |
 | `reshardingId` | Resharding id. |
 | `state` | Rollback state. |
-| `activeWriteVersion` | Active write version after rollback decision. |
-| `readableVersions` | Readable versions after rollback decision. |
+| `shardCount` | Shard count after rollback decision. |
 | `groupEpoch` | Group epoch after metadata update. |
 
 Duplicate request behavior:
@@ -317,7 +311,6 @@ Request body:
 | `requestId` | yes | Request trace and retry id. |
 | `memberId` | yes | Must match path parameter. Runtime-start UUID that identifies this member incarnation. |
 | `memberEpoch` | yes | `0` means join/rejoin, `-1` means leave, positive value means active member epoch. |
-| `rebalanceTimeoutMs` | first heartbeat required | Maximum time the coordinator waits for this member to finish revocation. |
 | `metadataVersion` | yes | Member's cached metadata version. |
 | `runtimeConsumerCapacity.runtimeMaxConcurrency` | yes | Process-local maximum consumer workers. Does not change server-side `maxConcurrency`. |
 | `runtimeConsumerCapacity.availableConcurrency` | yes | Currently available worker capacity. |
@@ -343,6 +336,7 @@ Response body:
 | `memberId` | Member id echoed by coordinator. |
 | `memberEpoch` | Epoch the member must use from next heartbeat. |
 | `heartbeatIntervalMs` | Server-side recommended next heartbeat interval. |
+| `rebalanceTimeoutMs` | Coordinator-owned maximum revoke/drain wait before the coordinator may fence this member and reassign shards. |
 | `groupEpoch` | Latest group epoch. |
 | `assignmentEpoch` | Latest target assignment epoch. |
 | `metadataVersion` | Latest metadata version. |
@@ -432,7 +426,7 @@ Response summary:
 | --- | --- |
 | `state` | Group state. |
 | `epochs` | `groupEpoch`, `assignmentEpoch`. |
-| `versions` | active/readable stream versions. |
+| `versions` | stored shard count. |
 | `members` | active/expired/fenced member counts. |
 | `assignments` | target/current assignment summary. |
 | `migration` | active migration summary. |
@@ -495,7 +489,7 @@ Response summary:
 | --- | --- |
 | `migrations` | Active and historical migration summaries. |
 | `activeReshardingId` | Active resharding id or null. |
-| `drainProgress` | Old readable version drain state. |
+| `drainProgress` | Removed shard drain state. |
 
 ## Explicitly Unsupported Endpoints
 

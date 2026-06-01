@@ -17,7 +17,13 @@ class OpenApiConfig {
                 Info()
                     .title("Redis Stream Coordinator API")
                     .version("v1")
-                    .description("Control-plane API for Redis Stream shard groups, member heartbeats, producer routing, migrations, monitoring, ACL, and audit operations."),
+                    .description(
+                        """
+                        Control-plane API for Redis Stream shard groups, member heartbeats, producer routing, resharding, monitoring, ACL, and audit operations.
+
+                        Redis Stream Coordinator exists because a single Redis Stream key can become a BigKey and a Redis Cluster hash-slot hotspot. The coordinator treats one logical stream as multiple physical shard streams and owns the membership, assignment, revoke-before-assign, producer routing, and monitoring protocol around those shards.
+                        """.trimIndent(),
+                    ),
             )
             .components(
                 Components()
