@@ -339,7 +339,7 @@
           <a href="prd/01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="prd/02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="prd/04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
           <a href="prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -390,10 +390,10 @@ SPRING_DATA_REDIS_CLUSTER_NODES=localhost:7101,localhost:7102,localhost:7103 \
 ./gradlew :coordinator-server:bootRun
 </code></pre>
 <p>Sample consumer pod 두 개 실행:</p>
-<pre><code class="language-bash">SERVER_PORT=18081 CONSUMER_MEMBER_ID=consumer-pod-1 STREAM_PREFIX=demo.orders \
+<pre><code class="language-bash">SERVER_PORT=18081 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
   ./gradlew :samples:consumer-pod:bootRun
 
-SERVER_PORT=18082 CONSUMER_MEMBER_ID=consumer-pod-2 STREAM_PREFIX=demo.orders \
+SERVER_PORT=18082 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
   ./gradlew :samples:consumer-pod:bootRun
 </code></pre>
 <p>Sample endpoints:</p>
@@ -403,12 +403,13 @@ SERVER_PORT=18082 CONSUMER_MEMBER_ID=consumer-pod-2 STREAM_PREFIX=demo.orders \
 <li><code>POST /sample/publish</code></li>
 </ul>
 <h2 id="docker-pod-smoke">Docker Pod Smoke</h2>
-<p>전체 pod topology를 Docker로 실행:</p>
-<pre><code class="language-bash">docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+<p>외부 Redis Cluster를 바라보는 pod topology를 Docker로 실행:</p>
+<pre><code class="language-bash">export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 </code></pre>
 <p>Stack:</p>
 <ul>
-<li>Redis Cluster 3 nodes: <code>7201</code>, <code>7202</code>, <code>7203</code></li>
 <li>Coordinator: <code>8080</code></li>
 <li>Consumer pod 1: <code>18081</code></li>
 <li>Consumer pod 2: <code>18082</code></li>
@@ -416,7 +417,7 @@ SERVER_PORT=18082 CONSUMER_MEMBER_ID=consumer-pod-2 STREAM_PREFIX=demo.orders \
 </ul>
 <p>확인:</p>
 <pre><code class="language-bash">curl -u admin:password \
-  http://localhost:8080/coord/v1/monitoring/streams/demo.orders/groups/demo-workers/assignments
+  http://localhost:8080/coord/v1/monitoring/streams/create-order/groups/demo-workers/assignments
 
 curl http://localhost:18090/sample/status
 curl http://localhost:18081/sample/events

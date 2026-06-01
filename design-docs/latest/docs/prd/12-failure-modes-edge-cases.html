@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -721,12 +721,12 @@ coordinator assigns shard S to the new target only after release is accepted
 </tr>
 <tr>
 <td data-label="Workflow">Resharding</td>
-<td data-label="Redis-recorded handoff point">resharding state, stream versions, active write version, drain progress</td>
+<td data-label="Redis-recorded handoff point">resharding state, shard count, drain progress</td>
 <td data-label="New coordinator continuation">Continue provisioning, activation, drain, or rollback</td>
 </tr>
 <tr>
 <td data-label="Workflow">Producer routing</td>
-<td data-label="Redis-recorded handoff point">metadata version, active write version</td>
+<td data-label="Redis-recorded handoff point">metadata version, shard count</td>
 <td data-label="New coordinator continuation">Return latest recorded routing metadata</td>
 </tr>
 </tbody>
@@ -788,7 +788,7 @@ coordinator assigns shard S to the new target only after release is accepted
 </table></div>
 <h2 id="producer-routing-during-failures">Producer Routing During Failures</h2>
 <p>Producer does not heartbeat. It uses routing metadata refresh.</p>
-<p>Because producer has no heartbeat channel, shard-count changes and <code>activeWriteVersion</code> changes are propagated only through routing metadata refresh. The producer module must therefore refresh routing metadata periodically even if publishes are succeeding. The refresh interval and routing cache TTL define the maximum time a producer can keep using an older shard layout after the coordinator adds shards or activates a new write version.</p>
+<p>Because producer has no heartbeat channel, shard-count changes are propagated only through routing metadata refresh. The producer module must therefore refresh routing metadata periodically even if publishes are succeeding. The refresh interval and routing cache TTL define the maximum time a producer can keep using an older shard count after the coordinator adds shards.</p>
 <p>Refresh rules:</p>
 <ul>
 <li>Refresh periodically before the local routing cache expires.</li>
@@ -818,7 +818,7 @@ coordinator assigns shard S to the new target only after release is accepted
 </tr>
 <tr>
 <td data-label="Edge case">Coordinator adds shards but producer has not refreshed yet</td>
-<td data-label="Risk">Producer keeps writing to the old shard layout</td>
+<td data-label="Risk">Producer keeps writing to the old shard count</td>
 <td data-label="Producer behavior">Continue with cached route until refresh; refresh interval/cache TTL bounds propagation delay</td>
 </tr>
 <tr>

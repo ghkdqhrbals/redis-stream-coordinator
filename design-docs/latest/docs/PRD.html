@@ -339,7 +339,7 @@
           <a href="prd/01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="prd/02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="prd/04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -362,7 +362,7 @@
 <li><a href="prd/01-context-goals.html">Context, Goals, Non-Goals</a></li>
 <li><a href="prd/02-coordinator-architecture.html">Coordinator Architecture</a></li>
 <li><a href="prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a></li>
-<li><a href="prd/04-resharding-routing.md">Resharding, Routing, and Admin API</a></li>
+<li><a href="prd/04-resharding-routing.html">Resharding, Routing, and Admin API</a></li>
 <li><a href="prd/05-processing-reliability.html">Member Data-Plane Boundary</a></li>
 <li><a href="prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a></li>
 <li><a href="prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a></li>
@@ -387,11 +387,12 @@
 <li>Identify a group from <code>{streamPrefix, consumerGroup}</code> in the API path instead of hard-coding group identity in coordinator YAML.</li>
 <li>Let the coordinator expire members whose heartbeat age exceeds <code>member-lease-ttl</code>, fence stale owners, and recalculate target assignment.</li>
 <li>Let member runtimes create their own UUID member IDs while the coordinator owns registration state, epochs, and fencing.</li>
+<li>For annotation-based consumers, treat <code>@StreamListener(concurrency = "N")</code> as <code>N</code> logical coordinator members in the same application process. Each logical member has its own generated <code>memberId</code>, heartbeat loop, Redis consumer name, assignment state, and shard ownership.</li>
 <li>Store shard ownership as coordinator-calculated target assignment and member-reported current assignment.</li>
 <li>Require revoke-before-assign: a shard is not assigned to a new live member until the previous owner has acknowledged revocation or expired.</li>
 <li>Run rebalance as member-level reconciliation, not a group-wide stop-the-world barrier.</li>
 <li>Change shard count only through the Coordinator Admin API.</li>
-<li>Treat consumer <code>maxConcurrency</code> as local worker capacity, not as shard count.</li>
+<li>Treat bean-based <code>runtimeMaxConcurrency</code> as local worker capacity for one coordinator member, not as shard count and not as listener member count.</li>
 <li>Keep coordinator YAML limited to Redis connectivity, security, event-loop defaults, and operational defaults.</li>
 <li>Store per-group shard count and consumer concurrency policy in coordinator metadata.</li>
 <li>Store each group aggregate in one Redis metadata key and use store revision CAS for updates.</li>
@@ -411,7 +412,8 @@
 <li>Producer routing uses the shard count returned by the coordinator.</li>
 <li>Shard count changes use coordinator-managed resharding instead of in-place key rewriting.</li>
 <li>Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.</li>
-<li>Spring Boot applications can integrate by adding the starter and implementing <code>CoordinatorShardLifecycle</code> or the built-in Redis Stream polling handler.</li>
+<li>Spring Boot applications can integrate by adding the starter and using <code>@StreamListener</code>, implementing <code>CoordinatorShardLifecycle</code>, or using the built-in Redis Stream polling handler.</li>
+<li>Annotation listener concurrency creates independent coordinator members, so <code>concurrency = 4</code> joins as four member IDs rather than one member with four local shard pollers.</li>
 <li>Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.</li>
 </ul>
 <h2 id="guarantee-boundaries">Guarantee Boundaries</h2>
@@ -421,6 +423,7 @@
 <li>The baseline processing model is at-least-once.</li>
 <li>Single processing and exactly-once side effects are not guaranteed.</li>
 <li>Applications must handle duplicate side effects through domain-level idempotency, deduplication, unique constraints, or compensation.</li>
+<li>Shard exclusivity is per live coordinator member: one shard has one live owner, but one member may own multiple shards. When that happens, the built-in polling adapter must rotate across owned shards so later shard indexes do not starve.</li>
 </ul>
       </main>
     </div>

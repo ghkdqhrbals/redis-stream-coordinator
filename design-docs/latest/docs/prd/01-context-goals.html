@@ -339,7 +339,7 @@
           <a href="01-context-goals.html" aria-current="page">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -370,11 +370,12 @@
 <ul>
 <li>Reduce Redis Stream BigKey risk by splitting traffic into multiple shard stream keys.</li>
 <li>Support Redis Cluster-friendly key distribution.</li>
-<li>Provide a dedicated coordinator server as the source of truth for group metadata, stream versions, and shard assignment.</li>
+<li>Provide a dedicated coordinator server as the source of truth for group metadata, shard count and shard assignment.</li>
 <li>Provide Spring Boot modules for consumer integration and producer routing/publishing.</li>
 <li>Preserve sticky shard ownership when possible so rebalances move only the shards that need to move.</li>
 <li>Enforce revoke-before-assign for live members.</li>
 <li>Support member join, graceful leave, expiration, and rejoin.</li>
+<li>Define annotation listener concurrency as logical coordinator member fan-out: <code>@StreamListener(concurrency = "N")</code> creates N independent members with separate heartbeat and assignment state.</li>
 <li>Support shard count changes through versioned stream migration.</li>
 <li>Provide monitoring APIs and metrics for ownership, epochs, member liveness, consumer progress, producer routing, and resharding.</li>
 <li>Make open source operation practical with Docker, sample pods, security defaults, tests, and compatibility policy.</li>
@@ -386,7 +387,7 @@
 <li>Global message ordering across shards.</li>
 <li>Exactly-once processing or exactly-once business side effects.</li>
 <li>Distributed transactions across Redis Stream ACK and arbitrary application databases or APIs.</li>
-<li>Automatic global event-id deduplication across all stream versions and shards.</li>
+<li>Automatic global event-id deduplication across all shards.</li>
 <li>Running the coordinator as embedded application logic inside every consumer.</li>
 <li>Letting member startup YAML mutate server-side shard count or group metadata.</li>
 </ul>
@@ -397,6 +398,7 @@
 <li>Operators can run the coordinator server with access to a durable metadata database.</li>
 <li>Redis Cluster is used for the Redis Stream data plane. Redis-backed coordinator metadata is allowed only for development, tests, or non-critical deployments.</li>
 <li>Redis Stream data-plane reads, handler retries, DLQ policy, and ACK policy remain application-owned unless the optional starter polling adapter is enabled.</li>
+<li>Bean-based <code>runtimeMaxConcurrency</code> is local worker capacity for one member; it is separate from annotation listener concurrency.</li>
 </ul>
 <h2 id="user-facing-modules">User-Facing Modules</h2>
 <ul>

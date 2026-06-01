@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -475,6 +475,21 @@
 <li>migration notes,</li>
 <li>warning logs or metrics where practical.</li>
 </ul>
+<h2 id="shared-protocol-artifact">Shared Protocol Artifact</h2>
+<p>Coordination version metadata and default timing values are owned by <code>redisstream-core</code>.
+The coordinator server and support modules must depend on this module instead of defining
+their own heartbeat interval, member lease TTL, rebalance timeout, or supported coordination
+version tables.</p>
+<p>For coordination version <code>1</code>, the default timing contract is:</p>
+<ul>
+<li>heartbeat interval: <code>3s</code></li>
+<li>member lease TTL: <code>15s</code></li>
+<li>rebalance timeout: <code>60s</code></li>
+</ul>
+<p>The coordinator still sends <code>heartbeatIntervalMs</code> and <code>rebalanceTimeoutMs</code> in heartbeat responses,
+and consumers should follow the server response after joining. The shared defaults exist so both artifacts behave
+consistently before the first successful heartbeat and so future protocol versions can evolve
+timing defaults in one place.</p>
       </main>
     </div>
   </body>

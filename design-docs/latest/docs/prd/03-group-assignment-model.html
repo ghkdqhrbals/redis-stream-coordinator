@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html" aria-current="page">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -369,8 +369,8 @@
 <td data-label="Description">A <code>{streamPrefix, consumerGroup}</code> pair managed by the coordinator</td>
 </tr>
 <tr>
-<td data-label="Entity">Stream Version</td>
-<td data-label="Description">A numbered routing domain with a fixed shard count</td>
+<td data-label="Entity">Shard Count</td>
+<td data-label="Description">The number of Redis Stream shard keys managed for the group</td>
 </tr>
 <tr>
 <td data-label="Entity">Shard</td>
@@ -378,7 +378,7 @@
 </tr>
 <tr>
 <td data-label="Entity">Member</td>
-<td data-label="Description">A consumer runtime instance identified by <code>memberId</code></td>
+<td data-label="Description">A logical consumer runtime member identified by <code>memberId</code></td>
 </tr>
 <tr>
 <td data-label="Entity">Target Assignment</td>
@@ -409,9 +409,7 @@
 <h2 id="metadata-ownership">Metadata Ownership</h2>
 <p>The coordinator owns:</p>
 <ul>
-<li>stream versions and shard count,</li>
-<li>active write version,</li>
-<li>readable versions,</li>
+<li>shard count,</li>
 <li>member registry and lease timestamps,</li>
 <li>target assignment,</li>
 <li>accepted current assignment,</li>
@@ -428,6 +426,11 @@
 <li>local progress reporting,</li>
 <li>local graceful shutdown.</li>
 </ul>
+<h2 id="logical-member-and-worker-capacity">Logical Member and Worker Capacity</h2>
+<p>The design separates logical coordinator membership from local worker capacity.</p>
+<p>Annotation-based consumers use Kafka-style listener concurrency: <code>@StreamListener(concurrency = "4")</code> creates four logical coordinator members inside the same application process. The starter derives member IDs by appending member suffixes such as <code>-m0</code>, <code>-m1</code>, <code>-m2</code>, and <code>-m3</code> to a generated base ID. Each logical member has its own heartbeat loop, Redis consumer name, assignment state, member epoch, metadata version, and shard ownership. Annotation listeners do not have a single-member toggle.</p>
+<p>Bean-based consumers can still register one coordinator member explicitly with <code>CoordinatorConsumerProperties.consumer(...)</code>. In that path, <code>runtimeMaxConcurrency</code> is local worker capacity for that one member. It controls how many handler executions or poll workers that member can run locally; it does not create additional coordinator members.</p>
+<p>This split keeps the ownership rule simple: the coordinator assigns shards to live members, while each member decides how to multiplex its owned shards across its local worker capacity.</p>
 <h2 id="assignment-state">Assignment State</h2>
 <p>Target assignment is declarative. It records which member should own each shard once the group converges.</p>
 <p>Current assignment is observational. It records what members have reported as applied through heartbeats.</p>
@@ -445,9 +448,9 @@
 <li>new member joins,</li>
 <li>member gracefully leaves,</li>
 <li>member expires,</li>
-<li>shard count migration changes readable versions or active write version,</li>
+<li>shard count migration changes the managed shard set,</li>
 <li>consumer concurrency policy affects assignment weight,</li>
-<li>rollback changes stream version state.</li>
+<li>rollback changes resharding state.</li>
 </ul>
 <h3 id="assignment-epoch">Assignment Epoch</h3>
 <p><code>assignmentEpoch</code> increments when target assignment is recalculated. If <code>groupEpoch</code> changes but assignment does not need to change, <code>assignmentEpoch</code> can remain stable.</p>
@@ -519,6 +522,20 @@
 <li>terminal duplicate revoke reports are ignored rather than treated as violations.</li>
 </ul>
 <p>Invalid ownership reports are fenced to prevent split ownership.</p>
+<h2 id="ownership-and-consumer-concurrency">Ownership and Consumer Concurrency</h2>
+<p>Shard ownership and consumer concurrency are intentionally separate:</p>
+<ul>
+<li>a shard can have exactly one live owner at a time,</li>
+<li>a consumer member can own many shards,</li>
+<li>annotation listener <code>concurrency</code> creates logical coordinator members, not local workers inside a single member,</li>
+<li>bean-based <code>runtimeMaxConcurrency</code> describes local worker capacity for one member, not a hard ownership limit,</li>
+<li><code>assignedMaxConcurrency</code> caps the coordinator-approved local worker capacity reported by one member,</li>
+<li>concurrency can be used as a balancing weight, but the coordinator must not require shard count to be less than or equal to member concurrency,</li>
+<li>when one member owns more shards than its worker count, the member must multiplex owned shards across local workers,</li>
+<li>the built-in polling adapter must keep one active Redis read loop per shard at most, even when several local workers are available.</li>
+</ul>
+<p>For annotation listeners, <code>concurrency = 4</code> means four independently assigned coordinator members. For bean-based integrations, <code>runtimeMaxConcurrency = 4</code> means one member can run up to four local handler executions in parallel. Neither setting means a member can own only four shards.</p>
+<p>If one member owns more shards than it has available local workers, the built-in polling adapter rotates across owned shards. Later shard indexes must continue to be polled and processed; assignment imbalance must not create permanent shard starvation.</p>
       </main>
     </div>
   </body>

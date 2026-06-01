@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html" aria-current="page">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -360,7 +360,7 @@
 <h2 id="responsibilities">Responsibilities</h2>
 <h3 id="coordinator-server">Coordinator Server</h3>
 <ul>
-<li>Own group metadata and stream version metadata.</li>
+<li>Own group metadata and shard metadata.</li>
 <li>Track member liveness from heartbeats.</li>
 <li>Fence stale or expired owners.</li>
 <li>Calculate sticky target assignment.</li>
@@ -391,7 +391,7 @@
 </ul>
 <h3 id="redis-metadata-store">Redis Metadata Store</h3>
 <ul>
-<li>Store group metadata, stream versions, assignments, member state, resharding state, audit pointers, and derived monitoring columns.</li>
+<li>Store group metadata, shard count, assignments, member state, resharding state, audit pointers, and derived monitoring columns.</li>
 <li>Keep the canonical <code>GroupMetadata</code> aggregate as JSON in a single Redis hash key per <code>{streamPrefix, consumerGroup}</code>.</li>
 <li>Use Redis mutex and <code>storeRevision</code> compare-and-set updates to reject stale writers.</li>
 </ul>
@@ -479,7 +479,7 @@
 <tr>
 <td data-label="Failure">Resharding provisioning failure</td>
 <td data-label="Coordinator Behavior">Keep migration in failed/preparing state and expose it through monitoring</td>
-<td data-label="Member Behavior">Continue reading existing readable versions</td>
+<td data-label="Member Behavior">Continue reading existing readable shard set</td>
 </tr>
 </tbody>
 </table></div>

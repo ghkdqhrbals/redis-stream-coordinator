@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Context, Goals, Non-Goals</title>
+    <title>리샤딩, 라우팅, Admin API</title>
     <style>
       * {
         box-sizing: border-box;
@@ -314,7 +314,7 @@
       (() => {
         const targetLanguage = new URLSearchParams(window.location.search).get("tl");
         if (targetLanguage === "en") {
-          const target = new URL("../../../docs/prd/01-context-goals.html", window.location.href);
+          const target = new URL("../../../docs/prd/04-resharding-routing.html", window.location.href);
           target.hash = window.location.hash;
           window.location.replace(target);
         }
@@ -328,7 +328,7 @@
           <div class="site-title">Redis Stream Coordinator</div>
           <div class="site-subtitle">Design docs</div>
         </div>
-        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/01-context-goals.html">English</a><span aria-hidden="true">/</span><a href="01-context-goals.html" aria-current="true">한국어</a></div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/04-resharding-routing.html">English</a><span aria-hidden="true">/</span><a href="04-resharding-routing.html" aria-current="true">한국어</a></div>
       </div>
     </header>
     <div class="layout">
@@ -336,10 +336,10 @@
         <div class="index-title">Pages</div>
         <nav class="doc-index" aria-label="Design document navigation">
           <a href="../PRD.html">Redis Stream Coordinator Design</a>
-          <a href="01-context-goals.html" aria-current="page">Context, Goals, Non-Goals</a>
+          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
+          <a href="04-resharding-routing.html" aria-current="page">리샤딩, 라우팅, Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -354,55 +354,171 @@
         </nav>
       </aside>
       <main>
-<h1 id="context-goals-non-goals">Context, Goals, Non-Goals</h1>
-<h2 id="context">Context</h2>
-<p>Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을 Redis-backed coordinator로 구현해야 한다.</p>
-<h2 id="goals">Goals</h2>
+<h1 id="admin-api">리샤딩, 라우팅, Admin API</h1>
+<h2 id="stream-key">Stream Key 모델</h2>
+<p>Coordinator는 stream name version token을 붙이거나 관리하지 않는다. <code>streamPrefix</code>는 사용자가 정하는 Redis Stream namespace다. 애플리케이션이 versioned name을 원하면 <code>orders-blue</code>, <code>orders.blue</code>처럼 <code>streamPrefix</code> 안에 직접 포함해야 한다.</p>
+<p>Coordinator는 shard index만 붙인다.</p>
+<pre><code class="language-text">streamKey = &quot;{streamPrefix}:{shardIndex}&quot;
+</code></pre>
+<p>예시:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>사용자 <code>streamPrefix</code></th>
+<th>Shard count</th>
+<th>Coordinator가 생성하는 stream key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="사용자 streamPrefix"><code>orders</code></td>
+<td data-label="Shard count"><code>3</code></td>
+<td data-label="Coordinator가 생성하는 stream key"><code>orders:0</code>, <code>orders:1</code>, <code>orders:2</code></td>
+</tr>
+<tr>
+<td data-label="사용자 streamPrefix"><code>orders-blue</code></td>
+<td data-label="Shard count"><code>2</code></td>
+<td data-label="Coordinator가 생성하는 stream key"><code>orders-blue:0</code>, <code>orders-blue:1</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>streamPrefix</code>에는 Redis Cluster hash tag brace를 포함할 수 없다. Shard key는 hash tag를 쓰지 않아 Redis Cluster가 hash slot 기준으로 분산할 수 있게 한다.</p>
+<h2 id="producer-routing">Producer Routing</h2>
+<p>Producer는 로컬 shard count를 source of truth로 쓰지 않는다. Producer는 coordinator에서 routing metadata를 가져온다.</p>
+<pre><code class="language-json">{
+  &quot;streamPrefix&quot;: &quot;orders&quot;,
+  &quot;consumerGroup&quot;: &quot;orders-consumer&quot;,
+  &quot;metadataVersion&quot;: 12,
+  &quot;shardCount&quot;: 8,
+  &quot;streamKeyPattern&quot;: &quot;orders:{shardIndex}&quot;
+}
+</code></pre>
+<p>Producer는 이 metadata를 캐시하고 partition key를 <code>[0, shardCount)</code> 범위의 shard index로 라우팅한다. <code>metadataVersion</code>이 바뀌거나, cache TTL이 만료되거나, publish 중 stale routing을 감지하면 cache를 갱신한다.</p>
+<p>Routing은 동일 metadata snapshot 안에서만 deterministic하다.</p>
 <ul>
-<li>coordinator가 group metadata, target assignment, current assignment를 source of truth로 관리한다.</li>
-<li>group 식별자는 coordinator API의 <code>{streamPrefix, consumerGroup}</code> path/body에서 받는다.</li>
-<li>member join/leave, metadata change, Coordinator Admin API로 요청된 shard count change를 group epoch 증가로 모델링한다.</li>
-<li>topic partition에 해당하는 Redis Stream shard count는 Coordinator Admin API 요청으로만 생성/증감한다.</li>
-<li>Annotation listener의 <code>concurrency = "N"</code>은 N개의 독립 coordinator member를 만드는 member fan-out이다. 각 member는 별도 heartbeat와 assignment state를 가진다.</li>
-<li>Bean 기반 <code>runtimeMaxConcurrency</code>는 partition/shard 개수가 아니라 하나의 member 안에서 사용할 consumer worker 수이며, coordinator의 server-side consumer concurrency policy로 제한된다.</li>
-<li>target assignment는 coordinator가 계산하고 assignment epoch으로 versioning한다.</li>
-<li>member는 heartbeat/reconciliation loop로 target assignment에 수렴한다.</li>
-<li>coordinator는 <code>tick-interval</code>마다 heartbeat가 <code>member-lease-ttl</code>을 넘긴 member를 <code>EXPIRED</code>로 표시하고 shard를 재할당한다.</li>
-<li>revoke 완료 전 같은 shard를 다른 member에게 assign하지 않는다.</li>
-<li>영향 없는 member는 rebalance 중에도 기존 shard를 계속 consume한다.</li>
-<li>shard count 변경은 next resharding으로 처리한다. at-least-once producer는 online 전환할 수 있지만, 중복에 민감한 workload는 scale 전 producer quiescence를 운영 제약으로 둔다.</li>
-<li>actual read authority는 coordinator가 내려준 assignment epoch과 member epoch으로 fence한다.</li>
-<li>기본 처리 보장은 at-least-once이다. application은 중복 전달과 중복 처리 시도를 허용하도록 설계해야 한다.</li>
-<li>operator가 group epoch, assignment epoch, member epoch, target/current assignment, revoke progress를 볼 수 있게 한다.</li>
+<li>같은 routing protocol</li>
+<li>같은 <code>shardCount</code></li>
+<li>같은 partition key</li>
 </ul>
-<h2 id="non-goals">Non-Goals</h2>
+<p>Shard count가 바뀌면 동일 partition key도 다른 Redis Stream shard로 들어갈 수 있다. Coordinator는 모든 shard에 걸친 동일 event id의 global deduplication을 제공하지 않는다.</p>
+<h2 id="duplicate-publish-boundary">Duplicate Publish Boundary</h2>
+<p>중요 시나리오:</p>
+<ol>
+<li>Producer A가 <code>eventId=E</code>, <code>partitionKey=order-123</code>을 old routing metadata로 shard <code>2</code>에 publish한다.</li>
+<li>Producer가 성공 응답을 보기 전에 Redis response가 유실된다.</li>
+<li>운영자가 group을 <code>4</code> shards에서 <code>8</code> shards로 scale한다.</li>
+<li>Producer A가 routing metadata를 갱신한 뒤 retry한다.</li>
+<li>같은 partition key가 shard <code>6</code>으로 라우팅될 수 있다.</li>
+<li>같은 event ID가 두 shard 위치에 존재할 수 있다.</li>
+</ol>
+<p>운영 제약:</p>
 <ul>
-<li>Kafka broker protocol을 그대로 재구현</li>
-<li>Redis Cluster resharding 자동 대응</li>
-<li>hot shard 자동 split</li>
-<li>shard 전체 serial ordering</li>
-<li>단일 delivery, 단일 handler invocation, 단일 side effect 보장</li>
-<li>producer global deduplication 또는 전체 shard/version을 가로지르는 동일 <code>eventId</code> deduplication</li>
-<li>여러 비즈니스 side effect와 Redis Stream ACK를 원자적으로 묶는 transaction protocol</li>
-<li>기존 stream key를 직접 rewrite하는 in-place resharding</li>
-<li>member startup, local YAML, producer, consumer가 직접 shard count나 server-side consumer <code>maxConcurrency</code>를 변경하는 방식</li>
-<li>기본 consumer mode의 retry와 DLQ 구현</li>
-<li>coordinator server HA/election protocol 설계</li>
+<li>Duplicate-sensitive workload는 shard scale-out/in 중 produce하면 안 된다.</li>
+<li>Scale 전에 producer를 중지한다.</li>
+<li>In-flight XADD와 retry window를 drain한다.</li>
+<li>Scale을 실행한다.</li>
+<li>Producer routing metadata를 갱신한다.</li>
+<li>Publishing을 재개한다.</li>
 </ul>
-<h2 id="assumptions">Assumptions</h2>
+<p>Producer traffic을 멈출 수 없다면 workload는 at-least-once로 취급하고 application idempotency로 보호해야 한다.</p>
+<h2 id="resharding-flow">Resharding Flow</h2>
+<p>Shard count 변경은 Coordinator Admin API로만 수행한다.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Admin
+    participant C as Coordinator
+    participant Store as Metadata Store
+    participant Stream as Redis Stream
+    participant M as Member
+
+    Admin-&gt;&gt;C: Request resharding(targetShardCount)
+    C-&gt;&gt;Store: Acquire critical section
+    C-&gt;&gt;Store: Read group metadata
+    C-&gt;&gt;Store: Validate no active resharding
+    C-&gt;&gt;Store: Create PREPARING resharding state
+    C-&gt;&gt;Stream: Provision shard stream keys and consumer groups
+    C-&gt;&gt;Store: Activate new shard count
+    C-&gt;&gt;Store: Increment group epoch and recalculate target assignment
+    C--&gt;&gt;Admin: Return reshardingId and old/new shard counts
+    M-&gt;&gt;C: Next heartbeat with current ownership/progress
+    C--&gt;&gt;M: Revoke or assign response until target ownership converges
+</code></pre>
+<h2 id="member-startup-boundary">Member Startup Boundary</h2>
+<p>Member startup은 다음으로 제한된다.</p>
 <ul>
-<li>Redis는 stream data plane으로 사용한다.</li>
-<li>Coordinator metadata store는 Redis-backed 단일 metadata key이다.</li>
-<li>각 member는 runtime 시작 시 UUID <code>memberId</code>를 직접 생성한다.</li>
-<li>producer와 consumer는 coordinator가 Redis metadata key 기준으로 내려준 shard count을 source of truth로 사용한다.</li>
-<li>producer retry, network failure, consumer pending recovery, shard migration은 중복 message 또는 중복 처리 시도를 만들 수 있다.</li>
-<li>동일 partition key는 같은 routing metadata 안에서만 같은 shard로 route된다. shard count가 바뀌면 다른 shard로 route될 수 있다.</li>
-<li>한 <code>streamPrefix + consumerGroup</code>에는 동시에 하나의 active migration만 허용한다.</li>
-<li><code>streamPrefix</code>와 <code>consumerGroup</code>은 coordinator API 호출의 group identifier이며, coordinator/member local YAML에 고정된 shard control 설정으로 두지 않는다.</li>
-<li>member startup은 shard count 변경을 시작하지 않는다. startup은 coordinator API heartbeat join과 metadata 조회만 수행한다.</li>
-<li>member heartbeat는 runtime이 감당 가능한 consumer worker 수를 보고할 수 있지만, 실제 허용되는 <code>maxConcurrency</code>는 coordinator metadata가 결정한다.</li>
-<li>Annotation listener concurrency와 bean 기반 worker capacity는 별도 개념이다.</li>
+<li>heartbeat를 통해 coordinator metadata 확인</li>
+<li>member ID 생성 또는 로드</li>
+<li><code>{streamPrefix, consumerGroup}</code>로 heartbeat 시작</li>
+<li>heartbeat response의 assignment 적용</li>
+<li>capacity와 progress 보고</li>
 </ul>
+<p>Member startup은 다음을 하지 않는다.</p>
+<ul>
+<li>local YAML shard count를 desired state로 제출</li>
+<li>group metadata 생성 또는 변경</li>
+<li>server-side consumer concurrency policy 변경</li>
+</ul>
+<h2 id="admin-api-source-of-truth">Admin API Source of Truth</h2>
+<p>초기 group 생성과 shard scale-out/in은 Coordinator Admin API로만 수행한다.</p>
+<p>Source of truth:</p>
+<ul>
+<li>shard count: coordinator group metadata</li>
+<li>consumer <code>maxConcurrency</code>: coordinator consumer concurrency policy</li>
+<li>routing metadata: coordinator producer routing endpoint</li>
+</ul>
+<h2 id="create-group">Create Group</h2>
+<p><code>initialShardCount</code>와 <code>consumerConcurrencyPolicy.defaultMaxConcurrency</code>는 생략할 수 있다. 생략하면 coordinator default를 사용한다.</p>
+<p>처리 순서:</p>
+<ol>
+<li>group이 이미 존재하지 않는지 확인한다.</li>
+<li>요청 shard count를 검증한다.</li>
+<li>provisioning이 켜져 있으면 shard stream key와 Redis consumer group을 생성한다.</li>
+<li>consumer concurrency policy를 저장한다.</li>
+<li><code>shardCount</code>와 <code>groupEpoch=1</code>을 저장한다.</li>
+<li>duplicate create request는 <code>409 Conflict</code>로 거절한다.</li>
+</ol>
+<h2 id="scale-out-scale-in">Scale Out / Scale In</h2>
+<p><code>scale-out</code>과 <code>scale-in</code>은 같은 <code>targetShardCount</code> request로 표현한다.</p>
+<p>Coordinator는 다음 조건에서만 요청을 수락한다.</p>
+<ul>
+<li>group에 active resharding이 없다.</li>
+<li><code>targetShardCount</code>가 현재 shard count와 다르다.</li>
+<li><code>targetShardCount</code>가 양수다.</li>
+</ul>
+<p>Scale request에 consumer concurrency policy가 포함되면 같은 metadata update 안에서 저장한다.</p>
+<h2 id="consumer-concurrency-update">Consumer Concurrency Update</h2>
+<p>로컬 worker capacity limit만 바꿀 때는 consumer concurrency API를 사용한다. 이 작업은 shard count를 바꾸지 않는다.</p>
+<p>규칙:</p>
+<ul>
+<li>policy는 heartbeat response의 <code>assignedMaxConcurrency</code>로 전파된다.</li>
+<li>member가 더 큰 runtime capacity를 보고해도 server-side policy를 초과할 수 없다.</li>
+<li>concurrency를 낮춰도 shard count는 줄어들지 않는다.</li>
+<li>assignment weight policy가 <code>maxConcurrency</code>에 의존하면 coordinator는 <code>groupEpoch</code>를 증가시키고 assignment를 다시 계산한다.</li>
+<li>no-op update는 새 metadata write 없이 현재 policy를 반환한다.</li>
+</ul>
+<h2 id="monitoring">Monitoring</h2>
+<p>Group monitoring은 다음을 반환한다.</p>
+<ul>
+<li>group epoch</li>
+<li>assignment epoch</li>
+<li>shard count</li>
+<li>consumer concurrency policy</li>
+<li>active resharding</li>
+<li>target/current assignment summary</li>
+<li>member liveness</li>
+<li>revoke progress</li>
+<li>consumer progress</li>
+</ul>
+<p>Resharding monitoring은 다음을 반환한다.</p>
+<ul>
+<li><code>reshardingId</code></li>
+<li>old/new shard counts</li>
+<li>provisioning state</li>
+<li>member-reported drain progress</li>
+<li>revoke progress</li>
+<li>rollback eligibility</li>
+</ul>
+<h2 id="rollback">Rollback</h2>
+<p>Rollback은 metadata로 안전하게 되돌릴 수 있는 resharding state에서만 허용한다. 새로 추가된 shard index에 이미 message가 쓰였다면 operator-defined policy로 drain, replay, 보정해야 한다. Rollback은 Redis Stream data와 coordinator metadata를 하나의 global transaction으로 묶지 않는다.</p>
       </main>
     </div>
   </body>

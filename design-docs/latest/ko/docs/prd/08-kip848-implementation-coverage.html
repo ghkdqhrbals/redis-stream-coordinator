@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -380,7 +380,7 @@
 </tr>
 <tr>
 <td data-label="KIP-848 Concept">Topic Partition</td>
-<td data-label="Redis Stream Coordinator"><code>{streamVersion, shardIndex}</code></td>
+<td data-label="Redis Stream Coordinator"><code>shardIndex</code></td>
 </tr>
 <tr>
 <td data-label="KIP-848 Concept">Target Assignment</td>
@@ -426,9 +426,9 @@
 <ul>
 <li>Kafka broker coordinator 대신 Coordinator API server가 group metadata와 assignment를 관리한다.</li>
 <li>Kafka broker wire protocol 대신 custom HTTP Admin/Heartbeat/Monitoring API를 사용한다.</li>
-<li>Kafka topic partition 대신 Redis Stream shard key <code>{streamVersion, shardIndex}</code>를 assignment 단위로 사용한다.</li>
+<li>Kafka topic partition 대신 Redis Stream shard index를 assignment 단위로 사용한다.</li>
 <li>Kafka offset commit fencing은 구현하지 않는다. Redis Stream read/ack fencing은 member data-plane이 coordinator의 assignment/member epoch을 기준으로 적용한다.</li>
-<li>Kafka partition expansion 대신 stream version migration으로 shard scale-out/in을 처리한다.</li>
+<li>Kafka partition expansion 대신 resharding으로 shard scale-out/in을 처리한다.</li>
 <li>Kafka <code>ConsumerGroupHeartbeat</code> RPC는 internal coordinator API 또는 Redis mailbox request/response로 구현한다.</li>
 <li>member id는 member runtime이 생성하고 coordinator가 epoch/fencing 상태를 관리한다.</li>
 <li>Kafka의 <code>group.consumer.heartbeat.interval.ms</code>와 <code>group.consumer.session.timeout.ms</code>는 coordinator <code>heartbeat-interval</code>과 <code>member-lease-ttl</code>로 단순화한다.</li>
@@ -473,7 +473,7 @@
 <tr>
 <td data-label="Area">Rebalance timeout</td>
 <td data-label="KIP-848">revoke 완료를 기다리는 rebalance timeout이 있고, 초과하면 member를 group에서 제거할 수 있다.</td>
-<td data-label="Redis Stream Coordinator"><code>rebalanceTimeoutMs</code>를 heartbeat field로 받는다. coordinator global config가 아니라 member revoke deadline으로만 사용한다.</td>
+<td data-label="Redis Stream Coordinator">Coordinator가 timeout 정책을 소유하고 heartbeat response의 <code>rebalanceTimeoutMs</code>로 member에게 전달한다.</td>
 </tr>
 <tr>
 <td data-label="Area">Assignor model</td>
@@ -493,7 +493,7 @@
 <tr>
 <td data-label="Area">Partition scaling</td>
 <td data-label="KIP-848">Kafka topic partition metadata 변경이 group epoch 증가 trigger가 된다.</td>
-<td data-label="Redis Stream Coordinator">shard count 변경은 Coordinator Admin API만 가능하고 next stream version migration으로 처리한다.</td>
+<td data-label="Redis Stream Coordinator">shard count 변경은 Coordinator Admin API만 가능하고 next resharding으로 처리한다.</td>
 </tr>
 <tr>
 <td data-label="Area">Static membership</td>

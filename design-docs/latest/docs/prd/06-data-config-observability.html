@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html" aria-current="page">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -436,6 +436,7 @@
   coordination:
     heartbeat-interval: 1s
     member-lease-ttl: 10s
+    rebalance-timeout: 60s
     event-loop:
       enabled: true
       interval: 1s
@@ -522,10 +523,12 @@
 <p>Monitoring responses should include:</p>
 <ul>
 <li>group summary,</li>
-<li>stream versions,</li>
-<li>active write version,</li>
-<li>readable versions,</li>
+<li>shard count,</li>
+<li>
+<ul>
 <li>target assignment,</li>
+</ul>
+</li>
 <li>current assignment,</li>
 <li>member liveness,</li>
 <li>member capacity,</li>
@@ -549,11 +552,13 @@
 <li>consumer shard progress and lag where available,</li>
 <li>producer routing requests by group,</li>
 <li>stale producer routing refreshes,</li>
+<li>stream shard length, end offset, group offset, consumer offset, pending count, and lag,</li>
 <li>store revision conflicts,</li>
 <li>Redis metadata write latency,</li>
 <li>mutex acquire latency and timeout count for Redis-backed development mode,</li>
 <li>admin mutation count and failure count.</li>
 </ul>
+<p>The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at <code>/actuator/prometheus</code> when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.</p>
 <h2 id="alerts">Alerts</h2>
 <p>Recommended alerts:</p>
 <ul>

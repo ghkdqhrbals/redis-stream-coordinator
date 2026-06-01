@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -507,6 +507,21 @@
 <li>RedisStream starter emits the module-defined coordination version</li>
 <li>rolling-upgrade behavior when old and new members heartbeat against the same group</li>
 </ul>
+<h2 id="shared-protocol-artifact">Shared Protocol Artifact</h2>
+<p>Coordination version metadata와 기본 timing 값은 <code>redisstream-core</code>가 소유한다.
+Coordinator server와 support module은 heartbeat interval, member lease TTL,
+rebalance timeout, supported coordination version table을 각자 정의하지 않고 이 모듈을
+의존해야 한다.</p>
+<p>Coordination version <code>1</code>의 기본 timing contract는 다음과 같다.</p>
+<ul>
+<li>heartbeat interval: <code>3s</code></li>
+<li>member lease TTL: <code>15s</code></li>
+<li>rebalance timeout: <code>60s</code></li>
+</ul>
+<p>Coordinator는 heartbeat response에서 <code>heartbeatIntervalMs</code>와 <code>rebalanceTimeoutMs</code>를 내려주며, consumer는
+join 이후 server response를 따라야 한다. Shared default는 첫 heartbeat가 성공하기 전에도
+양쪽 artifact의 기본 동작이 일치하도록 하고, future protocol version에서 timing default를
+한 곳에서 진화시키기 위한 계약이다.</p>
       </main>
     </div>
   </body>

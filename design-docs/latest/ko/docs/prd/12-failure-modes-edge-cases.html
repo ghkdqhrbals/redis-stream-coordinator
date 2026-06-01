@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -724,12 +724,12 @@ coordinator assigns shard S to the new target only after release is accepted
 </tr>
 <tr>
 <td data-label="Workflow">Resharding</td>
-<td data-label="Redis-recorded handoff point">resharding state, stream version, active write version, drain progress</td>
+<td data-label="Redis-recorded handoff point">resharding state, shard count, drain progress</td>
 <td data-label="New coordinator continuation">provisioning, activation, drain, rollback 계속 진행</td>
 </tr>
 <tr>
 <td data-label="Workflow">Producer routing</td>
-<td data-label="Redis-recorded handoff point">metadata version, active write version</td>
+<td data-label="Redis-recorded handoff point">metadata version, shard count</td>
 <td data-label="New coordinator continuation">최신 recorded routing metadata 반환</td>
 </tr>
 </tbody>
@@ -791,7 +791,7 @@ coordinator assigns shard S to the new target only after release is accepted
 </table></div>
 <h2 id="producer-routing-during-failures">Producer Routing During Failures</h2>
 <p>Producer는 heartbeat를 보내지 않는다. Producer는 routing metadata refresh만 수행한다.</p>
-<p>Producer에는 heartbeat channel이 없기 때문에 shard count 변경과 <code>activeWriteVersion</code> 변경은 routing metadata refresh로만 전파된다. 따라서 producer 모듈은 publish가 정상적으로 성공하고 있더라도 routing metadata를 주기적으로 refresh해야 한다. Refresh interval과 routing cache TTL은 coordinator가 shard를 추가하거나 새 write version을 activate한 뒤 producer가 old shard layout을 계속 사용할 수 있는 최대 시간을 결정한다.</p>
+<p>Producer에는 heartbeat channel이 없기 때문에 shard count 변경은 routing metadata refresh로만 전파된다. 따라서 producer 모듈은 publish가 정상적으로 성공하고 있더라도 routing metadata를 주기적으로 refresh해야 한다. Refresh interval과 routing cache TTL은 coordinator가 shard를 추가한 뒤 producer가 old shard count를 계속 사용할 수 있는 최대 시간을 결정한다.</p>
 <p>Refresh 규칙:</p>
 <ul>
 <li>Local routing cache가 만료되기 전에 주기적으로 refresh한다.</li>
@@ -821,7 +821,7 @@ coordinator assigns shard S to the new target only after release is accepted
 </tr>
 <tr>
 <td data-label="Edge case">coordinator가 shard를 추가했지만 producer가 아직 refresh하지 않음</td>
-<td data-label="위험">producer가 old shard layout으로 계속 write</td>
+<td data-label="위험">producer가 old shard count으로 계속 write</td>
 <td data-label="Producer 동작">refresh 전까지 cached route 사용. refresh interval/cache TTL이 전파 지연 상한</td>
 </tr>
 <tr>

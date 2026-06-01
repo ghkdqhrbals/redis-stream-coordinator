@@ -339,7 +339,7 @@
           <a href="prd/01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="prd/02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="prd/04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
           <a href="prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -418,10 +418,10 @@
 </ol>
 <h2 id="resharding-triage">Resharding Triage</h2>
 <ol>
-<li>Producer routing metadata의 <code>activeWriteVersion</code>이 기대값인지 확인한다.</li>
+<li>Producer routing metadata의 <code>shardCount</code>이 기대값인지 확인한다.</li>
 <li>Live consumer가 target assignment에 수렴했는지 확인한다.</li>
 <li>Old-version shard가 <code>currentAssignments</code>나 <code>revokeProgress</code>에 남아 있는지 확인한다.</li>
-<li>Active resharding이 위험하면 old version이 deprecated되기 전에 rollback API를 사용한다.</li>
+<li>Active resharding이 위험하면 rollback 허용 구간 안에서 rollback API를 사용한다.</li>
 </ol>
 <h2 id="shard-scale-procedure">Shard Scale Procedure</h2>
 <p>Duplicate를 허용하는 at-least-once workload는 coordinator scale API로 online scale-out/in을 수행할 수 있다.</p>
@@ -430,11 +430,11 @@
 <li>대상 <code>streamPrefix</code>와 <code>consumerGroup</code>의 producer를 멈춘다.</li>
 <li>In-flight <code>XADD</code>와 publish retry window가 drain될 때까지 기다린다.</li>
 <li>Coordinator scale API를 호출한다.</li>
-<li>Producer routing metadata가 새 <code>activeWriteVersion</code>을 노출할 때까지 기다린다.</li>
+<li>Producer routing metadata가 새 <code>shardCount</code>을 노출할 때까지 기다린다.</li>
 <li>Producer routing cache를 refresh한다.</li>
 <li>Producer를 재개한다.</li>
 </ol>
-<p>이 절차가 필요한 이유는 scale 중 produce retry가 old/new stream version에 같은 event id를 각각 publish할 수 있기 때문이다.</p>
+<p>이 절차가 필요한 이유는 scale 중 produce retry가 old/new shard count에 같은 event id를 각각 publish할 수 있기 때문이다.</p>
 <h2 id="upgrade-procedure">Upgrade Procedure</h2>
 <ol>
 <li>Release note와 compatibility matrix를 읽는다.</li>
@@ -473,7 +473,7 @@
 <li>해당 group의 admin mutation을 중단한다.</li>
 <li>key가 delete, corruption, 오래된 backup restore 중 무엇으로 사라지거나 rollback됐는지 확인한다.</li>
 <li>가능하면 backup에서 metadata를 restore한다.</li>
-<li>backup이 없거나 client가 관측한 최고 version보다 오래된 backup뿐이라면 기대 shard layout으로 group을 명시적으로 재생성하고, consumer/producer를 새 group lifecycle로 취급한다.</li>
+<li>backup이 없거나 client가 관측한 최고 version보다 오래된 backup뿐이라면 기대 shard count로 group을 명시적으로 재생성하고, consumer/producer를 새 group lifecycle로 취급한다.</li>
 <li>Consumer heartbeat, producer routing cache, stale local state로 group metadata를 자동 재구성하지 않는다.</li>
 <li>Client를 낮은 metadata version으로 강제 downgrade하지 않는다. Repair 또는 recreation이 끝날 때까지 fail closed한다.</li>
 <li>Rollback된 version 숫자만 증가시켜 repair하지 않는다. 유실된 transition에는 drain, release, shard scale, routing decision이 포함될 수 있고 이를 안전하게 추론할 수 없다.</li>

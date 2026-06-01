@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -357,12 +357,13 @@
 <h1 id="coordinator-api-endpoints">Coordinator API Endpoints</h1>
 <h2 id="scope">Scope</h2>
 <p>이 문서는 Redis Stream Coordinator가 제공하는 HTTP API endpoint catalog이다. Endpoint의 목록, 인증, mutation 여부, 중복 요청 처리, 요청/응답 핵심 필드만 한 곳에 정리한다.</p>
-<p>Endpoint 검색, schema, example, curl snippet은 <a href="../../api.html">Scalar API Reference</a>를 우선 사용한다. 이 Markdown 문서는 설계 관점의 API contract summary로 유지한다.</p>
+<p>Endpoint 검색, schema, example, curl snippet은 <a href="../../api.html">Scalar API Reference</a>를 우선 사용한다. 실제 실행 환경에서는 <code>http://localhost:8080/scalar</code>로도 확인할 수 있다. 이 Markdown 문서는 설계 관점의 API contract summary로 유지한다.
+<code>operationId</code>는 생성형 클라이언트에서 사용하는 공개 API 식별자이므로, 의도적인 프로토콜 변경 시에만 변경한다.</p>
 <p>상세 동작은 다음 문서를 기준으로 한다.</p>
 <ul>
 <li>heartbeat/reconciliation flow: <a href="02-coordinator-architecture.html"><code>02-coordinator-architecture.md</code></a></li>
 <li>group state와 assignment model: <a href="03-group-assignment-model.html"><code>03-group-assignment-model.md</code></a></li>
-<li>shard scale과 routing: <a href="04-resharding-routing.md"><code>04-resharding-routing.md</code></a></li>
+<li>shard scale과 routing: <a href="04-resharding-routing.html"><code>04-resharding-routing.md</code></a></li>
 <li>config, monitoring, metrics: <a href="06-data-config-observability.html"><code>06-data-config-observability.md</code></a></li>
 </ul>
 <h2 id="base-contract">Base Contract</h2>
@@ -549,6 +550,14 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </tr>
 <tr>
 <td data-label="Area">Admin</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing</code></td>
+<td data-label="Purpose">producer 라우팅 메타데이터 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Admin</td>
 <td data-label="Method"><code>PATCH</code></td>
 <td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency</code></td>
 <td data-label="Purpose">server-side consumer <code>maxConcurrency</code> 변경</td>
@@ -584,6 +593,22 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Method"><code>GET</code></td>
 <td data-label="Path"><code>/coord/v1/monitoring/health</code></td>
 <td data-label="Purpose">coordinator health 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/session</code></td>
+<td data-label="Purpose">모니터링 principal/session 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/compatibility</code></td>
+<td data-label="Purpose">coordination compatibility 조회</td>
 <td data-label="Mutates State">no</td>
 <td data-label="Duplicate Request Handling">not required</td>
 </tr>
@@ -632,6 +657,70 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Method"><code>GET</code></td>
 <td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations</code></td>
 <td data-label="Purpose">migration 목록/진행률 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/groups</code></td>
+<td data-label="Purpose">Grafana overview의 group flat rows 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/options/streams</code></td>
+<td data-label="Purpose">Grafana stream prefix 변수 옵션 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/options/consumer-groups</code></td>
+<td data-label="Purpose">Grafana consumer group 변수 옵션 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/options/shards</code></td>
+<td data-label="Purpose">Grafana shard 옵션 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/members</code></td>
+<td data-label="Purpose">Grafana member flat rows 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/shards</code></td>
+<td data-label="Purpose">Grafana shard 상태 행 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/assignments</code></td>
+<td data-label="Purpose">Grafana assignment flat rows 조회</td>
+<td data-label="Mutates State">no</td>
+<td data-label="Duplicate Request Handling">not required</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/messages</code></td>
+<td data-label="Purpose">Grafana 메시지 행 조회</td>
 <td data-label="Mutates State">no</td>
 <td data-label="Duplicate Request Handling">not required</td>
 </tr>
@@ -1265,6 +1354,28 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>loop</code></td>
 <td data-label="Meaning">Coordinator loop health and last tick time.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="monitoring-session">Monitoring Session</h3>
+<pre><code class="language-http">GET /coord/v1/monitoring/session
+</code></pre>
+<p>Response summary:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>authenticated</code></td>
+<td data-label="Meaning">모니터링 호출이 Basic Auth로 인증된 경우 <code>true</code>.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>username</code></td>
+<td data-label="Meaning">SecurityContext에서 추출 가능한 사용자명.</td>
 </tr>
 </tbody>
 </table></div>

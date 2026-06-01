@@ -339,7 +339,7 @@
           <a href="prd/01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="prd/02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="prd/04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -399,11 +399,11 @@ COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_CONNECT_PORT=7103 \
 ./gradlew :coordinator-server:bootRun
 </code></pre>
 <p>Create a group, then run two sample consumer pods:</p>
-<pre><code class="language-bash">SERVER_PORT=18081 CONSUMER_MEMBER_ID=consumer-pod-1 STREAM_PREFIX=demo.orders \
+<pre><code class="language-bash">SERVER_PORT=18081 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
 REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
   ./gradlew :samples:consumer-pod:bootRun
 
-SERVER_PORT=18082 CONSUMER_MEMBER_ID=consumer-pod-2 STREAM_PREFIX=demo.orders \
+SERVER_PORT=18082 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
 REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
   ./gradlew :samples:consumer-pod:bootRun
 </code></pre>
@@ -414,19 +414,20 @@ REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CL
 <li><code>POST /sample/publish</code></li>
 </ul>
 <h2 id="docker-pod-smoke">Docker Pod Smoke</h2>
-<p>Use <code>compose.pods.yaml</code> to run the full local pod topology in Docker:</p>
-<pre><code class="language-bash">docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+<p>Use <code>compose.pods.yaml</code> to run the pod topology against an external Redis Cluster:</p>
+<pre><code class="language-bash">export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 </code></pre>
 <p>The stack starts:</p>
 <ul>
-<li>3 Redis Cluster nodes on host ports <code>7201</code>, <code>7202</code>, and <code>7203</code></li>
 <li>1 coordinator on <code>8080</code></li>
 <li>2 consumer pods on <code>18081</code> and <code>18082</code></li>
 <li>1 auto-publishing pod on <code>18090</code></li>
 </ul>
 <p>Check the coordinator assignment and sample pod events:</p>
 <pre><code class="language-bash">curl -u admin:password \
-  http://localhost:8080/coord/v1/monitoring/streams/demo.orders/groups/demo-workers/assignments
+  http://localhost:8080/coord/v1/monitoring/streams/create-order/groups/demo-workers/assignments
 
 curl http://localhost:18090/sample/status
 curl http://localhost:18081/sample/events

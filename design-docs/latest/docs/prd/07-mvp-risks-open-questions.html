@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html" aria-current="page">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -367,7 +367,7 @@
 <li>sticky shard assignment,</li>
 <li>revoke-before-assign,</li>
 <li>member expiration and fencing,</li>
-<li>shard count resharding with stream versions,</li>
+<li>shard count resharding,</li>
 <li>rollback within a bounded window,</li>
 <li>producer routing metadata API,</li>
 <li>Spring Boot consumer and producer integration,</li>
@@ -380,7 +380,7 @@
 <ul>
 <li>Kafka wire protocol compatibility.</li>
 <li>Exactly-once business side effects.</li>
-<li>Global event-id deduplication across stream versions and shards.</li>
+<li>Global event-id deduplication across shards.</li>
 <li>Embedded coordinator mode inside consumer applications.</li>
 <li>Multi-region active-active coordinator state.</li>
 <li>Automatic Redis Cluster node provisioning.</li>

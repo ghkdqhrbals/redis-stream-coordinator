@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -357,12 +357,13 @@
 <h1 id="coordinator-api-endpoints">Coordinator API Endpoints</h1>
 <h2 id="scope">Scope</h2>
 <p>This document is the HTTP API catalog for Redis Stream Coordinator. It lists endpoint paths, auth expectations, mutation behavior, idempotency expectations, and the most important request and response fields.</p>
-<p>Use the <a href="../../api.html">Scalar API Reference</a> for interactive endpoint search, schemas, examples, and curl snippets. This Markdown page remains the design-level contract summary.</p>
+<p>Use the local <a href="../../api.html">Scalar API Reference</a> for interactive endpoint search, schemas, examples, and curl snippets. The server also exposes a live reference at <code>http://localhost:8080/scalar</code>.
+<code>operationId</code> values are treated as the API contract surface for generated clients and changed only for intentional protocol changes.</p>
 <p>Detailed behavior is defined in these documents:</p>
 <ul>
 <li>heartbeat and reconciliation flow: <a href="02-coordinator-architecture.html">02-coordinator-architecture.md</a></li>
 <li>group state and assignment model: <a href="03-group-assignment-model.html">03-group-assignment-model.md</a></li>
-<li>shard scaling and routing: <a href="04-resharding-routing.md">04-resharding-routing.md</a></li>
+<li>shard scaling and routing: <a href="04-resharding-routing.html">04-resharding-routing.md</a></li>
 <li>configuration, monitoring, and metrics: <a href="06-data-config-observability.html">06-data-config-observability.md</a></li>
 </ul>
 <h2 id="base-contract">Base Contract</h2>
@@ -564,6 +565,13 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <tr>
 <td data-label="Area">Monitoring</td>
 <td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/session</code></td>
+<td data-label="Purpose">Read monitoring principal/session context.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
 <td data-label="Path"><code>/coord/v1/monitoring/compatibility</code></td>
 <td data-label="Purpose">Read coordination compatibility metadata.</td>
 <td data-label="Mutates State">no</td>
@@ -608,6 +616,62 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Method"><code>GET</code></td>
 <td data-label="Path"><code>/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations</code></td>
 <td data-label="Purpose">List migrations.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/groups</code></td>
+<td data-label="Purpose">Read flat rows for Grafana overview.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/options/streams</code></td>
+<td data-label="Purpose">Grafana variable options for stream prefixes.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/options/consumer-groups</code></td>
+<td data-label="Purpose">Grafana variable options for consumer groups.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/options/shards</code></td>
+<td data-label="Purpose">Grafana variable options for shard indexes.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/members</code></td>
+<td data-label="Purpose">Read flat member rows for Grafana tables.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/shards</code></td>
+<td data-label="Purpose">Read flat shard status rows for Grafana.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/assignments</code></td>
+<td data-label="Purpose">Read flat assignment rows for Grafana.</td>
+<td data-label="Mutates State">no</td>
+</tr>
+<tr>
+<td data-label="Area">Monitoring</td>
+<td data-label="Method"><code>GET</code></td>
+<td data-label="Path"><code>/coord/v1/monitoring/grafana/messages</code></td>
+<td data-label="Purpose">Read flat stream message rows for Grafana.</td>
 <td data-label="Mutates State">no</td>
 </tr>
 </tbody>
@@ -1134,6 +1198,29 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>loop</code></td>
 <td data-label="Meaning">Coordinator loop health.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="monitoring-session">Monitoring Session</h3>
+<pre><code class="language-http">GET /coord/v1/monitoring/session
+</code></pre>
+<p>Response: <code>200 OK</code> with <code>MonitoringSessionResponse</code>.</p>
+<p>The response is intended for Grafana/API clients that need authenticated principal metadata for the monitoring calls.</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>authenticated</code></td>
+<td data-label="Meaning"><code>true</code> when monitoring request was authenticated by Basic Auth.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>username</code></td>
+<td data-label="Meaning">Principal name when available from security context.</td>
 </tr>
 </tbody>
 </table></div>

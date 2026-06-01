@@ -339,7 +339,7 @@
           <a href="prd/01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="prd/02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="prd/03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="prd/04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="prd/04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="prd/05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="prd/06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="prd/07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -424,10 +424,10 @@
 </ol>
 <h2 id="migration-triage">Migration Triage</h2>
 <ol>
-<li>Confirm producer routing metadata points to the expected <code>activeWriteVersion</code>.</li>
+<li>Confirm producer routing metadata points to the expected <code>shardCount</code>.</li>
 <li>Confirm live consumers have converged to target assignments.</li>
-<li>Check whether old-version shards are still reported in <code>currentAssignments</code> or <code>revokeProgress</code>.</li>
-<li>If the active migration is unsafe, use the rollback API before the old version is deprecated.</li>
+<li>Check whether removed shards are still reported in <code>currentAssignments</code> or <code>revokeProgress</code>.</li>
+<li>If the active migration is unsafe, use the rollback API while rollback is still allowed.</li>
 </ol>
 <h2 id="shard-scale-procedure">Shard Scale Procedure</h2>
 <p>For at-least-once producer workloads that tolerate duplicates, shard scale-out/in can be performed online through the coordinator scale API.</p>
@@ -436,11 +436,11 @@
 <li>Pause producers for the target <code>streamPrefix</code> and <code>consumerGroup</code>.</li>
 <li>Wait until in-flight <code>XADD</code> calls and publish retry windows are drained.</li>
 <li>Call the coordinator scale API.</li>
-<li>Wait for producer routing metadata to expose the new <code>activeWriteVersion</code>.</li>
+<li>Wait for producer routing metadata to expose the new <code>shardCount</code>.</li>
 <li>Refresh producer routing caches.</li>
 <li>Resume producers.</li>
 </ol>
-<p>This is required because the same event id can be published to old and new stream versions if scaling occurs while produce retries are still active. The project does not provide global deduplication or a single-processing guarantee.</p>
+<p>This is required because the same event id can be published to old and new shard counts if scaling occurs while produce retries are still active. The project does not provide global deduplication or a single-processing guarantee.</p>
 <h2 id="upgrade-procedure">Upgrade Procedure</h2>
 <ol>
 <li>Read the release notes and compatibility matrix.</li>
@@ -479,7 +479,7 @@
 <li>Stop admin mutations for the affected group.</li>
 <li>Confirm whether the key was deleted, corrupted, or restored from an older backup.</li>
 <li>Restore metadata from backup when possible.</li>
-<li>If backup is unavailable or older than the highest client-observed version, explicitly recreate the group with the expected shard layout and treat consumers/producers as a new group lifecycle.</li>
+<li>If backup is unavailable or older than the highest client-observed version, explicitly recreate the group with the expected shard count and treat consumers/producers as a new group lifecycle.</li>
 <li>Do not rely on consumer heartbeats, producer routing caches, or stale local state to reconstruct group metadata automatically.</li>
 <li>Do not force clients to downgrade to a lower metadata version; fail closed until repair or recreation is complete.</li>
 <li>Do not repair by only incrementing the rolled-back version number. The lost transition contents may include drain, release, shard scale, or routing decisions that cannot be inferred safely.</li>

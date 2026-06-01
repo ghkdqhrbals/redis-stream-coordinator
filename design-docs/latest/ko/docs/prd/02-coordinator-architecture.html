@@ -339,7 +339,7 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html" aria-current="page">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-stream-version-migration.html">Stream Version Migration and Routing</a>
+          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
           <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
@@ -460,7 +460,6 @@ steps:
   &quot;requestId&quot;: &quot;hb-member-a-000042&quot;,
   &quot;memberId&quot;: &quot;member-a&quot;,
   &quot;memberEpoch&quot;: 11,
-  &quot;rebalanceTimeoutMs&quot;: 60000,
   &quot;metadataVersion&quot;: 8,
   &quot;runtimeConsumerCapacity&quot;: {
     &quot;runtimeMaxConcurrency&quot;: 12,
@@ -468,14 +467,12 @@ steps:
   },
   &quot;ownedShards&quot;: [
     {
-      &quot;streamVersion&quot;: 2,
       &quot;shardIndex&quot;: 0,
       &quot;state&quot;: &quot;OWNED&quot;
     }
   ],
   &quot;revokingShards&quot;: [
     {
-      &quot;streamVersion&quot;: 1,
       &quot;shardIndex&quot;: 3,
       &quot;state&quot;: &quot;DRAINING&quot;,
       &quot;inFlight&quot;: 2,
@@ -491,6 +488,7 @@ steps:
   &quot;memberId&quot;: &quot;member-a&quot;,
   &quot;memberEpoch&quot;: 12,
   &quot;heartbeatIntervalMs&quot;: 3000,
+  &quot;rebalanceTimeoutMs&quot;: 60000,
   &quot;groupEpoch&quot;: 12,
   &quot;assignmentEpoch&quot;: 12,
   &quot;metadataVersion&quot;: 9,
@@ -498,10 +496,10 @@ steps:
   &quot;assignment&quot;: {
     &quot;error&quot;: &quot;NONE&quot;,
     &quot;assignedShards&quot;: [
-      {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 0}
+      {&quot;shardIndex&quot;: 0}
     ],
     &quot;pendingShards&quot;: [
-      {&quot;streamVersion&quot;: 2, &quot;shardIndex&quot;: 2}
+      {&quot;shardIndex&quot;: 2}
     ],
     &quot;metadataVersion&quot;: 9
   }
@@ -536,11 +534,6 @@ steps:
 <td data-label="Field"><code>memberEpoch</code></td>
 <td data-label="Required">yes</td>
 <td data-label="Role"><code>0</code>이면 신규 join 또는 coordinator가 이미 <code>EXPIRED</code>/<code>FENCED</code>로 판단한 member의 rejoin, <code>-1</code>이면 leave, 양수이면 coordinator가 직전 response로 발급한 epoch이다. stale 값이면 <code>FENCED_MEMBER_EPOCH</code>, coordinator가 발급하지 않은 값이면 <code>INVALID_REQUEST</code> 대상이다.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>rebalanceTimeoutMs</code></td>
-<td data-label="Required">first heartbeat required</td>
-<td data-label="Role">revoke를 완료할 수 있는 최대 시간이다. coordinator config가 아니라 member heartbeat contract이며, 값이 바뀌지 않으면 생략할 수 있다.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>metadataVersion</code></td>
@@ -603,6 +596,11 @@ steps:
 <td data-label="Field"><code>heartbeatIntervalMs</code></td>
 <td data-label="Required">yes</td>
 <td data-label="Role">member가 다음 정상 heartbeat를 보내야 하는 server-side 권장 주기이다.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>rebalanceTimeoutMs</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Role">coordinator-owned revoke/drain deadline이다. 이 시간 안에 revoke 완료 보고가 없으면 coordinator는 member를 fence하고 shard를 재할당할 수 있다.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>groupEpoch</code></td>
