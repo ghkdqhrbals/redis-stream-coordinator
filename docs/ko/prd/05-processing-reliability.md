@@ -10,7 +10,7 @@ Redis Stream Coordinator는 message processor가 아니다. 이 문서는 coordi
 * current assignment report
 * assigned/pending shard assignment
 * member epoch fencing status
-* stream version migration state
+* resharding state
 * assignment epoch과 member epoch 기반 stale owner fencing
 
 ## Member Data-Plane Owns

@@ -14,13 +14,43 @@ The main application-facing functions are:
 
 | API | Purpose |
 | --- | --- |
+| `@StreamConfiguration` | Declare class-level defaults for coordinator-managed listener methods, including polling and poller thread pool size. |
+| `@StreamListener` | Mark a business handler method as a listener endpoint and set endpoint identity, stream prefix, group ID, startup, and concurrency. |
 | `CoordinatorConsumerProperties.consumer(...)` | Register a managed consumer for one `{streamPrefix, consumerGroupName}` pair. |
 | `ProducerRoutingProperties.producer(...)` | Register a producer routing cache for one `{streamPrefix, consumerGroupName}` pair. |
 | `RedisStreamPublisher.publish(...)` | Route a partition key and append a record to the active Redis Stream shard. |
 | `CoordinatorShardLifecycle` | Receive shard assign/revoke callbacks when the application owns its own read workers. |
-| `RedisStreamMessageHandler` | Let the built-in polling adapter execute business handling and ACK after success. |
+| `RedisStreamMessageHandler` | Let the built-in polling adapter execute business handling; application code explicitly ACKs, ACKDELs, or NACKs. |
 
-Minimal consumer and producer registration:
+Minimal annotation-based consumer registration:
+
+```kotlin
+@StreamConfiguration
+class OrdersConsumer {
+    @StreamListener(
+        id = "orders-consumer-a",
+        streamPrefix = "orders",
+        groupId = "orders-consumer",
+        concurrency = "4",
+    )
+    fun consume(message: ConsumedRedisStreamMessage) {
+        // Business processing.
+        message.ack()
+    }
+}
+```
+
+For annotation listeners, `concurrency = "4"` creates four logical coordinator members in the same application process. Each logical member has its own generated `memberId`, heartbeat loop, Redis consumer name, assignment state, and shard ownership. This is the Kafka-like listener concurrency model.
+
+The annotation listener always uses this logical-member split model. The starter does not expose a split toggle, and there is no supported mode where `concurrency = "4"` means one coordinator member with four local pollers.
+
+Shard ownership and member concurrency are not the same thing. The coordinator assigns each shard to exactly one live member, while a single member can own many shards. Listener concurrency increases the number of logical members participating in assignment; it does not change the rule that a shard has one live owner.
+
+For annotation-based consumers, the starter generates the runtime `memberId` automatically. `id` is the listener endpoint identity, not the coordinator member ID.
+
+Heartbeat interval and rebalance timeout default to the shared coordination version timing. `rebalanceTimeout` is the maximum time the coordinator waits for this member to drain revoked shards before it may fence the member and reassign those shards.
+
+Minimal bean-based consumer and producer registration:
 
 ```kotlin
 @Bean
@@ -35,6 +65,8 @@ fun ordersProducer(): ProducerRoutingProperties =
         xadd.maxLen = 100_000
     }
 ```
+
+In the bean-based path, `runtimeMaxConcurrency = 4` is local worker capacity for one coordinator member. It does not create four member IDs. Applications that want Kafka-like member fan-out should use `@StreamListener(concurrency = "N")` or explicitly register multiple managed consumers with distinct member identities.
 
 Minimal publish call:
 
@@ -65,7 +97,6 @@ class OrdersConsumerConfiguration {
             streamPrefix = "orders",
             consumerGroupName = "orders-consumer",
         ) {
-            memberId = System.getenv("HOSTNAME") ?: UUID.randomUUID().toString()
             runtimeMaxConcurrency = 4
             heartbeatInterval = Duration.ofSeconds(3)
             rebalanceTimeout = Duration.ofSeconds(60)
@@ -138,21 +169,20 @@ class OrdersPollingConfiguration {
         ) {
             redis.pollBatchSize = 10
             redis.pollTimeout = Duration.ofSeconds(1)
-            redis.ack.mode = RedisStreamAckMode.AUTO
-            redis.failure.mode = RedisStreamFailureMode.LEAVE_PENDING
         }
 }
 ```
 
-Supported ACK modes:
+The polling adapter does not auto-commit records. Handler code must call `message.ack()` after the business side effect succeeds, `message.ackDel()` when the application also wants Redis to delete the stream entry, or `message.nack()` when the application wants to use Redis XNACK.
 
-| Mode | Behavior |
-| --- | --- |
-| `AUTO` | Use `XACKDEL` when the connected Redis server supports it, otherwise `XACK` |
-| `XACKDEL` | ACK and delete after successful handler execution |
-| `XACK` | ACK after successful handler execution |
+Polling semantics:
 
-Failed-message handling is configured separately through `redis.failure.mode`. The default `LEAVE_PENDING` preserves classic Redis Stream retry behavior. `XNACK` is only used when explicitly configured and the connected Redis version supports it.
+* coordinator ownership is per shard; at most one live member may read a shard,
+* listener concurrency is the number of logical members created inside the application process,
+* bean-based `runtimeMaxConcurrency` is local worker capacity for a single logical member,
+* when one member owns more than one shard, its workers round-robin across owned shards,
+* later shard indexes must continue to be polled; the adapter must not permanently starve shards simply because one member owns more shards than its worker count,
+* the built-in adapter keeps one active poll per shard to preserve shard-local ordering and avoid duplicate local reads.
 
 Applications provide a handler:
 
@@ -161,7 +191,7 @@ Applications provide a handler:
 class OrdersMessageHandler : RedisStreamMessageHandler {
     override fun handle(message: ConsumedRedisStreamMessage) {
         // Execute business processing.
-        // The adapter acknowledges only after this method returns successfully.
+        message.ack()
     }
 }
 ```
@@ -201,7 +231,7 @@ class OrdersProducerConfiguration {
 
 When a `ProducerRoutingCache` bean is created, it performs the same initial metadata validation and seeds the local routing cache. Missing prefix/group shard metadata is a startup error, not a first-publish error.
 
-The producer does not send heartbeats. Shard additions, shard-count changes, and active write-version changes reach producers through periodic routing metadata refresh. `routingRefreshInterval` bounds normal propagation delay; the routing cache lease bounds how long a producer may keep publishing without a successful coordinator refresh. If the cache lease expires and refresh still fails, publish must fail closed instead of using stale routing indefinitely.
+The producer does not send heartbeats. Shard additions and shard-count changes reach producers through periodic routing metadata refresh. `routingRefreshInterval` bounds normal propagation delay; the routing cache lease bounds how long a producer may keep publishing without a successful coordinator refresh. If the cache lease expires and refresh still fails, publish must fail closed instead of using stale routing indefinitely.
 
 Applications publish through `RedisStreamPublisher`:
 

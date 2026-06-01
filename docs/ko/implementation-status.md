@@ -1,14 +1,15 @@
 # 구현 상태
 
-마지막 업데이트: 2026-05-29
+마지막 업데이트: 2026-06-01
 
 ## 요약
 
-현재 저장소는 두 개의 주요 Gradle 모듈을 제공한다.
+현재 저장소는 세 개의 주요 production Gradle 모듈을 제공한다.
 
 | Module | Status | Purpose |
 | --- | --- | --- |
 | `coordinator-server` | MVP 구현 | group metadata, heartbeat reconciliation, assignment, resharding, monitoring, ACL, audit, Redis-backed state를 담당하는 Spring Boot control plane |
+| `redisstream-core` | 구현됨 | coordinator와 support module이 공유하는 coordination version contract와 versioned timing defaults |
 | `com.redisstream:redisstream-spring-boot-starter` | MVP 구현 | consumer heartbeat lifecycle, shard callback, Redis Stream polling, producer routing, publish, graceful leave, progress report를 제공하는 Spring Boot integration layer |
 
 ## 구현 완료
@@ -23,6 +24,7 @@
 * [x] Resharding 조회와 rollback API
 * [x] Member heartbeat API
 * [x] Health, group, member, assignment, resharding monitoring API
+* [x] `/console` built-in monitoring console
 * [x] HTTP status, error code, default message를 enum으로 관리하는 error model
 * [x] Member lease expiry, rebalance timeout, drain progress를 처리하는 scheduled event loop
 * [x] 여러 coordinator pod가 떠도 state 접근을 직렬화할 수 있는 Redis-backed state mutex
@@ -40,9 +42,9 @@
 * [x] `assignedShards`와 `pendingShards` 분리
 * [x] Revoke-before-assign handoff
 * [x] Rebalance timeout fencing
-* [x] Next stream version 기반 shard count migration
-* [x] Active migration 중 old/new readable versions
-* [x] Drain 완료 후 old version `DEPRECATED` 전환
+* [x] Shard count 변경 기반 resharding
+* [x] Active migration 중 제거 대상 shard drain
+* [x] Drain 완료 후 shard handoff
 * [x] Active resharding rollback
 
 ### Redis Integration
@@ -60,6 +62,10 @@
 * [x] Redis Cluster hash-slot-safe coordinator keys
 * [x] Optional Redis Stream shard and consumer-group provisioning
 * [x] Coordinator Redis command template
+* [x] JVM Dockerfile
+* [x] Manual GHCR publish workflow for coordinator image tags
+* [x] Consumer Redis polling enforces runtime concurrency across assigned shards before reading new records.
+* [x] Heartbeat replay idempotency for initial join and steady ownership reports.
 
 ### Redis Metadata Correction
 
@@ -79,8 +85,11 @@
 * [x] Per-caller/group admin mutation rate limiting
 * [x] Structured admin audit logs
 * [x] Optional Redis-backed group-scoped audit log
-* [x] Coordinator-owned Micrometer metrics
+* [x] Coordinator-owned Micrometer/Prometheus metrics
 * [x] Consumer shard progress gauges
+* [x] Redis Stream shard offset, length, pending, lag gauges
+* [x] Local Prometheus/Grafana Docker provisioning and Redis Stream Coordinator dashboard
+* [x] Coordinator Basic Auth로 로그인하고 monitoring API를 조회하는 built-in monitoring console
 
 ### Spring Boot Starter
 
@@ -115,6 +124,7 @@
 ./gradlew :redisstream-spring-boot-starter:test --no-daemon
 ./gradlew test build --no-daemon
 python3 .github/scripts/test_docker_distribution.py
+docker build -t redis-stream-coordinator/coordinator-server:jvm-ci .
 ```
 
 Redis integration tests:
@@ -132,4 +142,4 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
 2. [ ] 외부 배포 예제와 release automation hardening
 3. [ ] Redis version compatibility guide 보강
 4. [ ] 오래된 metadata JSON과 client coordination version compatibility fixture 보강
-5. [ ] 운영 dashboard/alert 예제 보강
+5. [ ] 운영 alert 예제 보강

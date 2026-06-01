@@ -86,6 +86,8 @@ coordinator:
   heartbeat-interval: 3s
   # member heartbeat가 이 시간보다 오래 오지 않으면 EXPIRED/FENCED로 보고 target assignment를 다시 계산한다.
   member-lease-ttl: 15s
+  # revoke/drain 완료를 기다리는 coordinator-owned 최대 시간이다. HeartbeatResponse.rebalanceTimeoutMs로 내려준다.
+  rebalance-timeout: 60s
   loop:
     # Coordinator event loop 활성화 여부이다.
     enabled: true
@@ -160,7 +162,7 @@ GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migration
 Monitoring response에는 다음 요약만 포함한다.
 
 * group state, `groupEpoch`, `assignmentEpoch`
-* active/readable stream version
+* shard count
 * active/expired member count
 * target/current assignment summary
 * revoke progress
@@ -207,7 +209,9 @@ Coordinator metric is the public observability surface. Consumer and producer mo
 * `redis_stream_coord_consumer_shard_progress_updated_at_seconds`
 * `redis_stream_coord_consumer_shard_progress_age_seconds`
 
-Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.
+Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, stream shard length, end offset, group offset, consumer offset, pending count, lag, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.
+
+The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at `/actuator/prometheus` when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.
 
 ## Redis Command Template Boundary
 

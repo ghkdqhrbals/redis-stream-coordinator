@@ -42,11 +42,12 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Identify a group from `{streamPrefix, consumerGroup}` in the API path instead of hard-coding group identity in coordinator YAML.
 * Let the coordinator expire members whose heartbeat age exceeds `member-lease-ttl`, fence stale owners, and recalculate target assignment.
 * Let member runtimes create their own UUID member IDs while the coordinator owns registration state, epochs, and fencing.
+* For annotation-based consumers, treat `@StreamListener(concurrency = "N")` as `N` logical coordinator members in the same application process. Each logical member has its own generated `memberId`, heartbeat loop, Redis consumer name, assignment state, and shard ownership.
 * Store shard ownership as coordinator-calculated target assignment and member-reported current assignment.
 * Require revoke-before-assign: a shard is not assigned to a new live member until the previous owner has acknowledged revocation or expired.
 * Run rebalance as member-level reconciliation, not a group-wide stop-the-world barrier.
 * Change shard count only through the Coordinator Admin API.
-* Treat consumer `maxConcurrency` as local worker capacity, not as shard count.
+* Treat bean-based `runtimeMaxConcurrency` as local worker capacity for one coordinator member, not as shard count and not as listener member count.
 * Keep coordinator YAML limited to Redis connectivity, security, event-loop defaults, and operational defaults.
 * Store per-group shard count and consumer concurrency policy in coordinator metadata.
 * Store each group aggregate in one Redis metadata key and use store revision CAS for updates.
@@ -66,7 +67,8 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Producer routing uses the shard count returned by the coordinator.
 * Shard count changes use coordinator-managed resharding instead of in-place key rewriting.
 * Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.
-* Spring Boot applications can integrate by adding the starter and implementing `CoordinatorShardLifecycle` or the built-in Redis Stream polling handler.
+* Spring Boot applications can integrate by adding the starter and using `@StreamListener`, implementing `CoordinatorShardLifecycle`, or using the built-in Redis Stream polling handler.
+* Annotation listener concurrency creates independent coordinator members, so `concurrency = 4` joins as four member IDs rather than one member with four local shard pollers.
 * Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.
 
 ## Guarantee Boundaries
@@ -76,3 +78,4 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * The baseline processing model is at-least-once.
 * Single processing and exactly-once side effects are not guaranteed.
 * Applications must handle duplicate side effects through domain-level idempotency, deduplication, unique constraints, or compensation.
+* Shard exclusivity is per live coordinator member: one shard has one live owner, but one member may own multiple shards. When that happens, the built-in polling adapter must rotate across owned shards so later shard indexes do not starve.

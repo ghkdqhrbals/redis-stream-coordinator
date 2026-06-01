@@ -133,3 +133,21 @@ Versioning changes must include tests for:
 * coordinator rejects below-minimum and above-maximum coordination versions
 * RedisStream starter emits the module-defined coordination version
 * rolling-upgrade behavior when old and new members heartbeat against the same group
+
+## Shared Protocol Artifact
+
+Coordination version metadata와 기본 timing 값은 `redisstream-core`가 소유한다.
+Coordinator server와 support module은 heartbeat interval, member lease TTL,
+rebalance timeout, supported coordination version table을 각자 정의하지 않고 이 모듈을
+의존해야 한다.
+
+Coordination version `1`의 기본 timing contract는 다음과 같다.
+
+* heartbeat interval: `3s`
+* member lease TTL: `15s`
+* rebalance timeout: `60s`
+
+Coordinator는 heartbeat response에서 `heartbeatIntervalMs`와 `rebalanceTimeoutMs`를 내려주며, consumer는
+join 이후 server response를 따라야 한다. Shared default는 첫 heartbeat가 성공하기 전에도
+양쪽 artifact의 기본 동작이 일치하도록 하고, future protocol version에서 timing default를
+한 곳에서 진화시키기 위한 계약이다.

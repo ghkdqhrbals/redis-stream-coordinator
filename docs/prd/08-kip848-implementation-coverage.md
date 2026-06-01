@@ -46,14 +46,13 @@ Assignment is computed and persisted by the coordinator. Consumers receive assig
 
 ## Redis-Specific Changes
 
-### Stream Versions
+### Redis Sharding
 
-Kafka partitions are broker-managed. Redis Stream shards are application-managed keys. Shard count changes therefore use stream versions:
+Kafka partitions are broker-managed. Redis Stream shards are application-managed keys. Shard count changes are managed by the coordinator metadata:
 
-* old version becomes `DRAINING`,
-* new version becomes `ACTIVE`,
-* consumers read all readable versions,
-* producers write only to the active version.
+* the coordinator records a resharding state,
+* consumers drain shards that are being removed,
+* producers route with the current shard count returned by the coordinator.
 
 ### Producer Routing
 

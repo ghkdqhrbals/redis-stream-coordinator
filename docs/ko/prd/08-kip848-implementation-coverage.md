@@ -11,7 +11,7 @@
 | Group Coordinator | Coordinator API server |
 | Consumer Group | `{streamPrefix, consumerGroup}` |
 | Member | member runtime이 생성한 UUID `memberId` |
-| Topic Partition | `{streamVersion, shardIndex}` |
+| Topic Partition | `shardIndex` |
 | Target Assignment | coordinator가 저장한 desired shard ownership |
 | Current Assignment | member가 heartbeat로 보고한 실제 적용 상태 |
 | ConsumerGroupHeartbeat | member heartbeat request/response assignment channel |
@@ -37,9 +37,9 @@
 
 * Kafka broker coordinator 대신 Coordinator API server가 group metadata와 assignment를 관리한다.
 * Kafka broker wire protocol 대신 custom HTTP Admin/Heartbeat/Monitoring API를 사용한다.
-* Kafka topic partition 대신 Redis Stream shard key `{streamVersion, shardIndex}`를 assignment 단위로 사용한다.
+* Kafka topic partition 대신 Redis Stream shard index를 assignment 단위로 사용한다.
 * Kafka offset commit fencing은 구현하지 않는다. Redis Stream read/ack fencing은 member data-plane이 coordinator의 assignment/member epoch을 기준으로 적용한다.
-* Kafka partition expansion 대신 stream version migration으로 shard scale-out/in을 처리한다.
+* Kafka partition expansion 대신 resharding으로 shard scale-out/in을 처리한다.
 * Kafka `ConsumerGroupHeartbeat` RPC는 internal coordinator API 또는 Redis mailbox request/response로 구현한다.
 * member id는 member runtime이 생성하고 coordinator가 epoch/fencing 상태를 관리한다.
 * Kafka의 `group.consumer.heartbeat.interval.ms`와 `group.consumer.session.timeout.ms`는 coordinator `heartbeat-interval`과 `member-lease-ttl`로 단순화한다.
@@ -55,11 +55,11 @@
 | Member ID | KIP-848 원문은 server-generated member id를 설명하고, 이후 KIP-1082로 client-generated id가 반영됐다. | member runtime이 UUID `memberId`를 만들고 coordinator가 등록/epoch/fencing을 관리한다. `memberId` 자체가 runtime incarnation id이다. |
 | Heartbeat payload | 첫 heartbeat나 error 이후에는 전체 필드를 보내고, 이후에는 변경된 subscription/assignor/owned partition field만 보낼 수 있다. | MVP heartbeat는 owned shards, revoking shards, runtime consumer capacity를 명시적으로 보고하는 custom schema를 사용한다. |
 | Heartbeat/session | server-side heartbeat interval과 session timeout을 member에게 전달한다. | `heartbeatIntervalMs`로 다음 heartbeat 주기를 전달하고, `member-lease-ttl` 초과 member를 `EXPIRED/FENCED` 처리한다. |
-| Rebalance timeout | revoke 완료를 기다리는 rebalance timeout이 있고, 초과하면 member를 group에서 제거할 수 있다. | `rebalanceTimeoutMs`를 heartbeat field로 받는다. coordinator global config가 아니라 member revoke deadline으로만 사용한다. |
+| Rebalance timeout | revoke 완료를 기다리는 rebalance timeout이 있고, 초과하면 member를 group에서 제거할 수 있다. | Coordinator가 timeout 정책을 소유하고 heartbeat response의 `rebalanceTimeoutMs`로 member에게 전달한다. |
 | Assignor model | server-side assignor 선택, assignor negotiation, client-side assignor delegation을 모델링한다. | sticky partition assignment만 전제로 하며 선택/협상/위임을 제공하지 않는다. |
 | Subscription model | topic name, topic id, regex subscription, partition metadata 변경을 group metadata로 다룬다. | `{streamPrefix, consumerGroup}` Admin API 대상과 Redis Stream version metadata를 사용한다. regex subscription은 없다. |
 | Member metadata | instance id, rack id, client id, client host, subscribed topics, assignor metadata를 group assignment input으로 다룬다. | member lifecycle, heartbeat time, assignment epoch, runtime/assigned concurrency만 coordinator state로 둔다. |
-| Partition scaling | Kafka topic partition metadata 변경이 group epoch 증가 trigger가 된다. | shard count 변경은 Coordinator Admin API만 가능하고 next stream version migration으로 처리한다. |
+| Partition scaling | Kafka topic partition metadata 변경이 group epoch 증가 trigger가 된다. | shard count 변경은 Coordinator Admin API만 가능하고 next resharding으로 처리한다. |
 | Static membership | instance id 기반 static membership과 temporary leave를 지원한다. | MVP에서는 static membership을 구현하지 않는다. restart는 새 runtime incarnation으로 본다. |
 | Offset APIs | offset commit/fetch가 member epoch으로 fencing된다. | Redis Stream `XREADGROUP`/`XACK`는 at-least-once이다. Coordinator는 stale owner fencing과 assignment visibility를 제공하지만 단일 처리 보장은 제공하지 않는다. |
 | Error model | Kafka protocol error code(`UNKNOWN_MEMBER_ID`, `FENCED_MEMBER_EPOCH`, `UNSUPPORTED_ASSIGNOR` 등)를 사용한다. | Redis coordinator는 sticky assignment 전제라 assignor error를 제외하고 `HeartbeatStatus` enum을 custom API contract로 정의한다. |

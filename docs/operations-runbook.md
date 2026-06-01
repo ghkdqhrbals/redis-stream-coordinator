@@ -70,10 +70,10 @@ Alert on:
 
 ## Migration Triage
 
-1. Confirm producer routing metadata points to the expected `activeWriteVersion`.
+1. Confirm producer routing metadata points to the expected `shardCount`.
 2. Confirm live consumers have converged to target assignments.
-3. Check whether old-version shards are still reported in `currentAssignments` or `revokeProgress`.
-4. If the active migration is unsafe, use the rollback API before the old version is deprecated.
+3. Check whether removed shards are still reported in `currentAssignments` or `revokeProgress`.
+4. If the active migration is unsafe, use the rollback API while rollback is still allowed.
 
 ## Shard Scale Procedure
 
@@ -84,11 +84,11 @@ For duplicate-sensitive workloads:
 1. Pause producers for the target `streamPrefix` and `consumerGroup`.
 2. Wait until in-flight `XADD` calls and publish retry windows are drained.
 3. Call the coordinator scale API.
-4. Wait for producer routing metadata to expose the new `activeWriteVersion`.
+4. Wait for producer routing metadata to expose the new `shardCount`.
 5. Refresh producer routing caches.
 6. Resume producers.
 
-This is required because the same event id can be published to old and new stream versions if scaling occurs while produce retries are still active. The project does not provide global deduplication or a single-processing guarantee.
+This is required because the same event id can be published to old and new shard counts if scaling occurs while produce retries are still active. The project does not provide global deduplication or a single-processing guarantee.
 
 ## Upgrade Procedure
 
@@ -136,7 +136,7 @@ If a source-of-truth metadata key is lost or Redis is restored to an older backu
 1. Stop admin mutations for the affected group.
 2. Confirm whether the key was deleted, corrupted, or restored from an older backup.
 3. Restore metadata from backup when possible.
-4. If backup is unavailable or older than the highest client-observed version, explicitly recreate the group with the expected shard layout and treat consumers/producers as a new group lifecycle.
+4. If backup is unavailable or older than the highest client-observed version, explicitly recreate the group with the expected shard count and treat consumers/producers as a new group lifecycle.
 5. Do not rely on consumer heartbeats, producer routing caches, or stale local state to reconstruct group metadata automatically.
 6. Do not force clients to downgrade to a lower metadata version; fail closed until repair or recreation is complete.
 7. Do not repair by only incrementing the rolled-back version number. The lost transition contents may include drain, release, shard scale, or routing decisions that cannot be inferred safely.

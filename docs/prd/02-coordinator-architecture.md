@@ -8,7 +8,7 @@ Redis Stream Coordinator separates the control plane from the data plane. The co
 
 ### Coordinator Server
 
-* Own group metadata and stream version metadata.
+* Own group metadata and shard metadata.
 * Track member liveness from heartbeats.
 * Fence stale or expired owners.
 * Calculate sticky target assignment.
@@ -39,7 +39,7 @@ Redis Stream Coordinator separates the control plane from the data plane. The co
 
 ### Redis Metadata Store
 
-* Store group metadata, stream versions, assignments, member state, resharding state, audit pointers, and derived monitoring columns.
+* Store group metadata, shard count, assignments, member state, resharding state, audit pointers, and derived monitoring columns.
 * Keep the canonical `GroupMetadata` aggregate as JSON in a single Redis hash key per `{streamPrefix, consumerGroup}`.
 * Use Redis mutex and `storeRevision` compare-and-set updates to reject stale writers.
 
@@ -112,7 +112,7 @@ This avoids a global stop-the-world barrier and keeps unaffected members consumi
 | Stale ownership report | Reject or fence the member depending on severity | Stop reads and rejoin |
 | Coordinator restart | Reload state from the Redis metadata key and continue from stored epochs | Continue heartbeating |
 | Redis metadata outage | Fail control-plane writes and report degraded health | Keep local policy or stop based on application risk policy |
-| Resharding provisioning failure | Keep migration in failed/preparing state and expose it through monitoring | Continue reading existing readable versions |
+| Resharding provisioning failure | Keep migration in failed/preparing state and expose it through monitoring | Continue reading existing readable shard set |
 
 ## Consistency Boundaries
 

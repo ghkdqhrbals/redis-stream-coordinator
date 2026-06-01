@@ -213,8 +213,8 @@ The new coordinator does not resume old stack frames. It resumes from Redis-reco
 | Expiration | last heartbeat timestamp, member state | Recalculate expiration on request or tick |
 | Rebalance | target/current assignment, revoking shards, assignment epoch | Continue revoke-before-assign |
 | Graceful leave | `LEAVING` state and revoking shards | Wait for revoke ack, timeout, or expiration |
-| Resharding | resharding state, stream versions, active write version, drain progress | Continue provisioning, activation, drain, or rollback |
-| Producer routing | metadata version, active write version | Return latest recorded routing metadata |
+| Resharding | resharding state, shard count, drain progress | Continue provisioning, activation, drain, or rollback |
+| Producer routing | metadata version, shard count | Return latest recorded routing metadata |
 
 ## Consumer Join, Rejoin, Leave, and Expiration
 
@@ -232,7 +232,7 @@ The new coordinator does not resume old stack frames. It resumes from Redis-reco
 
 Producer does not heartbeat. It uses routing metadata refresh.
 
-Because producer has no heartbeat channel, shard-count changes and `activeWriteVersion` changes are propagated only through routing metadata refresh. The producer module must therefore refresh routing metadata periodically even if publishes are succeeding. The refresh interval and routing cache TTL define the maximum time a producer can keep using an older shard layout after the coordinator adds shards or activates a new write version.
+Because producer has no heartbeat channel, shard-count changes are propagated only through routing metadata refresh. The producer module must therefore refresh routing metadata periodically even if publishes are succeeding. The refresh interval and routing cache TTL define the maximum time a producer can keep using an older shard count after the coordinator adds shards.
 
 Refresh rules:
 
@@ -246,7 +246,7 @@ Refresh rules:
 | --- | --- | --- |
 | Coordinator unavailable and routing cache is valid | Publish would stop unnecessarily | Continue publishing with cached routing metadata |
 | Coordinator unavailable and routing cache is expired | Stale routing can continue forever | Fail publish with retryable coordinator-unavailable error |
-| Coordinator adds shards but producer has not refreshed yet | Producer keeps writing to the old shard layout | Continue with cached route until refresh; refresh interval/cache TTL bounds propagation delay |
+| Coordinator adds shards but producer has not refreshed yet | Producer keeps writing to the old shard count | Continue with cached route until refresh; refresh interval/cache TTL bounds propagation delay |
 | Lower `metadataVersion` response | Redis metadata rollback or stale coordinator response | Treat as metadata sync. Downgrade only when the coordinator explicitly returns current routing metadata |
 | Higher `metadataVersion` response | Local route is stale | Replace cache |
 | Publish fails after uncertain `XADD` | Duplicate records on retry | Keep default publish attempts conservative; application owns event idempotency |

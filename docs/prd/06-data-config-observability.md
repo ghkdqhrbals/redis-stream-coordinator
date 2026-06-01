@@ -71,6 +71,7 @@ coordinator:
   coordination:
     heartbeat-interval: 1s
     member-lease-ttl: 10s
+    rebalance-timeout: 60s
     event-loop:
       enabled: true
       interval: 1s
@@ -164,10 +165,8 @@ Monitoring APIs are read-only. State changes must happen through Admin APIs or t
 Monitoring responses should include:
 
 * group summary,
-* stream versions,
-* active write version,
-* readable versions,
-* target assignment,
+* shard count,
+* * target assignment,
 * current assignment,
 * member liveness,
 * member capacity,
@@ -193,10 +192,13 @@ Coordinator metrics should cover:
 * consumer shard progress and lag where available,
 * producer routing requests by group,
 * stale producer routing refreshes,
+* stream shard length, end offset, group offset, consumer offset, pending count, and lag,
 * store revision conflicts,
 * Redis metadata write latency,
 * mutex acquire latency and timeout count for Redis-backed development mode,
 * admin mutation count and failure count.
+
+The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at `/actuator/prometheus` when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.
 
 ## Alerts
 

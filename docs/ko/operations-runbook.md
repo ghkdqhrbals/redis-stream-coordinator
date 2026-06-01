@@ -61,10 +61,10 @@ curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
 
 ## Resharding Triage
 
-1. Producer routing metadata의 `activeWriteVersion`이 기대값인지 확인한다.
+1. Producer routing metadata의 `shardCount`이 기대값인지 확인한다.
 2. Live consumer가 target assignment에 수렴했는지 확인한다.
 3. Old-version shard가 `currentAssignments`나 `revokeProgress`에 남아 있는지 확인한다.
-4. Active resharding이 위험하면 old version이 deprecated되기 전에 rollback API를 사용한다.
+4. Active resharding이 위험하면 rollback 허용 구간 안에서 rollback API를 사용한다.
 
 ## Shard Scale Procedure
 
@@ -75,11 +75,11 @@ Duplicate-sensitive workload는 다음 순서를 지킨다.
 1. 대상 `streamPrefix`와 `consumerGroup`의 producer를 멈춘다.
 2. In-flight `XADD`와 publish retry window가 drain될 때까지 기다린다.
 3. Coordinator scale API를 호출한다.
-4. Producer routing metadata가 새 `activeWriteVersion`을 노출할 때까지 기다린다.
+4. Producer routing metadata가 새 `shardCount`을 노출할 때까지 기다린다.
 5. Producer routing cache를 refresh한다.
 6. Producer를 재개한다.
 
-이 절차가 필요한 이유는 scale 중 produce retry가 old/new stream version에 같은 event id를 각각 publish할 수 있기 때문이다.
+이 절차가 필요한 이유는 scale 중 produce retry가 old/new shard count에 같은 event id를 각각 publish할 수 있기 때문이다.
 
 ## Upgrade Procedure
 
@@ -127,7 +127,7 @@ Source-of-truth metadata key가 사라졌거나 Redis가 오래된 backup으로 
 1. 해당 group의 admin mutation을 중단한다.
 2. key가 delete, corruption, 오래된 backup restore 중 무엇으로 사라지거나 rollback됐는지 확인한다.
 3. 가능하면 backup에서 metadata를 restore한다.
-4. backup이 없거나 client가 관측한 최고 version보다 오래된 backup뿐이라면 기대 shard layout으로 group을 명시적으로 재생성하고, consumer/producer를 새 group lifecycle로 취급한다.
+4. backup이 없거나 client가 관측한 최고 version보다 오래된 backup뿐이라면 기대 shard count로 group을 명시적으로 재생성하고, consumer/producer를 새 group lifecycle로 취급한다.
 5. Consumer heartbeat, producer routing cache, stale local state로 group metadata를 자동 재구성하지 않는다.
 6. Client를 낮은 metadata version으로 강제 downgrade하지 않는다. Repair 또는 recreation이 끝날 때까지 fail closed한다.
 7. Rollback된 version 숫자만 증가시켜 repair하지 않는다. 유실된 transition에는 drain, release, shard scale, routing decision이 포함될 수 있고 이를 안전하게 추론할 수 없다.

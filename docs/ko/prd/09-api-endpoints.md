@@ -4,7 +4,8 @@
 
 이 문서는 Redis Stream Coordinator가 제공하는 HTTP API endpoint catalog이다. Endpoint의 목록, 인증, mutation 여부, 중복 요청 처리, 요청/응답 핵심 필드만 한 곳에 정리한다.
 
-Endpoint 검색, schema, example, curl snippet은 [Scalar API Reference](../../api.html)를 우선 사용한다. 이 Markdown 문서는 설계 관점의 API contract summary로 유지한다.
+Endpoint 검색, schema, example, curl snippet은 [Scalar API Reference](../../api.html)를 우선 사용한다. 실제 실행 환경에서는 `http://localhost:8080/scalar`로도 확인할 수 있다. 이 Markdown 문서는 설계 관점의 API contract summary로 유지한다.
+`operationId`는 생성형 클라이언트에서 사용하는 공개 API 식별자이므로, 의도적인 프로토콜 변경 시에만 변경한다.
 
 상세 동작은 다음 문서를 기준으로 한다.
 
@@ -79,17 +80,28 @@ Common status codes:
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | group 생성 | yes | existing group is `409 Conflict` |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | group metadata 조회 | no | not required |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale` | shard scale-out/in migration 시작 | yes | active migration or same target is rejected/no-op |
+| Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing` | producer 라우팅 메타데이터 조회 | no | not required |
 | Admin | `PATCH` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` | server-side consumer `maxConcurrency` 변경 | yes | same policy returns current policy |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | migration 상태 조회 | no | not required |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | migration rollback 요청 | yes | current migration state decides acceptance |
 | Member | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat` | member liveness/owned shard 보고 및 assignment 수신 | yes | `requestId`; effective state is `memberEpoch` + `ownedShards` |
 | Monitoring | `GET` | `/coord/v1/monitoring/health` | coordinator health 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/session` | 모니터링 principal/session 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/compatibility` | coordination compatibility 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/groups` | group 목록 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}` | group 요약 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members` | member 상태 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments` | target/current assignment 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption` | consumer shard별 Redis Stream progress 조회 | no | not required |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations` | migration 목록/진행률 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/groups` | Grafana overview의 group flat rows 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/options/streams` | Grafana stream prefix 변수 옵션 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/options/consumer-groups` | Grafana consumer group 변수 옵션 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/options/shards` | Grafana shard 옵션 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/members` | Grafana member flat rows 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/shards` | Grafana shard 상태 행 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/assignments` | Grafana assignment flat rows 조회 | no | not required |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/messages` | Grafana 메시지 행 조회 | no | not required |
 
 ## Admin API
 
@@ -384,6 +396,19 @@ Response summary:
 | `coordinatorId` | Coordinator server identity. |
 | `redis` | Redis dependency health. Redis is checked only when Redis-backed store, Redis audit, or stream provisioning is enabled. |
 | `loop` | Coordinator loop health and last tick time. |
+
+### Monitoring Session
+
+```http
+GET /coord/v1/monitoring/session
+```
+
+Response summary:
+
+| Field | Meaning |
+| --- | --- |
+| `authenticated` | 모니터링 호출이 Basic Auth로 인증된 경우 `true`. |
+| `username` | SecurityContext에서 추출 가능한 사용자명. |
 
 ### Compatibility
 

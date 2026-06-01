@@ -40,11 +40,12 @@ Consumer 모듈은 heartbeat, assignment, revoke, fencing, optional Redis Stream
 * coordinator는 API 요청의 `{streamPrefix, consumerGroup}`으로 group을 식별하고, application YAML에 group을 고정 설정하지 않는다.
 * coordinator는 tick마다 member heartbeat를 확인하고, `member-lease-ttl`을 넘긴 member를 `EXPIRED`로 fencing한 뒤 target assignment를 다시 계산한다.
 * member identity는 member runtime이 직접 만든 UUID를 사용하되, coordinator가 등록/epoch/fencing 상태를 관리한다.
+* Annotation 기반 consumer에서 `@StreamListener(concurrency = "N")`은 같은 애플리케이션 프로세스 안에 N개의 논리 coordinator member를 만든다는 뜻이다. 각 논리 member는 별도 `memberId`, heartbeat loop, Redis consumer name, assignment state, shard ownership을 가진다.
 * shard assignment는 sticky partition 방식으로 계산하고 target assignment로 저장한다.
 * member는 heartbeat request로 owned shard와 revoke ack를 보고하고, coordinator는 heartbeat response로 assigned/pending shard assignment와 fencing status를 내려보낸다.
 * rebalance는 group-wide stop-the-world barrier가 아니라 member별 reconciliation loop로 진행한다.
 * shard count 변경은 member startup YAML sync가 아니라 Coordinator Admin API로만 요청하고, coordinator가 next resharding으로 처리한다.
-* consumer `maxConcurrency`는 partition/shard 수가 아니라 member 내부 consumer worker 수이며, Coordinator Admin API가 저장한 server-side consumer concurrency policy로 결정한다.
+* Bean 기반 consumer의 `runtimeMaxConcurrency`는 하나의 coordinator member 내부 consumer worker 수이다. 이는 shard count도 아니고 annotation listener의 member count도 아니다.
 * coordinator config는 Redis 접속 정보, Basic Auth admin 계정, control-plane default만 가진다.
 * stream/group별 shard count와 consumer concurrency 개별 설정은 Admin API로 저장한다.
 * 각 group aggregate는 Redis의 단일 metadata key에 저장하고 store revision CAS로 update한다.
@@ -65,7 +66,8 @@ Consumer 모듈은 heartbeat, assignment, revoke, fencing, optional Redis Stream
 * 중복에 민감한 workload는 shard count 변경 전 producer quiescence를 완료하고, scale 이후 갱신된 routing metadata로 produce를 재개한다.
 * 제거 대상 shard는 member가 보고한 drain progress가 완료된 뒤 handoff 가능 상태가 된다.
 * operator는 monitoring API로 group epoch, assignment epoch, member epoch, target/current assignment, revoke progress, migration progress를 확인할 수 있다.
-* application developer는 starter dependency와 `CoordinatorShardLifecycle` 구현만으로 coordinator heartbeat, assignment, revoke, fencing 처리를 연동할 수 있다.
+* application developer는 starter dependency와 `@StreamListener`, `CoordinatorShardLifecycle`, built-in Redis Stream polling handler 중 하나로 coordinator heartbeat, assignment, revoke, fencing 처리를 연동할 수 있다.
+* Annotation listener의 `concurrency = 4`는 하나의 member가 local poller 네 개를 가지는 모드가 아니라, 네 개의 member ID로 join하는 모드이다.
 * minor 버전 업그레이드는 N/N-1 client와 server가 동시에 동작하는 rolling upgrade를 지원한다.
 
 ## Guarantee Boundaries
@@ -75,3 +77,4 @@ Consumer 모듈은 heartbeat, assignment, revoke, fencing, optional Redis Stream
 * 기본 처리 모델은 at-least-once이다. 같은 business event가 여러 번 전달되거나 여러 번 처리 시도될 수 있다.
 * 단일 처리 또는 단일 side effect 반영은 보장하지 않는다. 여러 비즈니스 side effect를 Redis Stream ACK와 함께 원자적으로 commit할 수 없기 때문이다.
 * 중복 side effect 방지는 application domain의 idempotency, deduplication, unique constraint, compensation 정책으로 처리해야 한다.
+* Shard exclusivity는 live coordinator member 기준이다. 하나의 shard는 하나의 live owner만 가질 수 있지만, 하나의 member가 여러 shard를 소유할 수 있다. 이 경우 built-in polling adapter는 owned shard를 순회해서 뒤쪽 shard가 굶지 않도록 해야 한다.

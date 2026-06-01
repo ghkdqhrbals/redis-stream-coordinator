@@ -123,3 +123,21 @@ Deprecations must include:
 * earliest removal version,
 * migration notes,
 * warning logs or metrics where practical.
+
+## Shared Protocol Artifact
+
+Coordination version metadata and default timing values are owned by `redisstream-core`.
+The coordinator server and support modules must depend on this module instead of defining
+their own heartbeat interval, member lease TTL, rebalance timeout, or supported coordination
+version tables.
+
+For coordination version `1`, the default timing contract is:
+
+* heartbeat interval: `3s`
+* member lease TTL: `15s`
+* rebalance timeout: `60s`
+
+The coordinator still sends `heartbeatIntervalMs` and `rebalanceTimeoutMs` in heartbeat responses,
+and consumers should follow the server response after joining. The shared defaults exist so both artifacts behave
+consistently before the first successful heartbeat and so future protocol versions can evolve
+timing defaults in one place.

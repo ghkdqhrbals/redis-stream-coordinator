@@ -18,7 +18,7 @@ Included:
 * target assignment store
 * current assignment reporting
 * revoke before assign dependency handling
-* stream version migration
+* resharding
 * coordinator/member metrics
 * coordinator Docker image path and local Compose deployment
 * open source contribution, testing, security, release, and operations documentation

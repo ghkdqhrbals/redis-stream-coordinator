@@ -16,13 +16,43 @@ Starter는 특정 Redis Stream 처리 프레임워크를 강제하지 않는다.
 
 | API | 역할 |
 | --- | --- |
+| `@StreamConfiguration` | coordinator-managed listener method가 공유할 polling 설정과 poller thread pool size 기본값을 선언한다. |
+| `@StreamListener` | business handler method를 listener endpoint로 표시하고 stream prefix, group ID, startup, concurrency를 endpoint 단위로 설정한다. |
 | `CoordinatorConsumerProperties.consumer(...)` | 하나의 `{streamPrefix, consumerGroupName}`에 대한 managed consumer를 등록한다. |
 | `ProducerRoutingProperties.producer(...)` | 하나의 `{streamPrefix, consumerGroupName}`에 대한 producer routing cache를 등록한다. |
 | `RedisStreamPublisher.publish(...)` | partition key를 active Redis Stream shard로 routing하고 record를 `XADD`한다. |
 | `CoordinatorShardLifecycle` | 애플리케이션이 직접 worker를 운영할 때 shard assign/revoke callback을 받는다. |
-| `RedisStreamMessageHandler` | built-in polling adapter가 message를 처리하고 성공 후 ACK하도록 handler를 제공한다. |
+| `RedisStreamMessageHandler` | built-in polling adapter가 business handler를 호출한다. ACK, ACKDEL, NACK은 애플리케이션 코드가 명시적으로 수행한다. |
 
-최소 consumer/producer 등록 예시는 다음과 같다.
+최소 annotation 기반 consumer 등록 예시는 다음과 같다.
+
+```kotlin
+@StreamConfiguration
+class OrdersConsumer {
+    @StreamListener(
+        id = "orders-consumer-a",
+        streamPrefix = "orders",
+        groupId = "orders-consumer",
+        concurrency = "4",
+    )
+    fun consume(message: ConsumedRedisStreamMessage) {
+        // Business processing.
+        message.ack()
+    }
+}
+```
+
+Annotation listener에서 `concurrency = "4"`는 같은 애플리케이션 프로세스 안에 4개의 논리 coordinator member를 만든다. 각 논리 member는 개별 `memberId`, heartbeat loop, Redis consumer name, assignment state, shard ownership을 가진다. 이 방식이 Kafka와 유사한 listener concurrency 모델이다.
+
+Annotation listener는 항상 이 logical-member split 모델을 사용한다. Starter는 split toggle을 공개 설정으로 제공하지 않으며, `concurrency = "4"`가 하나의 coordinator member 내부 local poller 네 개를 의미하는 모드는 지원하지 않는다.
+
+Shard ownership과 member concurrency는 별개이다. Coordinator는 각 shard를 정확히 하나의 live member에만 배치하지만, 하나의 member가 여러 shard를 소유할 수 있다. Listener concurrency는 assignment에 참여하는 논리 member 수를 늘리는 기능이며, shard 하나는 live owner 하나만 가진다는 규칙은 바꾸지 않는다.
+
+Annotation 기반 consumer에서는 starter가 runtime `memberId`를 자동 생성한다. `id`는 listener endpoint 식별자이며 coordinator member ID가 아니다.
+
+Heartbeat interval과 rebalance timeout은 shared coordination version timing 기본값을 사용한다. `rebalanceTimeout`은 revoke된 shard를 drain할 수 있도록 coordinator가 해당 member를 기다리는 최대 시간이다. 이 시간 안에 revoke 완료 보고가 오지 않으면 coordinator는 member를 fence하고 shard를 재할당할 수 있다.
+
+Bean 기반 consumer/producer 등록 예시는 다음과 같다.
 
 ```kotlin
 @Bean
@@ -37,6 +67,8 @@ fun ordersProducer(): ProducerRoutingProperties =
         xadd.maxLen = 100_000
     }
 ```
+
+Bean 기반 경로에서 `runtimeMaxConcurrency = 4`는 하나의 coordinator member에 대한 local worker capacity이다. 네 개의 member ID를 만들지는 않는다. Kafka와 유사한 member fan-out이 필요하면 `@StreamListener(concurrency = "N")`을 사용하거나 서로 다른 member identity를 가진 managed consumer를 명시적으로 여러 개 등록해야 한다.
 
 최소 publish 예시는 다음과 같다.
 
@@ -73,7 +105,6 @@ class OrdersConsumerConfiguration {
             streamPrefix = "orders",
             consumerGroupName = "orders-consumer",
         ) {
-            memberId = System.getenv("HOSTNAME") ?: UUID.randomUUID().toString()
             runtimeMaxConcurrency = 4
             heartbeatInterval = Duration.ofSeconds(3)
             rebalanceTimeout = Duration.ofSeconds(60)
@@ -149,8 +180,6 @@ class OrdersPollingConfiguration {
         ) {
             redis.pollBatchSize = 10
             redis.pollTimeout = Duration.ofSeconds(1)
-            redis.ack.mode = RedisStreamAckMode.AUTO
-            redis.failure.mode = RedisStreamFailureMode.LEAVE_PENDING
         }
 }
 ```
@@ -159,18 +188,22 @@ class OrdersPollingConfiguration {
 @Component
 class OrdersMessageHandler : RedisStreamMessageHandler {
     override fun handle(message: ConsumedRedisStreamMessage) {
-        // 이 메서드가 성공적으로 반환된 뒤 starter가 ACK를 수행한다.
+        // 비즈니스 처리가 성공한 뒤 애플리케이션 코드가 직접 ACK한다.
+        message.ack()
     }
 }
 ```
 
-ACK mode:
+Built-in polling adapter는 자동 ACK를 수행하지 않는다. 비즈니스 side effect가 성공한 뒤 `message.ack()`를 호출하고, stream entry까지 삭제해야 하는 경우 `message.ackDel()`을 호출한다. Redis XNACK을 사용해야 하는 경우에는 `message.nack()`을 명시적으로 호출한다.
 
-| Mode | 동작 |
-| --- | --- |
-| `AUTO` | 연결된 Redis가 지원하면 `XACKDEL`, 아니면 `XACK` 사용 |
-| `XACKDEL` | handler 성공 후 ACK와 delete 수행 |
-| `XACK` | handler 성공 후 ACK만 수행 |
+Polling semantics:
+
+* coordinator ownership은 shard 단위이며, 하나의 shard는 최대 하나의 live member만 읽을 수 있다.
+* listener concurrency는 애플리케이션 프로세스 안에 생성할 논리 member 수이다.
+* bean 기반 `runtimeMaxConcurrency`는 하나의 논리 member가 가진 local worker capacity이다.
+* 하나의 member가 여러 shard를 소유하면 worker가 owned shard를 round-robin으로 순회한다.
+* 뒤쪽 shard index도 계속 poll/processing되어야 하며, 하나의 member가 worker 수보다 많은 shard를 소유했다는 이유로 영구적인 shard starvation이 발생하면 안 된다.
+* built-in adapter는 shard-local ordering과 중복 local read 방지를 위해 shard당 하나의 active poll만 허용한다.
 
 Failed-message 처리는 `redis.failure.mode`로 별도 설정한다. 기본값은 `LEAVE_PENDING`이며 classic Redis Stream retry behavior를 유지한다. `XNACK`은 명시적으로 설정하고 Redis 버전이 지원할 때만 사용한다.
 
@@ -209,7 +242,7 @@ class OrdersProducerConfiguration {
 
 `ProducerRoutingCache` bean도 생성 시 같은 초기 metadata validation을 수행하고 local routing cache를 채운다. Prefix/group shard metadata가 없는 상태는 첫 publish 시점의 에러가 아니라 startup error이다.
 
-Producer는 heartbeat를 보내지 않는다. Shard 추가, shard count 변경, active write version 변경은 주기적 routing metadata refresh로 producer에 전파된다. `routingRefreshInterval`은 일반적인 전파 지연 상한이고, routing cache lease는 coordinator refresh 없이 producer가 계속 publish할 수 있는 최대 시간이다. Cache lease가 만료된 뒤에도 refresh가 실패하면 stale routing을 무기한 사용하지 않고 publish를 fail closed해야 한다.
+Producer는 heartbeat를 보내지 않는다. Shard 추가와 shard count 변경은 주기적 routing metadata refresh로 producer에 전파된다. `routingRefreshInterval`은 일반적인 전파 지연 상한이고, routing cache lease는 coordinator refresh 없이 producer가 계속 publish할 수 있는 최대 시간이다. Cache lease가 만료된 뒤에도 refresh가 실패하면 stale routing을 무기한 사용하지 않고 publish를 fail closed해야 한다.
 
 애플리케이션은 `RedisStreamPublisher`로 publish한다.
 
@@ -220,9 +253,9 @@ redisStreamPublisher.publish(
 )
 ```
 
-Publisher는 coordinator의 producer routing metadata를 읽고, active stream version과 shard metadata를 기준으로 partition key를 stream shard에 매핑한 뒤 `XADD`한다.
+Publisher는 coordinator의 producer routing metadata를 읽고, shard count와 shard metadata를 기준으로 partition key를 stream shard에 매핑한 뒤 `XADD`한다.
 
-Producer path는 global event id deduplication을 제공하지 않는다. Shard scale-out/in으로 routing metadata가 바뀌면 같은 event id가 다른 shard 또는 stream version에 쓰일 수 있다. 중복에 민감한 workload는 scale 작업 동안 producer를 pause하고 in-flight XADD와 retry window를 drain한 뒤 routing metadata를 refresh해야 한다.
+Producer path는 global event id deduplication을 제공하지 않는다. Shard scale-out/in으로 routing metadata가 바뀌면 같은 event id가 서로 다른 shard에 쓰일 수 있다. 중복에 민감한 workload는 scale 작업 동안 producer를 pause하고 in-flight XADD와 retry window를 drain한 뒤 routing metadata를 refresh해야 한다.
 
 ## Redis Command Template
 

@@ -74,11 +74,11 @@ COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_CONNECT_PORT=7103 \
 Create a group, then run two sample consumer pods:
 
 ```bash
-SERVER_PORT=18081 CONSUMER_MEMBER_ID=consumer-pod-1 STREAM_PREFIX=demo.orders \
+SERVER_PORT=18081 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
 REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
   ./gradlew :samples:consumer-pod:bootRun
 
-SERVER_PORT=18082 CONSUMER_MEMBER_ID=consumer-pod-2 STREAM_PREFIX=demo.orders \
+SERVER_PORT=18082 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
 REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
   ./gradlew :samples:consumer-pod:bootRun
 ```
@@ -91,15 +91,16 @@ The sample exposes:
 
 ## Docker Pod Smoke
 
-Use `compose.pods.yaml` to run the full local pod topology in Docker:
+Use `compose.pods.yaml` to run the pod topology against an external Redis Cluster:
 
 ```bash
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 ```
 
 The stack starts:
 
-* 3 Redis Cluster nodes on host ports `7201`, `7202`, and `7203`
 * 1 coordinator on `8080`
 * 2 consumer pods on `18081` and `18082`
 * 1 auto-publishing pod on `18090`
@@ -108,7 +109,7 @@ Check the coordinator assignment and sample pod events:
 
 ```bash
 curl -u admin:password \
-  http://localhost:8080/coord/v1/monitoring/streams/demo.orders/groups/demo-workers/assignments
+  http://localhost:8080/coord/v1/monitoring/streams/create-order/groups/demo-workers/assignments
 
 curl http://localhost:18090/sample/status
 curl http://localhost:18081/sample/events

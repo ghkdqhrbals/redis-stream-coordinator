@@ -119,7 +119,6 @@ Heartbeat request 예시:
   "requestId": "hb-member-a-000042",
   "memberId": "member-a",
   "memberEpoch": 11,
-  "rebalanceTimeoutMs": 60000,
   "metadataVersion": 8,
   "runtimeConsumerCapacity": {
     "runtimeMaxConcurrency": 12,
@@ -127,14 +126,12 @@ Heartbeat request 예시:
   },
   "ownedShards": [
     {
-      "streamVersion": 2,
       "shardIndex": 0,
       "state": "OWNED"
     }
   ],
   "revokingShards": [
     {
-      "streamVersion": 1,
       "shardIndex": 3,
       "state": "DRAINING",
       "inFlight": 2,
@@ -153,6 +150,7 @@ Heartbeat response 예시:
   "memberId": "member-a",
   "memberEpoch": 12,
   "heartbeatIntervalMs": 3000,
+  "rebalanceTimeoutMs": 60000,
   "groupEpoch": 12,
   "assignmentEpoch": 12,
   "metadataVersion": 9,
@@ -160,10 +158,10 @@ Heartbeat response 예시:
   "assignment": {
     "error": "NONE",
     "assignedShards": [
-      {"streamVersion": 2, "shardIndex": 0}
+      {"shardIndex": 0}
     ],
     "pendingShards": [
-      {"streamVersion": 2, "shardIndex": 2}
+      {"shardIndex": 2}
     ],
     "metadataVersion": 9
   }
@@ -178,7 +176,6 @@ Heartbeat response 예시:
 | `requestId` | yes | 중복 응답과 로그 추적용 id. |
 | `memberId` | yes | path의 `{memberId}`와 같아야 한다. member runtime 시작 시 생성한 UUID이며 이 runtime incarnation을 식별한다. coordinator는 이 id에 member epoch을 부여하고 fencing한다. |
 | `memberEpoch` | yes | `0`이면 신규 join 또는 coordinator가 이미 `EXPIRED`/`FENCED`로 판단한 member의 rejoin, `-1`이면 leave, 양수이면 coordinator가 직전 response로 발급한 epoch이다. stale 값이면 `FENCED_MEMBER_EPOCH`, coordinator가 발급하지 않은 값이면 `INVALID_REQUEST` 대상이다. |
-| `rebalanceTimeoutMs` | first heartbeat required | revoke를 완료할 수 있는 최대 시간이다. coordinator config가 아니라 member heartbeat contract이며, 값이 바뀌지 않으면 생략할 수 있다. |
 | `metadataVersion` | yes | member가 캐시한 group metadata version. 낮으면 response의 assignment metadata version 기준으로 갱신한다. |
 | `runtimeConsumerCapacity` | yes | member runtime이 보고하는 처리 가능 상태. `runtimeMaxConcurrency`는 process local consumer worker limit이고, coordinator의 server-side `maxConcurrency`를 올릴 수 없다. |
 | `ownedShards` | yes | KIP-848의 `TopicPartitions`에 해당한다. member가 지금 read 가능하다고 보고하는 shard 목록이다. |
@@ -194,6 +191,7 @@ Heartbeat response 예시:
 | `memberId` | yes | path의 member id를 echo한다. |
 | `memberEpoch` | yes | member가 다음 heartbeat부터 사용해야 하는 epoch. |
 | `heartbeatIntervalMs` | yes | member가 다음 정상 heartbeat를 보내야 하는 server-side 권장 주기이다. |
+| `rebalanceTimeoutMs` | yes | coordinator-owned revoke/drain deadline이다. 이 시간 안에 revoke 완료 보고가 없으면 coordinator는 member를 fence하고 shard를 재할당할 수 있다. |
 | `groupEpoch` | yes | coordinator가 본 최신 group metadata epoch. |
 | `assignmentEpoch` | yes | target assignment가 계산된 epoch. |
 | `metadataVersion` | yes | 최신 metadata version. member cache가 낮으면 metadata를 갱신한다. |

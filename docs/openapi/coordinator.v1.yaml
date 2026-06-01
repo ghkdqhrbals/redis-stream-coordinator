@@ -40,7 +40,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     post:
       tags: [Groups]
-      operationId: createGroup
+      operationId: createCoordinatorGroup
       summary: Create a coordinator group.
       description: |
         Creates the source-of-truth metadata record and initial shard layout for a logical stream group.
@@ -70,7 +70,7 @@ paths:
           $ref: "#/components/responses/Conflict"
     get:
       tags: [Groups]
-      operationId: getGroup
+      operationId: getCoordinatorGroup
       summary: Read coordinator group metadata.
       description: Returns the coordinator source-of-truth view for one group.
       responses:
@@ -84,7 +84,7 @@ paths:
           $ref: "#/components/responses/NotFound"
     delete:
       tags: [Groups]
-      operationId: deleteGroup
+      operationId: deleteCoordinatorGroup
       summary: Delete an inactive coordinator group.
       description: Deletes coordinator metadata. Use force only for recovery when members cannot gracefully leave.
       requestBody:
@@ -109,7 +109,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Producer Routing]
-      operationId: getProducerRouting
+      operationId: getProducerRoutingMetadata
       summary: Read producer routing metadata.
       description: |
         Returns the shard count, stream key pattern, concrete shard keys, and Redis Cluster slots that producers
@@ -129,7 +129,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     post:
       tags: [Resharding]
-      operationId: scaleGroup
+      operationId: startGroupResharding
       summary: Start shard scale-out or scale-in.
       description: Starts a coordinator-managed resharding operation. The coordinator provisions shard stream keys and then reconciles consumer ownership through heartbeat responses.
       requestBody:
@@ -160,7 +160,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     patch:
       tags: [Groups]
-      operationId: updateConsumerConcurrency
+      operationId: updateConsumerConcurrencyPolicy
       summary: Update server-side consumer worker limits.
       description: Updates the coordinator-owned concurrency policy without changing shard count.
       requestBody:
@@ -184,7 +184,7 @@ paths:
       - $ref: "#/components/parameters/reshardingId"
     get:
       tags: [Resharding]
-      operationId: getMigration
+      operationId: getReshardingMigration
       summary: Read one resharding operation.
       responses:
         "200":
@@ -201,7 +201,7 @@ paths:
       - $ref: "#/components/parameters/reshardingId"
     post:
       tags: [Resharding]
-      operationId: rollbackMigration
+      operationId: rollbackReshardingMigration
       summary: Request rollback for an active resharding operation.
       requestBody:
         required: true
@@ -224,7 +224,7 @@ paths:
       - $ref: "#/components/parameters/memberId"
     post:
       tags: [Members]
-      operationId: heartbeat
+      operationId: sendConsumerHeartbeat
       summary: Send consumer liveness and ownership report.
       description: |
         Consumer runtimes periodically report their member epoch, local metadata version, current shard ownership,
@@ -248,7 +248,7 @@ paths:
   /coord/v1/monitoring/session:
     get:
       tags: [Monitoring]
-      operationId: monitoringSession
+      operationId: getMonitoringSession
       summary: Read authenticated monitoring session.
       responses:
         "200":
@@ -261,7 +261,7 @@ paths:
   /coord/v1/monitoring/health:
     get:
       tags: [Monitoring]
-      operationId: monitoringHealth
+      operationId: getCoordinatorHealth
       summary: Read current coordinator health.
       responses:
         "200":
@@ -274,7 +274,7 @@ paths:
   /coord/v1/monitoring/compatibility:
     get:
       tags: [Monitoring]
-      operationId: monitoringCompatibility
+      operationId: getCoordinatorCompatibility
       summary: Read coordinator compatibility metadata.
       description: Returns the supported coordinator/client module version range.
       responses:
@@ -289,7 +289,7 @@ paths:
   /coord/v1/monitoring/groups:
     get:
       tags: [Monitoring]
-      operationId: listGroups
+      operationId: listCoordinatorGroups
       summary: List all coordinator groups.
       responses:
         "200":
@@ -310,7 +310,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Monitoring]
-      operationId: monitoringGroup
+      operationId: getMonitoringGroup
       summary: Read one group monitoring summary.
       responses:
         "200":
@@ -326,7 +326,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Monitoring]
-      operationId: listMembers
+      operationId: listGroupMembers
       summary: List member runtime state.
       responses:
         "200":
@@ -347,7 +347,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Monitoring]
-      operationId: monitoringAssignments
+      operationId: getGroupAssignments
       summary: Read target, current, and revoking assignments.
       responses:
         "200":
@@ -363,7 +363,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Monitoring]
-      operationId: monitoringConsumption
+      operationId: getConsumptionProgress
       summary: Read consumer progress by shard.
       responses:
         "200":
@@ -379,7 +379,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Monitoring]
-      operationId: monitoringMigrations
+      operationId: listReshardingMigrations
       summary: List resharding operations for a group.
       responses:
         "200":
@@ -395,7 +395,7 @@ paths:
       - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Monitoring]
-      operationId: streamShardOffsets
+      operationId: getStreamShardOffsets
       summary: Read Redis Stream offset, lag, and memory data by shard.
       description: Lag can be null when Redis cannot calculate it, for example when entries-read tracking is unavailable or invalid for the consumer group.
       responses:
@@ -416,7 +416,7 @@ paths:
       - $ref: "#/components/parameters/messageLimit"
     get:
       tags: [Monitoring]
-      operationId: streamMessages
+      operationId: getStreamShardMessages
       summary: Page Redis Stream messages for one shard.
       description: Reads message payloads from Redis for debugging and dashboard drill-down.
       responses:
@@ -430,7 +430,7 @@ paths:
   /coord/v1/monitoring/grafana/groups:
     get:
       tags: [Grafana]
-      operationId: grafanaGroups
+      operationId: listGrafanaGroups
       summary: Grafana-ready group rows.
       responses:
         "200":
@@ -445,7 +445,7 @@ paths:
   /coord/v1/monitoring/grafana/options/streams:
     get:
       tags: [Grafana]
-      operationId: grafanaStreamOptions
+      operationId: listGrafanaStreamOptions
       summary: Grafana variable options for stream prefixes.
       responses:
         "200":
@@ -454,7 +454,7 @@ paths:
   /coord/v1/monitoring/grafana/options/consumer-groups:
     get:
       tags: [Grafana]
-      operationId: grafanaConsumerGroupOptions
+      operationId: listGrafanaConsumerGroupOptions
       summary: Grafana variable options for consumer groups.
       parameters:
         - name: streamPrefix
@@ -469,7 +469,7 @@ paths:
   /coord/v1/monitoring/grafana/options/shards:
     get:
       tags: [Grafana]
-      operationId: grafanaShardOptions
+      operationId: listGrafanaShardOptions
       summary: Grafana variable options for shard selectors.
       parameters:
         - $ref: "#/components/parameters/queryStreamPrefix"
@@ -481,7 +481,7 @@ paths:
   /coord/v1/monitoring/grafana/members:
     get:
       tags: [Grafana]
-      operationId: grafanaMembers
+      operationId: listGrafanaMemberRows
       summary: Grafana-ready member rows.
       parameters:
         - $ref: "#/components/parameters/queryStreamPrefix"
@@ -499,7 +499,7 @@ paths:
   /coord/v1/monitoring/grafana/shards:
     get:
       tags: [Grafana]
-      operationId: grafanaShards
+      operationId: listGrafanaShardRows
       summary: Grafana-ready shard offset rows.
       parameters:
         - $ref: "#/components/parameters/queryStreamPrefix"
@@ -517,7 +517,7 @@ paths:
   /coord/v1/monitoring/grafana/assignments:
     get:
       tags: [Grafana]
-      operationId: grafanaAssignments
+      operationId: listGrafanaAssignmentRows
       summary: Grafana-ready assignment rows.
       parameters:
         - $ref: "#/components/parameters/queryStreamPrefix"
@@ -535,7 +535,7 @@ paths:
   /coord/v1/monitoring/grafana/messages:
     get:
       tags: [Grafana]
-      operationId: grafanaMessages
+      operationId: listGrafanaMessageRows
       summary: Grafana-ready message rows.
       parameters:
         - $ref: "#/components/parameters/queryStreamPrefix"

@@ -13,7 +13,7 @@ The MVP includes:
 * sticky shard assignment,
 * revoke-before-assign,
 * member expiration and fencing,
-* shard count resharding with stream versions,
+* shard count resharding,
 * rollback within a bounded window,
 * producer routing metadata API,
 * Spring Boot consumer and producer integration,
@@ -26,7 +26,7 @@ The MVP includes:
 
 * Kafka wire protocol compatibility.
 * Exactly-once business side effects.
-* Global event-id deduplication across stream versions and shards.
+* Global event-id deduplication across shards.
 * Embedded coordinator mode inside consumer applications.
 * Multi-region active-active coordinator state.
 * Automatic Redis Cluster node provisioning.

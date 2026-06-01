@@ -4,7 +4,8 @@
 
 This document is the HTTP API catalog for Redis Stream Coordinator. It lists endpoint paths, auth expectations, mutation behavior, idempotency expectations, and the most important request and response fields.
 
-Use the [Scalar API Reference](../../api.html) for interactive endpoint search, schemas, examples, and curl snippets. This Markdown page remains the design-level contract summary.
+Use the local [Scalar API Reference](../../api.html) for interactive endpoint search, schemas, examples, and curl snippets. The server also exposes a live reference at `http://localhost:8080/scalar`.
+`operationId` values are treated as the API contract surface for generated clients and changed only for intentional protocol changes.
 
 Detailed behavior is defined in these documents:
 
@@ -85,6 +86,7 @@ Common status codes:
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | Request migration rollback. | yes |
 | Member | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat` | Report liveness/ownership and receive assignment. | yes |
 | Monitoring | `GET` | `/coord/v1/monitoring/health` | Read coordinator health. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/session` | Read monitoring principal/session context. | no |
 | Monitoring | `GET` | `/coord/v1/monitoring/compatibility` | Read coordination compatibility metadata. | no |
 | Monitoring | `GET` | `/coord/v1/monitoring/groups` | List groups. | no |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}` | Read group monitoring summary. | no |
@@ -92,6 +94,14 @@ Common status codes:
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments` | Read target/current assignment. | no |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption` | Read consumer shard progress. | no |
 | Monitoring | `GET` | `/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations` | List migrations. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/groups` | Read flat rows for Grafana overview. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/options/streams` | Grafana variable options for stream prefixes. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/options/consumer-groups` | Grafana variable options for consumer groups. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/options/shards` | Grafana variable options for shard indexes. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/members` | Read flat member rows for Grafana tables. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/shards` | Read flat shard status rows for Grafana. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/assignments` | Read flat assignment rows for Grafana. | no |
+| Monitoring | `GET` | `/coord/v1/monitoring/grafana/messages` | Read flat stream message rows for Grafana. | no |
 
 ## Admin API
 
@@ -351,6 +361,21 @@ Response: `200 OK` with `HealthResponse`.
 | `coordinatorId` | Coordinator server identity. |
 | `redis` | Redis dependency health. |
 | `loop` | Coordinator loop health. |
+
+### Monitoring Session
+
+```http
+GET /coord/v1/monitoring/session
+```
+
+Response: `200 OK` with `MonitoringSessionResponse`.
+
+The response is intended for Grafana/API clients that need authenticated principal metadata for the monitoring calls.
+
+| Field | Meaning |
+| --- | --- |
+| `authenticated` | `true` when monitoring request was authenticated by Basic Auth. |
+| `username` | Principal name when available from security context. |
 
 ### Compatibility
 

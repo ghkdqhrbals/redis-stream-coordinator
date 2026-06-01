@@ -216,8 +216,8 @@ Coordinator는 Kubernetes readiness, service endpoint propagation, external load
 | Expiration | last heartbeat timestamp, member state | request 또는 tick에서 expiration 재계산 |
 | Rebalance | target/current assignment, revoking shards, assignment epoch | revoke-before-assign 계속 진행 |
 | Graceful leave | `LEAVING` state와 revoking shards | revoke ack, timeout, expiration 대기 |
-| Resharding | resharding state, stream version, active write version, drain progress | provisioning, activation, drain, rollback 계속 진행 |
-| Producer routing | metadata version, active write version | 최신 recorded routing metadata 반환 |
+| Resharding | resharding state, shard count, drain progress | provisioning, activation, drain, rollback 계속 진행 |
+| Producer routing | metadata version, shard count | 최신 recorded routing metadata 반환 |
 
 ## Consumer Join, Rejoin, Leave, Expiration
 
@@ -235,7 +235,7 @@ Coordinator는 Kubernetes readiness, service endpoint propagation, external load
 
 Producer는 heartbeat를 보내지 않는다. Producer는 routing metadata refresh만 수행한다.
 
-Producer에는 heartbeat channel이 없기 때문에 shard count 변경과 `activeWriteVersion` 변경은 routing metadata refresh로만 전파된다. 따라서 producer 모듈은 publish가 정상적으로 성공하고 있더라도 routing metadata를 주기적으로 refresh해야 한다. Refresh interval과 routing cache TTL은 coordinator가 shard를 추가하거나 새 write version을 activate한 뒤 producer가 old shard layout을 계속 사용할 수 있는 최대 시간을 결정한다.
+Producer에는 heartbeat channel이 없기 때문에 shard count 변경은 routing metadata refresh로만 전파된다. 따라서 producer 모듈은 publish가 정상적으로 성공하고 있더라도 routing metadata를 주기적으로 refresh해야 한다. Refresh interval과 routing cache TTL은 coordinator가 shard를 추가한 뒤 producer가 old shard count를 계속 사용할 수 있는 최대 시간을 결정한다.
 
 Refresh 규칙:
 
@@ -249,7 +249,7 @@ Refresh 규칙:
 | --- | --- | --- |
 | coordinator unavailable + routing cache valid | 불필요한 publish 중단 | cached routing metadata로 계속 publish |
 | coordinator unavailable + routing cache expired | stale routing이 무기한 지속 | retryable coordinator-unavailable error로 publish fail |
-| coordinator가 shard를 추가했지만 producer가 아직 refresh하지 않음 | producer가 old shard layout으로 계속 write | refresh 전까지 cached route 사용. refresh interval/cache TTL이 전파 지연 상한 |
+| coordinator가 shard를 추가했지만 producer가 아직 refresh하지 않음 | producer가 old shard count으로 계속 write | refresh 전까지 cached route 사용. refresh interval/cache TTL이 전파 지연 상한 |
 | 낮은 `metadataVersion` 응답 | Redis metadata rollback 또는 stale coordinator response | coordinator가 명시적으로 current routing metadata를 반환할 때만 downgrade한다 |
 | 높은 `metadataVersion` 응답 | local route stale | cache 교체 |
 | 불확실한 `XADD` 이후 publish 실패 | retry 시 duplicate record | 기본 publish attempt는 보수적으로 유지, application event idempotency 필요 |
