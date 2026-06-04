@@ -9,8 +9,12 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
 
 import org.springframework.beans.factory.support.StaticListableBeanFactory
 import org.springframework.data.redis.connection.RedisConnectionFactory
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.datasource.DriverManagerDataSource
+import tools.jackson.databind.ObjectMapper
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -78,6 +82,34 @@ class CoordinatorStateStoreTest {
     }
 
     @Test
+    fun `jdbc store persists group metadata and rejects stale writes`() {
+        val store = jdbcStore()
+        val key = GroupKey("jdbc-orders", "orders-consumer")
+        val group = groupMetadata(key)
+
+        assertTrue(store.putIfAbsent(key, group))
+        assertFalse(store.putIfAbsent(key, groupMetadata(key).copy(metadataVersion = 99)))
+
+        val firstSnapshot = assertNotNull(store.get(key))
+        val staleSnapshot = assertNotNull(store.get(key))
+        firstSnapshot.metadataVersion = 2
+        store.save(key, firstSnapshot)
+
+        staleSnapshot.metadataVersion = 3
+        assertFailsWith<CoordinatorStateConflictException> {
+            store.save(key, staleSnapshot)
+        }
+
+        val stored = assertNotNull(store.get(key))
+        assertEquals(2, stored.metadataVersion)
+        assertEquals(2, stored.storeRevision)
+        assertEquals(listOf(key), store.list().map { GroupKey(it.streamPrefix, it.consumerGroup) })
+        assertFalse(store.deleteIfRevision(key, expectedRevision = 1))
+        assertTrue(store.deleteIfRevision(key, expectedRevision = 2))
+        assertFalse(store.contains(key))
+    }
+
+    @Test
     fun `redis keys keep group metadata in one hash slot`() {
         val stateKeys = RedisCoordinatorStateKeys("redis-stream:coord:")
         val keys = stateKeys.forGroup(GroupKey("orders", "orders-consumer"))
@@ -95,6 +127,16 @@ class CoordinatorStateStoreTest {
             clock = clock,
         )
 
+    private fun jdbcStore(): JdbcCoordinatorStateStore {
+        val dataSource = DriverManagerDataSource().apply {
+            setDriverClassName("org.h2.Driver")
+            url = "jdbc:h2:mem:${System.nanoTime()};MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
+            username = "sa"
+            password = ""
+        }
+        return JdbcCoordinatorStateStore(JdbcTemplate(dataSource), ObjectMapper())
+    }
+
     private fun groupMetadata(key: GroupKey): GroupMetadata =
         GroupMetadata(
             streamPrefix = key.streamPrefix,
@@ -103,9 +145,7 @@ class CoordinatorStateStoreTest {
             metadataVersion = 1,
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
-            activeWriteVersion = 1,
-            readableVersions = setOf(1),
-            shardCountsByVersion = linkedMapOf(1 to 4),
+            shardCount = 4,
             consumerConcurrencyPolicy = ConsumerConcurrencyPolicy(defaultMaxConcurrency = 4),
             createdAt = Instant.now(clock),
             updatedAt = Instant.now(clock),
@@ -124,7 +164,6 @@ class CoordinatorStateStoreTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,

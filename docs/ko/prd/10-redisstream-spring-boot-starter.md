@@ -42,13 +42,13 @@ class OrdersConsumer {
 }
 ```
 
-Annotation listener에서 `concurrency = "4"`는 같은 애플리케이션 프로세스 안에 4개의 논리 coordinator member를 만든다. 각 논리 member는 개별 `memberId`, heartbeat loop, Redis consumer name, assignment state, shard ownership을 가진다. 이 방식이 Kafka와 유사한 listener concurrency 모델이다.
+Annotation listener에서 `concurrency = "4"`는 같은 애플리케이션 프로세스 안에 4개의 논리 coordinator member를 만든다. 각 논리 member는 pod IP context에서 파생한 base member id와 `-m0`, `-m1`, `-m2`, `-m3` 같은 suffix를 가진 개별 `memberId`, heartbeat loop, Redis consumer name, assignment state, shard ownership을 가진다. 이 방식이 Kafka와 유사한 listener concurrency 모델이다.
 
 Annotation listener는 항상 이 logical-member split 모델을 사용한다. Starter는 split toggle을 공개 설정으로 제공하지 않으며, `concurrency = "4"`가 하나의 coordinator member 내부 local poller 네 개를 의미하는 모드는 지원하지 않는다.
 
 Shard ownership과 member concurrency는 별개이다. Coordinator는 각 shard를 정확히 하나의 live member에만 배치하지만, 하나의 member가 여러 shard를 소유할 수 있다. Listener concurrency는 assignment에 참여하는 논리 member 수를 늘리는 기능이며, shard 하나는 live owner 하나만 가진다는 규칙은 바꾸지 않는다.
 
-Annotation 기반 consumer에서는 starter가 runtime `memberId`를 자동 생성한다. `id`는 listener endpoint 식별자이며 coordinator member ID가 아니다.
+Annotation 기반 consumer에서는 starter가 `POD_IP`, local host address, hostname 순서로 runtime `memberId`를 자동 생성한다. Kubernetes에서는 Downward API로 `status.podIP`를 `POD_IP` 환경변수로 노출하는 것을 권장한다. `id`는 listener endpoint 식별자이며 coordinator member ID가 아니다.
 
 Heartbeat interval과 rebalance timeout은 shared coordination version timing 기본값을 사용한다. `rebalanceTimeout`은 revoke된 shard를 drain할 수 있도록 coordinator가 해당 member를 기다리는 최대 시간이다. 이 시간 안에 revoke 완료 보고가 오지 않으면 coordinator는 member를 fence하고 shard를 재할당할 수 있다.
 
@@ -233,7 +233,7 @@ class OrdersProducerConfiguration {
             consumerGroupName = "orders-consumer",
         ) {
             routingRefreshInterval = Duration.ofSeconds(30)
-            publishMaxAttempts = 1
+            publishMaxAttempts = 2
             xadd.maxLen = 10_000_000
             xadd.approximateTrimming = true
         }
@@ -253,7 +253,9 @@ redisStreamPublisher.publish(
 )
 ```
 
-Publisher는 coordinator의 producer routing metadata를 읽고, shard count와 shard metadata를 기준으로 partition key를 stream shard에 매핑한 뒤 `XADD`한다.
+Publisher는 coordinator의 producer routing metadata를 읽고, shard count와 shard metadata를 기준으로 partition key를 stream shard에 매핑한 뒤 `XADD NOMKSTREAM`을 보낸다.
+
+`NOMKSTREAM`은 scale-in을 위한 기본 producer 안전장치다. Producer가 stale routing metadata를 가지고 제거된 shard key에 write하려고 해도 Redis가 stream key를 다시 만들면 안 된다. 이 경우 첫 publish attempt는 실패하고 routing cache를 invalidate한다. 기본 두 번째 attempt는 새 routing metadata를 가져온 뒤 target shard를 다시 계산한다.
 
 Producer path는 global event id deduplication을 제공하지 않는다. Shard scale-out/in으로 routing metadata가 바뀌면 같은 event id가 서로 다른 shard에 쓰일 수 있다. 중복에 민감한 workload는 scale 작업 동안 producer를 pause하고 in-flight XADD와 retry window를 drain한 뒤 routing metadata를 refresh해야 한다.
 
@@ -267,7 +269,7 @@ Template가 담당하는 명령:
 * `XACK`
 * `XACKDEL`
 * `XNACK`
-* `XADD`
+* `XADD NOMKSTREAM`
 * Redis server version lookup
 
 이렇게 하면 Redis command shape, version compatibility check, serialization behavior를 한 곳에서 테스트할 수 있다.

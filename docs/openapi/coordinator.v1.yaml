@@ -34,6 +34,38 @@ tags:
 security:
   - basicAuth: []
 paths:
+  /coord/v1/streams/{streamPrefix}:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+    post:
+      tags: [Groups]
+      operationId: createStreamGroup
+      summary: Create a stream group.
+      description: |
+        Creates the initial shard layout for a sharded Redis Stream prefix. The official create path only
+        requires `streamPrefix`; consumer groups reconcile through their own runtime configuration and heartbeat flow.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStreamRequest"
+            examples:
+              create:
+                value:
+                  initialShardCount: 20
+                  requestedBy: operator@example.com
+                  reason: bootstrap create-order stream
+      responses:
+        "201":
+          description: Stream shard layout was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamCreateResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}:
     parameters:
       - $ref: "#/components/parameters/streamPrefix"
@@ -41,10 +73,8 @@ paths:
     post:
       tags: [Groups]
       operationId: createCoordinatorGroup
-      summary: Create a coordinator group.
-      description: |
-        Creates the source-of-truth metadata record and initial shard layout for a logical stream group.
-        Producers and consumers are expected to fail startup if this group does not exist.
+      summary: Compatibility: create one consumer group metadata.
+      description: Compatibility endpoint for older clients that created metadata with `consumerGroup` in the path. Operators should prefer POST /coord/v1/streams/{streamPrefix}.
       requestBody:
         required: true
         content:
@@ -123,6 +153,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProducerRoutingResponse"
 
+  /coord/v1/streams/{streamPrefix}/scale:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+    post:
+      tags: [Resharding]
+      operationId: scaleStreamShards
+      summary: Start shard scale-out or scale-in.
+      description: |
+        Changes the physical shard count for every coordinator group registered under the stream prefix.
+        Consumer groups are intentionally not part of this path. Each affected group receives the new
+        assignment plan on the next consumer heartbeat and reconciles ownership independently.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScaleStreamRequest"
+            examples:
+              scaleOut:
+                value:
+                  targetShardCount: 20
+                  requestedBy: operator@example.com
+                  reason: distribute create-order stream load
+      responses:
+        "202":
+          description: Stream-level resharding was accepted for affected consumer groups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamScaleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale:
     parameters:
       - $ref: "#/components/parameters/streamPrefix"
@@ -130,8 +195,8 @@ paths:
     post:
       tags: [Resharding]
       operationId: startGroupResharding
-      summary: Start shard scale-out or scale-in.
-      description: Starts a coordinator-managed resharding operation. The coordinator provisions shard stream keys and then reconciles consumer ownership through heartbeat responses.
+      summary: Compatibility: scale one consumer group.
+      description: Compatibility endpoint for a single consumer group. Operators should prefer POST /coord/v1/streams/{streamPrefix}/scale so the stream shard count changes consistently across registered groups.
       requestBody:
         required: true
         content:
@@ -572,21 +637,21 @@ components:
       required: true
       schema:
         type: string
-      description: Logical Redis Stream prefix managed by the coordinator.
+      description: Sharded Redis Stream prefix managed by the coordinator. Physical stream keys are built as `{streamPrefix}:{shardIndex}`.
     consumerGroup:
       name: consumerGroup
       in: path
       required: true
       schema:
         type: string
-      description: Logical Redis Stream consumer group name.
+      description: Redis Stream consumer group name.
     memberId:
       name: memberId
       in: path
       required: true
       schema:
         type: string
-      description: Runtime-generated member id, normally a UUID.
+      description: Runtime-generated member id. The Spring Boot starter derives it from pod IP context by default.
     reshardingId:
       name: reshardingId
       in: path
@@ -608,7 +673,7 @@ components:
       required: true
       schema:
         type: string
-      description: Logical Redis Stream prefix.
+      description: Sharded Redis Stream prefix used to build physical stream keys such as create-order:4.
     queryConsumerGroup:
       name: consumerGroup
       in: query
@@ -683,6 +748,30 @@ components:
         reason:
           type: string
           nullable: true
+    CreateStreamRequest:
+      type: object
+      required: [requestedBy]
+      properties:
+        initialShardCount:
+          type: integer
+          minimum: 1
+        requestedBy:
+          type: string
+        reason:
+          type: string
+          nullable: true
+    StreamCreateResponse:
+      type: object
+      required: [streamPrefix, shardCount, metadataVersion]
+      properties:
+        streamPrefix:
+          type: string
+        shardCount:
+          type: integer
+          minimum: 1
+        metadataVersion:
+          type: integer
+          format: int64
     DeleteGroupRequest:
       type: object
       required: [requestedBy, reason]
@@ -710,6 +799,36 @@ components:
         deprecatedAfter:
           type: string
           nullable: true
+    ScaleStreamRequest:
+      type: object
+      required: [targetShardCount, requestedBy, reason]
+      properties:
+        targetShardCount:
+          type: integer
+          minimum: 1
+        requestedBy:
+          type: string
+        reason:
+          type: string
+        deprecatedAfter:
+          type: string
+          nullable: true
+    StreamScaleResponse:
+      type: object
+      required: [streamPrefix, targetShardCount, affectedConsumerGroups, migrations]
+      properties:
+        streamPrefix:
+          type: string
+        targetShardCount:
+          type: integer
+        affectedConsumerGroups:
+          type: array
+          items:
+            type: string
+        migrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Migration"
     UpdateConsumerConcurrencyRequest:
       type: object
       required: [defaultMaxConcurrency, requestedBy, reason]

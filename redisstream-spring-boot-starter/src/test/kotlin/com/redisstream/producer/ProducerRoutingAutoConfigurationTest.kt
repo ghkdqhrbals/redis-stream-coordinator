@@ -137,14 +137,12 @@ private fun routingResponse(
         streamPrefix = "orders",
         consumerGroup = "orders-consumer",
         metadataVersion = 1,
-        activeWriteVersion = 1,
-        shardCount = shardCount,
-        streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+                shardCount = shardCount,
+        streamKeyPattern = "orders:{shardIndex}",
         shards = (0 until shardCount).map { shardIndex ->
             ProducerRoutingShard(
-                streamVersion = 1,
                 shardIndex = shardIndex,
-                streamKey = "orders:v1:shard:$shardIndex",
+                streamKey = "orders:$shardIndex",
                 redisSlot = shardIndex,
             )
         },

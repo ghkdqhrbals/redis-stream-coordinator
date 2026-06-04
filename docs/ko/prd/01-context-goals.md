@@ -40,7 +40,7 @@ Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을
 
 * Redis는 stream data plane으로 사용한다.
 * Coordinator metadata store는 Redis-backed 단일 metadata key이다.
-* 각 member는 runtime 시작 시 UUID `memberId`를 직접 생성한다.
+* 각 member는 runtime 시작 시 pod IP context에서 `memberId`를 직접 생성한다.
 * producer와 consumer는 coordinator가 Redis metadata key 기준으로 내려준 shard count을 source of truth로 사용한다.
 * producer retry, network failure, consumer pending recovery, shard migration은 중복 message 또는 중복 처리 시도를 만들 수 있다.
 * 동일 partition key는 같은 routing metadata 안에서만 같은 shard로 route된다. shard count가 바뀌면 다른 shard로 route될 수 있다.

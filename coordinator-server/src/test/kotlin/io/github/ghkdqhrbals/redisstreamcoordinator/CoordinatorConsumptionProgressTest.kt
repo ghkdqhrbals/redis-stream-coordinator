@@ -26,7 +26,7 @@ class CoordinatorConsumptionProgressTest {
         val shard = first.assignment.assignedShards.first()
         val progress = ShardConsumptionProgress(
             shard = shard,
-            streamKey = "orders:v${shard.streamVersion}:shard:${shard.shardIndex}",
+            streamKey = "orders:${shard.shardIndex}",
             lastDeliveredId = "100-2",
             lastAckedId = "100-1",
             pendingCount = 1,
@@ -71,8 +71,8 @@ class CoordinatorConsumptionProgressTest {
                 ownedShards = first.assignment.assignedShards,
                 shardProgress = listOf(
                     ShardConsumptionProgress(
-                        shard = ShardId(1, 99),
-                        streamKey = "orders:v1:shard:99",
+                        shard = ShardId(99),
+                        streamKey = "orders:99",
                         lastDeliveredId = "100-0",
                         lastAckedId = "100-0",
                     ),
@@ -107,7 +107,6 @@ class CoordinatorConsumptionProgressTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,

@@ -44,8 +44,8 @@ class CoordinatorGroupedWorkflowTest {
             val assignments = service.assignments("category-expired", "orders-consumer")
 
             assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, staleA.status)
-            assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), memberB.assignment.assignedShards)
-            assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-b"))
+            assertEquals(setOf(ShardId(0), ShardId(1)), memberB.assignment.assignedShards)
+            assertEquals(setOf(ShardId(0), ShardId(1)), assignments.targetAssignment.getValue("member-b"))
             assertTrue(assignments.invariantViolations.isEmpty())
         }
 
@@ -71,7 +71,7 @@ class CoordinatorGroupedWorkflowTest {
             assertEquals(HeartbeatStatus.OK, rejoinedA.status)
             assertTrue(rejoinedA.assignment.assignedShards.isEmpty())
             assertEquals(emptySet(), assignments.currentAssignments.getValue("member-a"))
-            assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-b"))
+            assertEquals(setOf(ShardId(0), ShardId(1)), assignments.currentAssignments.getValue("member-b"))
             assertTrue(assignments.invariantViolations.isEmpty())
         }
     }
@@ -86,7 +86,7 @@ class CoordinatorGroupedWorkflowTest {
 
             val joined = join(service, "category-join-first", "member-a")
 
-            assertEquals(setOf(ShardId(1, 0), ShardId(1, 1), ShardId(1, 2)), joined.assignment.assignedShards)
+            assertEquals(setOf(ShardId(0), ShardId(1), ShardId(2)), joined.assignment.assignedShards)
             assertTrue(joined.assignment.pendingShards.isEmpty())
         }
 
@@ -98,7 +98,7 @@ class CoordinatorGroupedWorkflowTest {
             acknowledge(service, "category-join-second", "member-a", memberA)
 
             val memberB = join(service, "category-join-second", "member-b")
-            assertEquals(setOf(ShardId(1, 1)), memberB.assignment.pendingShards)
+            assertEquals(setOf(ShardId(1)), memberB.assignment.pendingShards)
 
             service.heartbeat(
                 "category-join-second",
@@ -107,8 +107,8 @@ class CoordinatorGroupedWorkflowTest {
                 heartbeat(
                     "member-a",
                     memberA.memberEpoch,
-                    ownedShards = setOf(ShardId(1, 0)),
-                    revokingShards = listOf(RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED)),
+                    ownedShards = setOf(ShardId(0)),
+                    revokingShards = listOf(RevokingShardReport(ShardId(1), RevokingShardState.REVOKED)),
                 ),
             )
             val assignedToB = service.heartbeat(
@@ -118,7 +118,7 @@ class CoordinatorGroupedWorkflowTest {
                 heartbeat("member-b", memberB.memberEpoch),
             )
 
-            assertEquals(setOf(ShardId(1, 1)), assignedToB.assignment.assignedShards)
+            assertEquals(setOf(ShardId(1)), assignedToB.assignment.assignedShards)
             assertTrue(assignedToB.assignment.pendingShards.isEmpty())
         }
 
@@ -135,7 +135,7 @@ class CoordinatorGroupedWorkflowTest {
 
             assertEquals(mapOf("member-a" to 2, "member-b" to 2, "member-c" to 2), assignments.targetAssignment.mapValues { it.value.size })
             assertEquals(6, targetShards.toSet().size)
-            assertEquals((0 until 6).map { ShardId(1, it) }.toSet(), targetShards.toSet())
+            assertEquals((0 until 6).map { ShardId(it) }.toSet(), targetShards.toSet())
             assertTrue(assignments.invariantViolations.isEmpty())
         }
     }
@@ -165,8 +165,8 @@ class CoordinatorGroupedWorkflowTest {
             )
             val assignments = service.assignments("category-leave", "orders-consumer")
 
-            assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), survivor.assignment.assignedShards)
-            assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-b"))
+            assertEquals(setOf(ShardId(0), ShardId(1)), survivor.assignment.assignedShards)
+            assertEquals(setOf(ShardId(0), ShardId(1)), assignments.targetAssignment.getValue("member-b"))
             assertTrue("member-a" !in assignments.targetAssignment)
             assertTrue(assignments.invariantViolations.isEmpty())
         }
@@ -198,7 +198,7 @@ class CoordinatorGroupedWorkflowTest {
     @DisplayName("Partition upscaling")
     inner class PartitionUpscaling {
         @Test
-        fun `scale creates next stream version and assigns old plus new shards`() {
+        fun `scale updates shard count and assigns target shards`() {
             val service = service()
             service.createGroup("category-upscale", "orders-consumer", createGroupRequest(initialShardCount = 2))
             val memberA = join(service, "category-upscale", "member-a")
@@ -217,14 +217,11 @@ class CoordinatorGroupedWorkflowTest {
             )
             val group = service.getGroup("category-upscale", "orders-consumer")
 
-            assertEquals(1, migration.fromVersion)
-            assertEquals(2, migration.toVersion)
-            assertEquals(setOf(1, 2), group.readableVersions)
-            assertEquals((0 until 2).map { ShardId(1, it) }.toSet() + (0 until 4).map { ShardId(2, it) }.toSet(), heartbeat.assignment.assignedShards)
+                                                assertEquals((0 until 2).map { ShardId(it) }.toSet() + (0 until 4).map { ShardId(it) }.toSet(), heartbeat.assignment.assignedShards)
         }
 
         @Test
-        fun `scale updates producer routing while keeping old version readable`() {
+        fun `scale updates producer routing metadata`() {
             val service = service()
             service.createGroup("category-upscale-routing", "orders-consumer", createGroupRequest(initialShardCount = 2))
             val before = service.producerRouting("category-upscale-routing", "orders-consumer")
@@ -232,16 +229,13 @@ class CoordinatorGroupedWorkflowTest {
             service.scaleGroup(
                 "category-upscale-routing",
                 "orders-consumer",
-                ScaleGroupRequest(targetShardCount = 5, requestedBy = "test", reason = "route new version"),
+                ScaleGroupRequest(targetShardCount = 5, requestedBy = "test", reason = "route target shard count"),
             )
             val after = service.producerRouting("category-upscale-routing", "orders-consumer")
             val group = service.getGroup("category-upscale-routing", "orders-consumer")
 
-            assertEquals(1, before.activeWriteVersion)
-            assertEquals(2, after.activeWriteVersion)
-            assertEquals(5, after.shardCount)
-            assertEquals(setOf(1, 2), group.readableVersions)
-            assertEquals((0 until 5).map { "category-upscale-routing:v2:shard:$it" }, after.shards.map { it.streamKey })
+                                    assertEquals(5, after.shardCount)
+                        assertEquals((0 until 5).map { "category-upscale-routing:$it" }, after.shards.map { it.streamKey })
             assertTrue(after.metadataVersion > before.metadataVersion)
         }
     }
@@ -257,11 +251,11 @@ class CoordinatorGroupedWorkflowTest {
             service.createGroup("category-topic-create", "orders-consumer", createGroupRequest(initialShardCount = 3))
 
             assertEquals(
-                listOf(CategoryProvisionedVersion("category-topic-create", "orders-consumer", 1, 3)),
+                listOf(CategoryProvisionedPlan("category-topic-create", "orders-consumer", 3)),
                 provisioner.provisioned,
             )
             assertEquals(
-                listOf("category-topic-create:v1:shard:0", "category-topic-create:v1:shard:1", "category-topic-create:v1:shard:2"),
+                listOf("category-topic-create:0", "category-topic-create:1", "category-topic-create:2"),
                 provisioner.plans.single().shardKeys.map { it.value },
             )
         }
@@ -278,11 +272,10 @@ class CoordinatorGroupedWorkflowTest {
                 ScaleGroupRequest(targetShardCount = 5, requestedBy = "test", reason = "topic upscale"),
             )
 
-            assertEquals(2, migration.toVersion)
-            assertEquals(
+                        assertEquals(
                 listOf(
-                    CategoryProvisionedVersion("category-topic-scale", "orders-consumer", 1, 2),
-                    CategoryProvisionedVersion("category-topic-scale", "orders-consumer", 2, 5),
+                    CategoryProvisionedPlan("category-topic-scale", "orders-consumer", 2),
+                    CategoryProvisionedPlan("category-topic-scale", "orders-consumer", 5),
                 ),
                 provisioner.provisioned,
             )
@@ -302,9 +295,8 @@ class CoordinatorGroupedWorkflowTest {
             val group = service.getGroup("category-topic-noop", "orders-consumer")
 
             assertEquals(MigrationState.DEPRECATED, migration.state)
-            assertEquals(1, group.activeWriteVersion)
-            assertEquals(null, group.activeMigration)
-            assertEquals(listOf(CategoryProvisionedVersion("category-topic-noop", "orders-consumer", 1, 3)), provisioner.provisioned)
+                        assertEquals(null, group.activeMigration)
+            assertEquals(listOf(CategoryProvisionedPlan("category-topic-noop", "orders-consumer", 3)), provisioner.provisioned)
         }
     }
 
@@ -361,7 +353,6 @@ class CoordinatorGroupedWorkflowTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,
@@ -372,23 +363,21 @@ class CoordinatorGroupedWorkflowTest {
         )
 }
 
-private data class CategoryProvisionedVersion(
+private data class CategoryProvisionedPlan(
     val streamPrefix: String,
     val consumerGroup: String,
-    val streamVersion: Int,
     val shardCount: Int,
 )
 
 private class CategoryRecordingStreamShardProvisioner : StreamShardProvisioner {
     val plans = mutableListOf<RedisStreamShardProvisioningPlan>()
-    val provisioned = mutableListOf<CategoryProvisionedVersion>()
+    val provisioned = mutableListOf<CategoryProvisionedPlan>()
 
     override fun provision(plan: RedisStreamShardProvisioningPlan) {
         plans += plan
-        provisioned += CategoryProvisionedVersion(
+        provisioned += CategoryProvisionedPlan(
             streamPrefix = plan.streamPrefix,
             consumerGroup = plan.consumerGroup,
-            streamVersion = plan.streamVersion,
             shardCount = plan.shardCount,
         )
     }

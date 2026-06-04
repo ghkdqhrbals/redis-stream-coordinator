@@ -9,7 +9,7 @@ This document explains which KIP-848 ideas are adapted and how they are reshaped
 | KIP-848 Concept | Redis Stream Coordinator Equivalent |
 | --- | --- |
 | Group Coordinator | Dedicated coordinator server |
-| Member | Consumer runtime member with UUID `memberId` |
+| Member | Consumer runtime member with a pod-IP-context-derived `memberId` |
 | Topic Partition | Redis Stream shard |
 | Target Assignment | Coordinator-owned desired shard ownership |
 | Current Assignment | Member-reported applied ownership |
@@ -78,5 +78,5 @@ Kafka transactions can bind Kafka output records and consumed offsets inside Kaf
 
 * Whether to support pluggable assignment strategies.
 * Whether to add richer assignment diff reporting for clients.
-* Whether member identity should optionally be coordinator-issued.
+* Whether pod-IP-context-derived member identity should optionally be coordinator-issued.
 * Whether monitoring projections should be rebuilt automatically from an append-only audit/event log.

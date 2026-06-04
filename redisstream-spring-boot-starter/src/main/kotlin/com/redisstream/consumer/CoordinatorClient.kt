@@ -14,7 +14,7 @@ interface CoordinatorClient {
     ): HeartbeatResponse
 
     /**
-     * Fetches producer routing metadata for the active write stream version.
+     * Fetches producer routing metadata for the coordinator-managed shard count.
      */
     fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse
 }

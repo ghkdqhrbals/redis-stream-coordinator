@@ -6,7 +6,7 @@ class ProducerRoutingProperties {
     var streamPrefix: String = ""
     var consumerGroupName: String = ""
     var routingRefreshInterval: Duration = Duration.ofSeconds(30)
-    var publishMaxAttempts: Int = 1
+    var publishMaxAttempts: Int = 2
     var xadd: XAdd = XAdd()
 
     @Deprecated(

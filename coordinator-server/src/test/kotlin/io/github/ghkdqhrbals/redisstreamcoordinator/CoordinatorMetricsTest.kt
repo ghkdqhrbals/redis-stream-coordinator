@@ -6,6 +6,9 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.domain.HeartbeatRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.RuntimeConsumerCapacity
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ScaleGroupRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardConsumptionProgress
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardId
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamShardOffset
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamShardOffsetsResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorMetrics
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.MicrometerCoordinatorMetrics
@@ -249,7 +252,7 @@ class CoordinatorMetricsTest {
                 shardProgress = listOf(
                     ShardConsumptionProgress(
                         shard = shard,
-                        streamKey = "metrics-progress:v1:shard:0",
+                        streamKey = "metrics-progress:0",
                         lastDeliveredId = "100-2",
                         lastAckedId = "100-1",
                         pendingCount = 1,
@@ -265,8 +268,7 @@ class CoordinatorMetricsTest {
                 .tag("stream", "metrics-progress")
                 .tag("group", "orders-consumer")
                 .tag("member", "member-a")
-                .tag("stream_version", "1")
-                .tag("shard", "0")
+                                .tag("shard", "0")
                 .gauge()
                 .value(),
         )
@@ -276,8 +278,7 @@ class CoordinatorMetricsTest {
                 .tag("stream", "metrics-progress")
                 .tag("group", "orders-consumer")
                 .tag("member", "member-a")
-                .tag("stream_version", "1")
-                .tag("shard", "0")
+                                .tag("shard", "0")
                 .gauge()
                 .value(),
         )
@@ -287,10 +288,188 @@ class CoordinatorMetricsTest {
                 .tag("stream", "metrics-progress")
                 .tag("group", "orders-consumer")
                 .tag("member", "member-a")
-                .tag("stream_version", "1")
+                                .tag("shard", "0")
+                .gauge()
+                .value(),
+        )
+    }
+
+    @Test
+    fun `coordinator exports stream shard offset and lag metrics`() {
+        val registry = SimpleMeterRegistry()
+        val metrics = MicrometerCoordinatorMetrics(registry, properties, clock)
+
+        metrics.recordStreamShardOffsets(
+            StreamShardOffsetsResponse(
+                streamPrefix = "metrics-offsets",
+                consumerGroup = "orders-consumer",
+                shards = listOf(
+                    StreamShardOffset(
+                        streamPrefix = "metrics-offsets",
+                        consumerGroup = "orders-consumer",
+                        shard = ShardId(shardIndex = 0),
+                        streamKey = "metrics-offsets:0",
+                        redisSlot = 0,
+                        redisNodeEndpoint = null,
+                        redisNodeId = null,
+                        redisSlotRangeStart = null,
+                        redisSlotRangeEnd = null,
+                        streamLength = 42,
+                        firstRecordId = "100-0",
+                        lastRecordId = "200-3",
+                        lastGeneratedId = "200-3",
+                        groupLastDeliveredId = "190-0",
+                        consumerLastDeliveredId = "190-0",
+                        consumerLastAckedId = "180-1",
+                        pendingCount = 3,
+                        lag = 7,
+                        memoryUsageBytes = 2048,
+                        ownerMemberIds = listOf("member-a"),
+                    ),
+                ),
+                totalStreamLength = 42,
+                totalPendingCount = 3,
+                totalLag = 7,
+                totalMemoryUsageBytes = 2048,
+                memoryUsageKnown = true,
+            ),
+        )
+
+        assertEquals(
+            42.0,
+            registry.get("redis_stream_coord_shard_stream_length")
+                .tag("stream", "metrics-offsets")
+                .tag("group", "orders-consumer")
+                                .tag("shard", "0")
+                .tag("stream_key", "metrics-offsets:0")
+                .gauge()
+                .value(),
+        )
+        assertEquals(
+            7.0,
+            registry.get("redis_stream_coord_shard_lag")
+                .tag("stream", "metrics-offsets")
+                .tag("group", "orders-consumer")
                 .tag("shard", "0")
                 .gauge()
                 .value(),
+        )
+        assertEquals(
+            2048.0,
+            registry.get("redis_stream_coord_shard_memory_usage_bytes")
+                .tag("stream", "metrics-offsets")
+                .tag("group", "orders-consumer")
+                .tag("shard", "0")
+                .gauge()
+                .value(),
+        )
+        assertEquals(
+            180.0,
+            registry.get("redis_stream_coord_shard_consumer_last_acked_ms")
+                .tag("stream", "metrics-offsets")
+                .tag("group", "orders-consumer")
+                .tag("shard", "0")
+                .gauge()
+                .value(),
+        )
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_coord_shard_consumer_last_acked_seq")
+                .tag("stream", "metrics-offsets")
+                .tag("group", "orders-consumer")
+                .tag("shard", "0")
+                .gauge()
+                .value(),
+        )
+    }
+
+    @Test
+    fun `coordinator exports unknown Redis lag as zero in Prometheus gauge`() {
+        val registry = SimpleMeterRegistry()
+        val metrics = MicrometerCoordinatorMetrics(registry, properties, clock)
+
+        metrics.recordStreamShardOffsets(
+            StreamShardOffsetsResponse(
+                streamPrefix = "metrics-unknown-lag",
+                consumerGroup = "orders-consumer",
+                shards = listOf(
+                    StreamShardOffset(
+                        streamPrefix = "metrics-unknown-lag",
+                        consumerGroup = "orders-consumer",
+                        shard = ShardId(shardIndex = 0),
+                        streamKey = "metrics-unknown-lag:0",
+                        redisSlot = 0,
+                        redisNodeEndpoint = null,
+                        redisNodeId = null,
+                        redisSlotRangeStart = null,
+                        redisSlotRangeEnd = null,
+                        streamLength = 0,
+                        firstRecordId = null,
+                        lastRecordId = null,
+                        lastGeneratedId = null,
+                        groupLastDeliveredId = null,
+                        consumerLastDeliveredId = null,
+                        consumerLastAckedId = null,
+                        pendingCount = 0,
+                        lag = null,
+                        memoryUsageBytes = null,
+                        ownerMemberIds = emptyList(),
+                    ),
+                ),
+                totalStreamLength = 0,
+                totalPendingCount = 0,
+                totalLag = null,
+                totalMemoryUsageBytes = 0,
+                memoryUsageKnown = false,
+            ),
+        )
+
+        assertEquals(
+            0.0,
+            registry.get("redis_stream_coord_shard_lag")
+                .tag("stream", "metrics-unknown-lag")
+                .tag("group", "orders-consumer")
+                .tag("shard", "0")
+                .gauge()
+                .value(),
+        )
+    }
+
+    @Test
+    fun `coordinator records API request latency metrics`() {
+        val registry = SimpleMeterRegistry()
+        val metrics = MicrometerCoordinatorMetrics(registry, properties, clock)
+
+        metrics.recordApiRequest(
+            method = "GET",
+            route = "/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/offsets",
+            status = 200,
+            outcome = "SUCCESS",
+            streamPrefix = "metrics-api",
+            consumerGroup = "orders-consumer",
+            duration = Duration.ofMillis(3250),
+        )
+
+        assertEquals(
+            1.0,
+            registry.get("redis_stream_coord_api_request_total")
+                .tag("method", "GET")
+                .tag("route", "/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/offsets")
+                .tag("status", "200")
+                .tag("outcome", "SUCCESS")
+                .tag("stream", "metrics-api")
+                .tag("group", "orders-consumer")
+                .counter()
+                .count(),
+        )
+        assertEquals(
+            3.25,
+            registry.get("redis_stream_coord_api_request_duration")
+                .tag("route", "/coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/offsets")
+                .tag("stream", "metrics-api")
+                .tag("group", "orders-consumer")
+                .timer()
+                .totalTime(java.util.concurrent.TimeUnit.SECONDS),
         )
     }
 
@@ -322,7 +501,6 @@ class CoordinatorMetricsTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,

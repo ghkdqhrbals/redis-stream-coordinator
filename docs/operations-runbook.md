@@ -42,6 +42,22 @@ curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
   http://localhost:8080/coord/v1/monitoring/streams/orders/groups/orders-consumer/migrations
 ```
 
+## Terraform And GitOps Admin Mutations
+
+Production admin mutations should be applied through Terraform or another GitOps workflow when possible.
+
+Recommended pattern:
+
+1. Review desired changes in a pull request.
+2. Run plan against coordinator read APIs.
+3. Apply with a dedicated `WRITE` principal.
+4. Send `X-Request-Id` and request body fields `requestedBy` and `reason`.
+5. Verify coordinator audit logs and monitoring APIs after apply.
+
+Terraform manages desired state such as group existence, shard count, and consumer concurrency policy. It does not manage runtime state such as heartbeats, current assignments, revoke progress, offsets, pending entries, or message payloads.
+
+Coordinator audit remains required even when Terraform is the caller. It records the actual API request, outcome, status, principal, roles, request id, request body fingerprint, client address, duration, stream prefix, consumer group, and operation reason.
+
 ## Alerts
 
 Alert on:

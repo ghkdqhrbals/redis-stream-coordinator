@@ -18,10 +18,7 @@ internal object CoordinatorRoutingMetadataValidator {
         require(metadata.shards.isNotEmpty()) {
             "coordinator group $streamPrefix/$consumerGroupName has no shard metadata"
         }
-        val activeShardIndexes = metadata.shards
-            .filter { it.streamVersion == metadata.activeWriteVersion }
-            .map { it.shardIndex }
-            .toSortedSet()
+        val activeShardIndexes = metadata.shards.map { it.shardIndex }.toSortedSet()
         require(activeShardIndexes == (0 until metadata.shardCount).toSortedSet()) {
             "coordinator group $streamPrefix/$consumerGroupName active shard list does not match shardCount"
         }

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component
 @Component
 internal class CriticalSectionAspect(
     private val stateMutex: CoordinatorStateMutex,
+    private val shutdownGate: CoordinatorShutdownGate,
 ) {
     @Around("@annotation(io.github.ghkdqhrbals.redisstreamcoordinator.service.CriticalSection)")
     fun around(joinPoint: ProceedingJoinPoint): Any? {
@@ -21,8 +22,11 @@ internal class CriticalSectionAspect(
             .getAnnotation(CriticalSection::class.java)
         val monitor = joinPoint.target ?: this
         return synchronized(monitor) {
-            stateMutex.withCriticalSection(criticalSection.operation) {
-                joinPoint.proceed()
+            val lease = shutdownGate.enter(criticalSection.operation)
+            lease.use {
+                stateMutex.withCriticalSection(criticalSection.operation) {
+                    joinPoint.proceed()
+                }
             }
         }
     }

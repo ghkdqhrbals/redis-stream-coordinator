@@ -13,6 +13,9 @@ management:
 springdoc:
   api-docs:
     enabled: true
+  paths-to-exclude:
+    - /scalar
+    - /scalar/**
   swagger-ui:
     path: /swagger-ui.html
     try-it-out-enabled: true

@@ -43,14 +43,14 @@ coordinator:
     admin-username: admin
     # 운영 환경에서는 환경변수/secret으로 주입한다. 기본 local password는 password이다.
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
-    # 선택 ACL이다. 비어 있으면 admin-username/admin-password가 ADMIN/MONITOR/MEMBER 전체 권한을 가진다.
+    # 선택 ACL이다. 비어 있으면 admin-username/admin-password가 READ/WRITE/MEMBER 전체 권한을 가진다.
     users:
       - username: admin
         password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
-        roles: [ADMIN]
-      - username: monitor
+        roles: [WRITE]
+      - username: grafana
         password: ${REDIS_STREAM_COORDINATOR_MONITOR_PASSWORD:}
-        roles: [MONITOR]
+        roles: [READ]
       - username: member
         password: ${REDIS_STREAM_COORDINATOR_MEMBER_PASSWORD:}
         roles: [MEMBER]
@@ -65,6 +65,11 @@ coordinator:
     # log 또는 redis. redis는 group-scoped admin audit list에 이벤트를 저장한다.
     sink: log
     redis-max-entries: 1000
+
+  store:
+    # local 개발은 memory, Redis 기반 metadata는 redis, DB 기반 metadata는 jdbc를 사용한다.
+    type: redis
+    key-prefix: redis-stream:coord
 
   # Redis Stream data plane과 optional stream provisioning에 사용할 Redis 접속 정보이다.
   redis:
@@ -126,15 +131,29 @@ Redis-backed coordinator는 Redis mutex와 `storeRevision` compare-and-set을 st
 
 이 구조의 목적은 사용자가 `replicas=1`, `Recreate`, blue/green passive mode 같은 배포 세부사항을 직접 맞추지 않아도 안전하게 운영을 시작할 수 있게 하는 것이다.
 
+## Metadata Store Options
+
+Coordinator metadata store는 세 가지를 지원한다.
+
+| Store | 용도 | 일관성 경계 |
+| --- | --- | --- |
+| `memory` | local 개발과 unit test | process-local map |
+| `redis` | Redis만으로 운영하는 배포 | group metadata hash 1개 + Redis mutex + `storeRevision` CAS |
+| `jdbc` | metadata를 DB에 저장해야 하는 배포 | `{streamPrefix, consumerGroup}` row 1개 + JSON metadata + `storeRevision` CAS |
+
+JDBC store도 Redis store와 동일한 aggregate metadata JSON을 저장한다. primary key는 `{streamPrefix, consumerGroup}`이며 모든 update/delete는 이전 `storeRevision` 조건으로 보호한다.
+
 ## Access Control
 
-MVP는 Basic Auth를 사용한다. `api.users`가 비어 있으면 `admin-username` / `admin-password`가 `ADMIN`, `MONITOR`, `MEMBER` 전체 권한을 가진다.
+MVP는 Basic Auth를 사용한다. `api.users`가 비어 있으면 `admin-username` / `admin-password`가 `READ`, `WRITE`, `MEMBER` 전체 권한을 가진다.
 
 `api.users`가 설정되면 각 user의 role로 ACL을 평가한다.
 
-* `ADMIN`: create, scale, consumer concurrency update, rollback 같은 mutation API.
-* `MONITOR`: monitoring API와 producer routing/group/migration 조회 API.
+* `READ`: monitoring, Grafana datasource, health, compatibility, message inspection API.
+* `WRITE`: `READ` 전체와 create/delete/scale/rollback/producer routing metadata 같은 coordinator control-plane API.
 * `MEMBER`: member heartbeat API. `authenticate-member-api=true`일 때만 요구한다.
+
+기존 `ADMIN`, `MONITOR` role 이름은 하위 호환 alias로 허용한다. `ADMIN`은 legacy full coordinator permission, `MONITOR`는 `READ`로 처리한다.
 
 인증 실패는 `401 Unauthorized`를 반환한다. 권한이 없는 mutation 요청은 `403 Forbidden`을 반환한다.
 
@@ -233,11 +252,35 @@ Structured log fields:
 * `requestedBy`
 * `reshardingId`
 
-Admin audit events are emitted for create, scale, consumer concurrency update, and rollback. The default sink is structured application logs. When `coordinator.audit.sink=redis`, the coordinator writes JSON audit events to:
+Admin audit event는 create, delete, scale, consumer concurrency update, rollback 같은 control-plane mutation마다 남긴다. 기본 sink는 structured application log이다. `coordinator.audit.sink=redis`이면 coordinator는 JSON audit event를 다음 group-scoped key에 쓴다.
 
 ```text
 redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
 ```
+
+Audit event에는 다음 값을 포함한다.
+
+* action,
+* outcome,
+* HTTP status,
+* authenticated principal,
+* granted roles,
+* `requestedBy`,
+* `reason`,
+* request id,
+* client address,
+* user agent,
+* route and query string,
+* request duration,
+* stream prefix,
+* consumer group,
+* resharding id when present,
+* request summary,
+* SHA-256 request body fingerprint,
+* coordinator id,
+* timestamp.
+
+Audit log는 runtime evidence이다. Terraform/GitOps change management와 역할이 다르다. Terraform은 의도한 desired state와 승인 이력을 보여주고, coordinator audit log는 실제 coordinator가 받은 요청과 응답 결과를 보여준다. 실패한 요청, forbidden 요청, retry된 요청도 coordinator audit log에 남아야 한다.
 
 ## Alerts
 

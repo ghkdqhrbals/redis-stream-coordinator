@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.connection.RedisConnectionFactory
 
-@AutoConfiguration
+@AutoConfiguration(afterName = ["org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration"])
 class ProducerRoutingAutoConfiguration {
     @Bean
     @ConditionalOnBean(ProducerRoutingProperties::class, CoordinatorClient::class)

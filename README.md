@@ -87,9 +87,21 @@ class OrdersConsumer {
 }
 ```
 
-`concurrency` is both the reported local capacity and the default worker thread count. If the application needs a specific thread pool, declare an `Executor` bean and set `executor = "beanName"` on `@StreamConfiguration` or `@StreamListener`.
+With annotation listeners, `concurrency = "4"` creates four logical coordinator members in the same application process. Each member has its own `memberId`, heartbeat loop, Redis consumer name, assignment state, and shard ownership. By default the starter derives the base member id from the pod IP context and appends `-m0`, `-m1`, `-m2`, and so on for listener concurrency. This matches Kafka-style listener concurrency: concurrency increases the number of independently assigned consumer members.
 
-For annotation-based consumers, the starter generates the runtime `memberId` automatically. `id` is the listener endpoint identity, not the coordinator member ID.
+Shard ownership and listener concurrency are separate. The coordinator assigns each shard to exactly one live consumer member, but one member can own multiple shards. Listener concurrency increases the number of logical members participating in assignment; it does not change the rule that a shard has one live owner.
+
+## API Explorer
+
+Once the coordinator is running, open:
+
+* `http://localhost:8080/scalar` for human-readable API docs with operation-by-operation explanations.
+* `http://localhost:8080/v3/api-docs` for the raw OpenAPI document.
+* `http://localhost:8080/coord/v1/monitoring/health` for quick coordinator/Redis health check.
+
+The API operations are named by stable `operationId`s so teams can follow endpoint changes in git history and client code generation.
+
+For annotation-based consumers, the starter creates the runtime `memberId` automatically from `POD_IP`, local host address, or hostname. In Kubernetes, expose `status.podIP` as the `POD_IP` environment variable with the Downward API. `id` is the listener endpoint identity, not the coordinator member ID.
 
 For advanced configuration, provide a `RedisStreamMessageHandler` bean and code-defined consumer settings directly:
 
@@ -186,6 +198,8 @@ During Spring bean initialization, both managed consumers and producer routing c
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
+* [Terraform and GitOps Governance](docs/prd/13-terraform-governance.md)
+* [Terraform Shard Management Module](terraform/README.md)
 * [OpenAPI Spec](docs/openapi/coordinator.v1.yaml)
 * [Docker Guide](docs/docker.md)
 * [Testing Guide](docs/testing.md)
@@ -202,7 +216,7 @@ docker compose --profile coordinator up --build
 curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
 ```
 
-The coordinator monitoring console is available at `http://localhost:8080/console`. Sign in with the configured coordinator Basic Auth user; the local default is `admin` / `password`.
+The coordinator monitoring console is available at `http://localhost:8080/console`. Sign in with the configured coordinator Basic Auth user; the local default is `admin` / `password`. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
 
 The runtime API reference is available at `http://localhost:8080/scalar`. The published static API reference is generated from `docs/openapi/coordinator.v1.yaml`.
 
@@ -223,16 +237,7 @@ The pod smoke stack also starts Prometheus and Grafana for coordinator-owned met
 * Grafana: `http://localhost:3001` (`admin` / `admin`)
 * Dashboard: `Redis Stream Coordinator`
 
-Prometheus scrapes `coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and stream message payload tables with cursor-based pagination.
-
-For message pagination in Grafana, use the dashboard variables:
-
-* `Stream`, `Consumer Group`, `Shard`
-* `Message Direction`
-* `Message Limit`
-* `Message Cursor`
-
-The `Stream Messages API` panel displays `Next Cursor`; paste that value into `Message Cursor` and refresh the dashboard to load the next page.
+Prometheus scrapes `coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
 
 Swagger UI is available for interactive local testing:
 
@@ -241,11 +246,11 @@ Swagger UI is available for interactive local testing:
 * Consumer pod 2: `http://localhost:18082/swagger-ui.html`
 * Publisher pod: `http://localhost:18090/swagger-ui.html`
 
-Use `admin` / `password` in the coordinator Swagger Authorize dialog for protected coordinator endpoints.
+Use `admin` / `password` in the coordinator Swagger Authorize dialog for protected coordinator endpoints. Production ACLs should use `READ` for monitoring/Grafana users, `WRITE` for coordinator control-plane users, and `MEMBER` for authenticated consumer heartbeat callers. Legacy `ADMIN` and `MONITOR` roles remain accepted as aliases.
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, a lightweight monitoring console, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
+This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed or JDBC-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, a lightweight monitoring console, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
 
 ## License
 

@@ -40,7 +40,7 @@ data class RedisStreamCommandSupport(
         /**
          * Converts a server version into the Redis Stream command feature matrix used by the starter.
          */
-        fun fromVersion(version: RedisServerVersion): RedisStreamCommandSupport =
+        fun forRedisVersion(version: RedisServerVersion): RedisStreamCommandSupport =
             RedisStreamCommandSupport(
                 serverVersion = version,
                 supportsXAckDel = version >= RedisServerVersion(8, 2, 0, "8.2.0"),
@@ -75,7 +75,7 @@ class RedisConnectionStreamCommandSupportProvider(
     private fun load(): RedisStreamCommandSupport {
         val rawVersion = commands.serverVersion()
             ?: error("Redis INFO server response did not include redis_version or valkey_version")
-        return RedisStreamCommandSupport.fromVersion(RedisServerVersion.parse(rawVersion))
+        return RedisStreamCommandSupport.forRedisVersion(RedisServerVersion.parse(rawVersion))
     }
 }
 

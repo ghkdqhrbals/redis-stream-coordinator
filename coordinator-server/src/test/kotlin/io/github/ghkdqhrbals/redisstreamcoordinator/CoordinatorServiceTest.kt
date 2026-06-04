@@ -4,6 +4,9 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.api.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.protocol.CoordinatorProtocol
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.RedisStreamInfo
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.RedisStreamRecord
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
@@ -38,6 +41,413 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `delete group removes inactive metadata`() {
+        service.createGroup("delete-orders", "orders-consumer", createGroupRequest())
+
+        val deleted = service.deleteGroup(
+            "delete-orders",
+            "orders-consumer",
+            DeleteGroupRequest(
+                requestedBy = "test",
+                reason = "cleanup inactive test group",
+            ),
+        )
+
+        assertEquals("delete-orders", deleted.streamPrefix)
+        val error = kotlin.runCatching {
+            service.getGroup("delete-orders", "orders-consumer")
+        }.exceptionOrNull() as CoordinatorException
+        assertEquals(CoordinatorError.GROUP_NOT_FOUND, error.error)
+    }
+
+    @Test
+    fun `delete group rejects live members unless forced`() {
+        service.createGroup("delete-live-orders", "orders-consumer", createGroupRequest())
+        service.heartbeat(
+            "delete-live-orders",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+
+        val rejected = kotlin.runCatching {
+            service.deleteGroup(
+                "delete-live-orders",
+                "orders-consumer",
+                DeleteGroupRequest(
+                    requestedBy = "test",
+                    reason = "cleanup live test group",
+                ),
+            )
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.GROUP_HAS_ACTIVE_MEMBERS, rejected.error)
+        service.deleteGroup(
+            "delete-live-orders",
+            "orders-consumer",
+            DeleteGroupRequest(
+                requestedBy = "test",
+                reason = "forced cleanup live test group",
+                force = true,
+            ),
+        )
+        val notFound = kotlin.runCatching {
+            service.getGroup("delete-live-orders", "orders-consumer")
+        }.exceptionOrNull() as CoordinatorException
+        assertEquals(CoordinatorError.GROUP_NOT_FOUND, notFound.error)
+    }
+
+    @Test
+    fun `grafana option APIs expose current sharded stream selections from metadata`() {
+        service.createGroup("orders", "orders-consumer", createGroupRequest(initialShardCount = 3))
+        service.createGroup("payments", "payments-consumer", createGroupRequest(initialShardCount = 2))
+
+        assertEquals(
+            listOf(
+                GrafanaOptionRow(text = "orders", value = "orders"),
+                GrafanaOptionRow(text = "payments", value = "payments"),
+            ),
+            service.grafanaStreamOptions(),
+        )
+        assertEquals(
+            listOf(GrafanaOptionRow(text = "orders / orders-consumer", value = "orders-consumer")),
+            service.grafanaConsumerGroupOptions("orders"),
+        )
+        assertEquals(
+            listOf(
+                GrafanaOptionRow(text = ":0", value = "0"),
+                GrafanaOptionRow(text = ":1", value = "1"),
+                GrafanaOptionRow(text = ":2", value = "2"),
+            ),
+            service.grafanaShardOptions("orders", "orders-consumer"),
+        )
+    }
+
+    @Test
+    fun `grafana shard rows can scan all groups for overview dashboards`() {
+        service.createGroup("orders", "orders-consumer", createGroupRequest(initialShardCount = 3))
+        service.createGroup("payments", "payments-consumer", createGroupRequest(initialShardCount = 2))
+
+        val rows = service.grafanaShards(streamPrefix = "", consumerGroup = "")
+
+        assertEquals(5, rows.size)
+        assertEquals(
+            setOf("orders" to "orders-consumer", "payments" to "payments-consumer"),
+            rows.map { it.streamPrefix to it.consumerGroup }.toSet(),
+        )
+        assertEquals(setOf(":0", ":1", ":2"), rows.filter { it.streamPrefix == "orders" }.map { it.shardLabel }.toSet())
+        assertEquals(setOf(":0", ":1"), rows.filter { it.streamPrefix == "payments" }.map { it.shardLabel }.toSet())
+    }
+
+    @Test
+    fun `grafana message search finds a record id across every shard`() {
+        val redis = FakeMessageRedisCommands(
+            mapOf(
+                "search-orders:0" to listOf(
+                    RedisStreamRecord("100-1", mapOf("payload" to """{"shard":0}""")),
+                ),
+                "search-orders:1" to listOf(
+                    RedisStreamRecord("100-2", mapOf("payload" to """{"shard":1}""")),
+                ),
+                "search-orders:2" to listOf(
+                    RedisStreamRecord("100-1", mapOf("payload" to """{"shard":2}""")),
+                ),
+            ),
+        )
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("search-orders", "orders-consumer", createGroupRequest(initialShardCount = 3))
+
+        val rows = service.grafanaMessages(
+            streamPrefix = "search-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "0",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = null,
+            recordId = "100-1",
+            limit = 25,
+        )
+
+        assertEquals(listOf(0, 2), rows.map { it.shardIndex })
+        assertEquals(listOf("search-orders:0", "search-orders:2"), rows.map { it.streamKey })
+        assertEquals(listOf("search-orders:0", "search-orders:1", "search-orders:2"), redis.rangeRequests)
+        assertEquals("all", rows.first().shardSelector)
+        assertEquals(null, rows.first().pageNextCursor)
+    }
+
+    @Test
+    fun `grafana messages can page backward through a single shard more than once`() {
+        val redis = FakeMessageRedisCommands(
+            mapOf(
+                "paged-orders:0" to listOf(
+                    RedisStreamRecord("100-0", mapOf("payload" to "one")),
+                    RedisStreamRecord("101-0", mapOf("payload" to "two")),
+                    RedisStreamRecord("102-0", mapOf("payload" to "three")),
+                    RedisStreamRecord("103-0", mapOf("payload" to "four")),
+                    RedisStreamRecord("104-0", mapOf("payload" to "five")),
+                ),
+            ),
+        )
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("paged-orders", "orders-consumer", createGroupRequest(initialShardCount = 1))
+
+        val firstPage = service.grafanaMessages(
+            streamPrefix = "paged-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "0",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = null,
+            recordId = null,
+            limit = 2,
+        )
+        val secondPage = service.grafanaMessages(
+            streamPrefix = "paged-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "0",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = firstPage.first().pageNextCursor,
+            recordId = null,
+            limit = 2,
+        )
+        val thirdPage = service.grafanaMessages(
+            streamPrefix = "paged-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "0",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = secondPage.first().pageNextCursor,
+            recordId = null,
+            limit = 2,
+        )
+
+        assertEquals(listOf("104-0", "103-0"), firstPage.map { it.recordId })
+        assertEquals("103-0", firstPage.first().pageNextCursor)
+        assertEquals(listOf("102-0", "101-0"), secondPage.map { it.recordId })
+        assertEquals("101-0", secondPage.first().pageNextCursor)
+        assertEquals(listOf("100-0"), thirdPage.map { it.recordId })
+        assertEquals(null, thirdPage.first().pageNextCursor)
+    }
+
+    @Test
+    fun `grafana messages can jump to the last page for a single shard`() {
+        val redis = FakeMessageRedisCommands(
+            mapOf(
+                "last-page-orders:0" to listOf(
+                    RedisStreamRecord("100-0", mapOf("payload" to "one")),
+                    RedisStreamRecord("101-0", mapOf("payload" to "two")),
+                    RedisStreamRecord("102-0", mapOf("payload" to "three")),
+                    RedisStreamRecord("103-0", mapOf("payload" to "four")),
+                    RedisStreamRecord("104-0", mapOf("payload" to "five")),
+                ),
+            ),
+        )
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("last-page-orders", "orders-consumer", createGroupRequest(initialShardCount = 1))
+
+        val newestFirst = service.grafanaMessages(
+            streamPrefix = "last-page-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "0",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = "__rsc_last__",
+            recordId = null,
+            limit = 2,
+        )
+        val oldestFirst = service.grafanaMessages(
+            streamPrefix = "last-page-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "0",
+            direction = StreamMessagePageDirection.FORWARD,
+            cursor = "__rsc_last__",
+            recordId = null,
+            limit = 2,
+        )
+
+        assertEquals(listOf("100-0"), newestFirst.map { it.recordId })
+        assertEquals(listOf("104-0"), oldestFirst.map { it.recordId })
+        assertEquals(null, newestFirst.first().pageNextCursor)
+        assertEquals(null, oldestFirst.first().pageNextCursor)
+
+        val pageBeforeLast = service.grafanaMessages(
+            streamPrefix = "last-page-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "0",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = "__rsc_tail__:1",
+            recordId = null,
+            limit = 2,
+        )
+
+        assertEquals(listOf("102-0", "101-0"), pageBeforeLast.map { it.recordId })
+        assertEquals("__rsc_tail__:0", pageBeforeLast.first().pageNextCursor)
+    }
+
+    @Test
+    fun `grafana messages can jump to the last page across all shards`() {
+        val redis = FakeMessageRedisCommands(
+            mapOf(
+                "last-page-all-orders:0" to listOf(
+                    RedisStreamRecord("100-0", mapOf("payload" to "s0-a")),
+                    RedisStreamRecord("105-0", mapOf("payload" to "s0-b")),
+                    RedisStreamRecord("110-0", mapOf("payload" to "s0-c")),
+                ),
+                "last-page-all-orders:1" to listOf(
+                    RedisStreamRecord("101-0", mapOf("payload" to "s1-a")),
+                    RedisStreamRecord("106-0", mapOf("payload" to "s1-b")),
+                    RedisStreamRecord("111-0", mapOf("payload" to "s1-c")),
+                ),
+            ),
+        )
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("last-page-all-orders", "orders-consumer", createGroupRequest(initialShardCount = 2))
+
+        val rows = service.grafanaMessages(
+            streamPrefix = "last-page-all-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "all",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = "__rsc_last__",
+            recordId = null,
+            limit = 4,
+        )
+
+        assertEquals(listOf("101-0", "100-0"), rows.map { it.recordId })
+        assertEquals(listOf(1, 0), rows.map { it.shardIndex })
+        assertEquals("all", rows.first().shardSelector)
+        assertEquals(null, rows.first().pageNextCursor)
+        assertEquals(6, rows.first().pageTotalMessages)
+
+        val pageBeforeLast = service.grafanaMessages(
+            streamPrefix = "last-page-all-orders",
+            consumerGroup = "orders-consumer",
+            shardIndex = "all",
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = "__rsc_tail__:1",
+            recordId = null,
+            limit = 4,
+        )
+
+        assertEquals(listOf("111-0", "110-0", "106-0", "105-0"), pageBeforeLast.map { it.recordId })
+        assertEquals(listOf(1, 0, 1, 0), pageBeforeLast.map { it.shardIndex })
+        assertEquals("__rsc_tail__:0", pageBeforeLast.first().pageNextCursor)
+    }
+
+    @Test
+    fun `grafana shard rows expose target owners separately from acknowledged current owners`() {
+        service.createGroup("owner-pending", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        service.heartbeat(
+            "owner-pending",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+
+        val rows = service.grafanaShards("owner-pending", "orders-consumer")
+
+        assertEquals(setOf("member-a"), rows.map { it.targetOwnerMemberIds }.toSet())
+        assertEquals(setOf(""), rows.map { it.currentOwnerMemberIds }.toSet())
+        assertEquals(setOf("PENDING_ACK"), rows.map { it.ownerState }.toSet())
+    }
+
+    @Test
+    fun `heartbeat accepts previously granted ownership after target changes before ack`() {
+        service.createGroup("granted-before-ack", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "granted-before-ack",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "granted-before-ack",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+
+        val acknowledgedA = service.heartbeat(
+            "granted-before-ack",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberA.memberEpoch,
+                ownedShards = memberA.assignment.assignedShards,
+            ),
+        )
+        val member = service.listMembers("granted-before-ack", "orders-consumer").members
+            .single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.OK, acknowledgedA.status)
+        assertEquals(MemberState.ACTIVE, member.state)
+        assertEquals(memberA.assignment.assignedShards, member.currentAssignment)
+    }
+
+    @Test
+    fun `monitoring live owner rows exclude expired members with stale current assignments`() {
+        service.createGroup("owner-monitoring", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "owner-monitoring",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "owner-monitoring",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        clock.advance(Duration.ofSeconds(16))
+        val memberB = service.heartbeat(
+            "owner-monitoring",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "owner-monitoring",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch, ownedShards = memberB.assignment.assignedShards),
+        )
+
+        val offsets = service.streamShardOffsets("owner-monitoring", "orders-consumer")
+        val assignmentRows = service.grafanaAssignments("owner-monitoring", "orders-consumer")
+
+        assertEquals(setOf("member-b"), offsets.shards.flatMap { it.ownerMemberIds }.toSet())
+        assertTrue(offsets.shards.none { "member-a" in it.ownerMemberIds })
+        assertEquals(setOf("member-b"), assignmentRows.map { it.currentOwners }.toSet())
+    }
+
+    @Test
+    fun `terminal members are pruned after stale member retention`() {
+        val clock = MutableClock(Instant.parse("2026-05-21T00:00:00Z"), ZoneOffset.UTC)
+        val service = service(
+            clock = clock,
+            properties = CoordinatorProperties(
+                heartbeatInterval = Duration.ofSeconds(3),
+                memberLeaseTtl = Duration.ofSeconds(15),
+                staleMemberRetention = Duration.ofSeconds(30),
+                defaults = CoordinatorProperties.Defaults(
+                    initialShardCount = 2,
+                    consumerMaxConcurrency = 2,
+                ),
+            ),
+        )
+        service.createGroup("member-prune", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        service.heartbeat("member-prune", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+
+        clock.advance(Duration.ofSeconds(16))
+        service.tick()
+
+        assertEquals(MemberState.EXPIRED, service.listMembers("member-prune", "orders-consumer").members.single().state)
+
+        clock.advance(Duration.ofSeconds(15))
+        service.tick()
+
+        assertTrue(service.listMembers("member-prune", "orders-consumer").members.isEmpty())
+    }
+
+    @Test
     fun `heartbeat rejects member id mismatch`() {
         val response = service.heartbeat(
             streamPrefix = "orders",
@@ -59,6 +469,59 @@ class CoordinatorServiceTest {
         )
 
         assertEquals(HeartbeatStatus.UNKNOWN_MEMBER_ID, response.status)
+    }
+
+    @Test
+    fun `initial join heartbeat replay returns current assignment without changing epochs`() {
+        service.createGroup("join-idempotent", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val request = heartbeat("member-a", memberEpoch = 0)
+
+        val first = service.heartbeat("join-idempotent", "orders-consumer", "member-a", request)
+        val replayed = service.heartbeat("join-idempotent", "orders-consumer", "member-a", request)
+        val group = service.getGroup("join-idempotent", "orders-consumer")
+        val member = service.listMembers("join-idempotent", "orders-consumer").members.single()
+
+        assertEquals(HeartbeatStatus.OK, first.status)
+        assertEquals(HeartbeatStatus.OK, replayed.status)
+        assertEquals(first.memberEpoch, replayed.memberEpoch)
+        assertEquals(first.groupEpoch, replayed.groupEpoch)
+        assertEquals(first.assignmentEpoch, replayed.assignmentEpoch)
+        assertEquals(first.metadataVersion, replayed.metadataVersion)
+        assertEquals(first.assignment.assignedShards, replayed.assignment.assignedShards)
+        assertEquals(first.metadataVersion, group.metadataVersion)
+        assertEquals(first.groupEpoch, group.groupEpoch)
+        assertEquals(first.assignmentEpoch, group.assignmentEpoch)
+        assertEquals(first.metadataVersion, member.metadataVersion)
+        assertTrue(member.currentAssignment.isEmpty())
+    }
+
+    @Test
+    fun `steady heartbeat replay does not bump metadata or assignment epochs`() {
+        service.createGroup("steady-idempotent", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val joined = service.heartbeat(
+            "steady-idempotent",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val request = heartbeat(
+            "member-a",
+            memberEpoch = joined.memberEpoch,
+            ownedShards = joined.assignment.assignedShards,
+        )
+
+        val first = service.heartbeat("steady-idempotent", "orders-consumer", "member-a", request)
+        val replayed = service.heartbeat("steady-idempotent", "orders-consumer", "member-a", request)
+        val group = service.getGroup("steady-idempotent", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.OK, first.status)
+        assertEquals(HeartbeatStatus.OK, replayed.status)
+        assertEquals(first.memberEpoch, replayed.memberEpoch)
+        assertEquals(first.groupEpoch, replayed.groupEpoch)
+        assertEquals(first.assignmentEpoch, replayed.assignmentEpoch)
+        assertEquals(first.metadataVersion, replayed.metadataVersion)
+        assertEquals(first.metadataVersion, group.metadataVersion)
+        assertEquals(first.assignment.assignedShards, replayed.assignment.assignedShards)
     }
 
     @Test
@@ -138,6 +601,32 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `health does not wait for a slow redis ping beyond configured timeout`() {
+        val redisConnectionFactory = Mockito.mock(RedisConnectionFactory::class.java)
+        Mockito.`when`(redisConnectionFactory.connection).thenAnswer {
+            Thread.sleep(250)
+            throw IllegalStateException("redis ping timed out")
+        }
+        val service = CoordinatorService(
+            properties = CoordinatorProperties(
+                store = CoordinatorProperties.Store(type = CoordinatorProperties.StoreType.REDIS),
+                health = CoordinatorProperties.Health(redisTimeoutMs = 10),
+            ),
+            stateStore = InMemoryCoordinatorStateStore(),
+            redisConnectionFactory = redisProvider(redisConnectionFactory),
+            clock = clock,
+        )
+
+        val startedAt = System.nanoTime()
+        val health = service.health()
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+
+        assertEquals("DEGRADED", health.status)
+        assertEquals("DOWN", health.redis)
+        assertTrue(elapsedMs < 200, "health took ${elapsedMs}ms despite a 10ms Redis timeout")
+    }
+
+    @Test
     fun `heartbeat rejects unknown member leave`() {
         service.createGroup("orders", "orders-consumer", createGroupRequest())
 
@@ -167,8 +656,8 @@ class CoordinatorServiceTest {
         val second = service.heartbeat("orders", "orders-consumer", "member-b", heartbeat("member-b", memberEpoch = 0))
         val assignments = service.assignments("orders", "orders-consumer")
 
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-b"))
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), second.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0), ShardId(1)), assignments.targetAssignment.getValue("member-b"))
+        assertEquals(setOf(ShardId(0), ShardId(1)), second.assignment.assignedShards)
         assertTrue(second.assignment.pendingShards.isEmpty())
     }
 
@@ -195,7 +684,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `monitoring read retries operational refresh when state save races with another writer`() {
+    fun `monitoring read does not acquire critical section or write refreshed state`() {
         val store = CopyingConflictOnceStateStore()
         val service = service(clock, store)
         service.createGroup("monitor-race", "orders-consumer", createGroupRequest(initialShardCount = 2))
@@ -211,7 +700,12 @@ class CoordinatorServiceTest {
         store.conflictsBeforeSave = 1
         val group = service.getGroup("monitor-race", "orders-consumer")
 
-        assertEquals(GroupState.EMPTY, group.state)
+        assertEquals(GroupState.STABLE, group.state)
+        assertEquals(0, store.conflictedSaves)
+        assertEquals(MemberState.ACTIVE, service.listMembers("monitor-race", "orders-consumer").members.single().state)
+
+        service.tick()
+
         assertEquals(1, store.conflictedSaves)
         assertEquals(MemberState.EXPIRED, service.listMembers("monitor-race", "orders-consumer").members.single().state)
     }
@@ -354,9 +848,7 @@ class CoordinatorServiceTest {
         val group = service.getGroup("metrics", "metrics-consumer")
 
         assertEquals(MigrationState.ROLLED_BACK, rolledBack.state)
-        assertEquals(1, group.activeWriteVersion)
-        assertEquals(setOf(1), group.readableVersions)
-        assertEquals(null, group.activeMigration)
+                        assertEquals(null, group.activeMigration)
     }
 
     @Test
@@ -432,7 +924,7 @@ class CoordinatorServiceTest {
 
         assertEquals(HeartbeatStatus.OK, response.status)
         assertEquals(
-            setOf(ShardId(1, 0), ShardId(1, 1), ShardId(1, 2), ShardId(1, 3)),
+            setOf(ShardId(0), ShardId(1), ShardId(2), ShardId(3)),
             response.assignment.assignedShards,
         )
         assertTrue(response.assignment.pendingShards.isEmpty())
@@ -451,7 +943,7 @@ class CoordinatorServiceTest {
 
         val second = service.heartbeat("payments", "payments-consumer", "member-b", heartbeat("member-b", memberEpoch = 0))
 
-        assertEquals(setOf(ShardId(1, 1)), second.assignment.pendingShards)
+        assertEquals(setOf(ShardId(1)), second.assignment.pendingShards)
         assertTrue(second.assignment.assignedShards.isEmpty())
 
         val revokeFromA = service.heartbeat(
@@ -461,11 +953,11 @@ class CoordinatorServiceTest {
             heartbeat(
                 "member-a",
                 memberEpoch = first.memberEpoch,
-                ownedShards = setOf(ShardId(1, 0)),
-                revokingShards = listOf(RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED)),
+                ownedShards = setOf(ShardId(0)),
+                revokingShards = listOf(RevokingShardReport(ShardId(1), RevokingShardState.REVOKED)),
             ),
         )
-        assertEquals(setOf(ShardId(1, 0)), revokeFromA.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0)), revokeFromA.assignment.assignedShards)
 
         val assignedToB = service.heartbeat(
             "payments",
@@ -473,19 +965,21 @@ class CoordinatorServiceTest {
             "member-b",
             heartbeat("member-b", memberEpoch = second.memberEpoch),
         )
-        assertEquals(setOf(ShardId(1, 1)), assignedToB.assignment.assignedShards)
+        assertEquals(setOf(ShardId(1)), assignedToB.assignment.assignedShards)
         assertTrue(assignedToB.assignment.pendingShards.isEmpty())
     }
 
     @Test
     fun `rebalance timeout fences stuck owner`() {
+        val service = service(clock, rebalanceTimeout = Duration.ofSeconds(5))
         service.createGroup("rebalance-timeout", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
             "rebalance-timeout",
             "orders-consumer",
             "member-a",
-            heartbeat("member-a", memberEpoch = 0, rebalanceTimeoutMs = 5_000),
+            heartbeat("member-a", memberEpoch = 0),
         )
+        assertEquals(5_000, memberA.rebalanceTimeoutMs)
         service.heartbeat(
             "rebalance-timeout",
             "orders-consumer",
@@ -494,7 +988,6 @@ class CoordinatorServiceTest {
                 "member-a",
                 memberEpoch = memberA.memberEpoch,
                 ownedShards = memberA.assignment.assignedShards,
-                rebalanceTimeoutMs = 5_000,
             ),
         )
         val memberB = service.heartbeat(
@@ -503,7 +996,7 @@ class CoordinatorServiceTest {
             "member-b",
             heartbeat("member-b", memberEpoch = 0),
         )
-        assertEquals(setOf(ShardId(1, 1)), memberB.assignment.pendingShards)
+        assertEquals(setOf(ShardId(1)), memberB.assignment.pendingShards)
 
         clock.advance(Duration.ofSeconds(6))
         val afterTimeout = service.heartbeat(
@@ -515,7 +1008,7 @@ class CoordinatorServiceTest {
         val members = service.listMembers("rebalance-timeout", "orders-consumer").members
         val assignments = service.assignments("rebalance-timeout", "orders-consumer")
 
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), afterTimeout.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0), ShardId(1)), afterTimeout.assignment.assignedShards)
         assertEquals(MemberState.FENCED, members.single { it.memberId == "member-a" }.state)
         assertEquals(MemberState.ACTIVE, members.single { it.memberId == "member-b" }.state)
         assertTrue(assignments.invariantViolations.isEmpty())
@@ -523,12 +1016,13 @@ class CoordinatorServiceTest {
 
     @Test
     fun `rebalance timeout keeps timely owner active`() {
+        val service = service(clock, rebalanceTimeout = Duration.ofSeconds(5))
         service.createGroup("rebalance-completes", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(
             "rebalance-completes",
             "orders-consumer",
             "member-a",
-            heartbeat("member-a", memberEpoch = 0, rebalanceTimeoutMs = 5_000),
+            heartbeat("member-a", memberEpoch = 0),
         )
         service.heartbeat(
             "rebalance-completes",
@@ -538,7 +1032,6 @@ class CoordinatorServiceTest {
                 "member-a",
                 memberEpoch = memberA.memberEpoch,
                 ownedShards = memberA.assignment.assignedShards,
-                rebalanceTimeoutMs = 5_000,
             ),
         )
         val memberB = service.heartbeat(
@@ -555,9 +1048,8 @@ class CoordinatorServiceTest {
             heartbeat(
                 "member-a",
                 memberEpoch = memberA.memberEpoch,
-                ownedShards = setOf(ShardId(1, 0)),
-                revokingShards = listOf(RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED)),
-                rebalanceTimeoutMs = 5_000,
+                ownedShards = setOf(ShardId(0)),
+                revokingShards = listOf(RevokingShardReport(ShardId(1), RevokingShardState.REVOKED)),
             ),
         )
         clock.advance(Duration.ofSeconds(6))
@@ -569,7 +1061,7 @@ class CoordinatorServiceTest {
         )
         val members = service.listMembers("rebalance-completes", "orders-consumer").members
 
-        assertEquals(setOf(ShardId(1, 1)), assignedToB.assignment.assignedShards)
+        assertEquals(setOf(ShardId(1)), assignedToB.assignment.assignedShards)
         assertEquals(MemberState.ACTIVE, members.single { it.memberId == "member-a" }.state)
     }
 
@@ -597,7 +1089,7 @@ class CoordinatorServiceTest {
             "member-b",
             heartbeat("member-b", memberEpoch = 0),
         )
-        assertEquals(setOf(ShardId(1, 1)), memberB.assignment.pendingShards)
+        assertEquals(setOf(ShardId(1)), memberB.assignment.pendingShards)
 
         val replacementCoordinator = service(clock, sharedStore)
         val revokeAck = replacementCoordinator.heartbeat(
@@ -607,8 +1099,8 @@ class CoordinatorServiceTest {
             heartbeat(
                 "member-a",
                 memberEpoch = memberA.memberEpoch,
-                ownedShards = setOf(ShardId(1, 0)),
-                revokingShards = listOf(RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED)),
+                ownedShards = setOf(ShardId(0)),
+                revokingShards = listOf(RevokingShardReport(ShardId(1), RevokingShardState.REVOKED)),
             ),
         )
         val assignedToB = replacementCoordinator.heartbeat(
@@ -618,8 +1110,8 @@ class CoordinatorServiceTest {
             heartbeat("member-b", memberEpoch = memberB.memberEpoch),
         )
 
-        assertEquals(setOf(ShardId(1, 0)), revokeAck.assignment.assignedShards)
-        assertEquals(setOf(ShardId(1, 1)), assignedToB.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0)), revokeAck.assignment.assignedShards)
+        assertEquals(setOf(ShardId(1)), assignedToB.assignment.assignedShards)
         assertTrue(replacementCoordinator.assignments("failover", "orders-consumer").invariantViolations.isEmpty())
     }
 
@@ -679,8 +1171,37 @@ class CoordinatorServiceTest {
 
         assertEquals(HeartbeatStatus.INVALID_REQUEST, resetAttempt.status)
         assertEquals(memberA.memberEpoch, members.single { it.memberId == "member-a" }.memberEpoch)
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-a"))
+        assertEquals(setOf(ShardId(0), ShardId(1)), assignments.currentAssignments.getValue("member-a"))
         assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `heartbeat rejects epoch reset after ownership was acknowledged even when report is empty`() {
+        service.createGroup("epoch-reset-empty", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val joined = service.heartbeat(
+            "epoch-reset-empty",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val acknowledged = service.heartbeat(
+            "epoch-reset-empty",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = joined.memberEpoch, ownedShards = joined.assignment.assignedShards),
+        )
+
+        val resetAttempt = service.heartbeat(
+            "epoch-reset-empty",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val member = service.listMembers("epoch-reset-empty", "orders-consumer").members.single { it.memberId == "member-a" }
+
+        assertEquals(HeartbeatStatus.INVALID_REQUEST, resetAttempt.status)
+        assertEquals(acknowledged.memberEpoch, member.memberEpoch)
+        assertEquals(joined.assignment.assignedShards, member.currentAssignment)
     }
 
     @Test
@@ -709,7 +1230,7 @@ class CoordinatorServiceTest {
 
         assertEquals(HeartbeatStatus.INVALID_REQUEST, future.status)
         assertEquals(acknowledged.memberEpoch, member.memberEpoch)
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), member.currentAssignment)
+        assertEquals(setOf(ShardId(0), ShardId(1)), member.currentAssignment)
     }
 
     @Test
@@ -923,6 +1444,71 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `metadata sync does not wait for empty leaving members`() {
+        service.createGroup("metadata-sync-empty-leaving", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        service.heartbeat(
+            "metadata-sync-empty-leaving",
+            "orders-consumer",
+            "member-old",
+            heartbeat("member-old", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "metadata-sync-empty-leaving",
+            "orders-consumer",
+            "member-old",
+            heartbeat("member-old", memberEpoch = -1),
+        )
+        val memberAJoined = service.heartbeat(
+            "metadata-sync-empty-leaving",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val current = service.getGroup("metadata-sync-empty-leaving", "orders-consumer")
+
+        val syncA = service.heartbeat(
+            "metadata-sync-empty-leaving",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = memberAJoined.memberEpoch + 5,
+                metadataVersion = current.metadataVersion + 5,
+                ownedShards = emptySet(),
+            ),
+        )
+        val correctedA = service.heartbeat(
+            "metadata-sync-empty-leaving",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = syncA.memberEpoch,
+                metadataVersion = syncA.metadataVersion,
+                ownedShards = emptySet(),
+            ),
+        )
+        service.heartbeat(
+            "metadata-sync-empty-leaving",
+            "orders-consumer",
+            "member-a",
+            heartbeat(
+                "member-a",
+                memberEpoch = correctedA.memberEpoch,
+                metadataVersion = correctedA.metadataVersion,
+                ownedShards = correctedA.assignment.assignedShards,
+            ),
+        )
+        val assignments = service.assignments("metadata-sync-empty-leaving", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.SYNC_METADATA, syncA.status)
+        assertEquals(HeartbeatStatus.OK, correctedA.status)
+        assertEquals(setOf(ShardId(0), ShardId(1)), correctedA.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0), ShardId(1)), assignments.currentAssignments.getValue("member-a"))
+        assertEquals(emptySet(), assignments.currentAssignments.getValue("member-old"))
+    }
+
+    @Test
     fun `admin mutations are blocked while metadata sync is in progress`() {
         service.createGroup("metadata-sync-admin", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val joined = service.heartbeat(
@@ -1130,9 +1716,45 @@ class CoordinatorServiceTest {
         val assignments = service.assignments("expired-return", "orders-consumer")
 
         assertEquals(HeartbeatStatus.FENCED_MEMBER_EPOCH, staleMemberA.status)
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), memberB.assignment.assignedShards)
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-b"))
+        assertEquals(setOf(ShardId(0), ShardId(1)), memberB.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0), ShardId(1)), assignments.targetAssignment.getValue("member-b"))
         assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
+    fun `monitoring current assignments ignore expired members`() {
+        service.createGroup("monitor-expired-current", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        val memberA = service.heartbeat(
+            "monitor-expired-current",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "monitor-expired-current",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = memberA.memberEpoch, ownedShards = memberA.assignment.assignedShards),
+        )
+        clock.advance(Duration.ofSeconds(16))
+        val memberB = service.heartbeat(
+            "monitor-expired-current",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = 0),
+        )
+        service.heartbeat(
+            "monitor-expired-current",
+            "orders-consumer",
+            "member-b",
+            heartbeat("member-b", memberEpoch = memberB.memberEpoch, ownedShards = memberB.assignment.assignedShards),
+        )
+
+        val group = service.getGroup("monitor-expired-current", "orders-consumer")
+        val grafana = service.grafanaGroups().single { it.streamPrefix == "monitor-expired-current" }
+
+        assertEquals(mapOf("member-b" to 2), group.currentAssignmentSummary)
+        assertEquals(2, grafana.currentShards)
     }
 
     @Test
@@ -1206,7 +1828,7 @@ class CoordinatorServiceTest {
         assertEquals(HeartbeatStatus.OK, rejoinedA.status)
         assertTrue(rejoinedA.assignment.assignedShards.isEmpty())
         assertEquals(emptySet(), assignments.currentAssignments.getValue("member-a"))
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.currentAssignments.getValue("member-b"))
+        assertEquals(setOf(ShardId(0), ShardId(1)), assignments.currentAssignments.getValue("member-b"))
         assertTrue(assignments.invariantViolations.isEmpty())
     }
 
@@ -1246,7 +1868,7 @@ class CoordinatorServiceTest {
         assertTrue(fenced.assignment.assignedShards.isEmpty())
         assertEquals(MemberState.FENCED, members.single { it.memberId == "member-b" }.state)
         assertEquals(emptySet(), assignments.currentAssignments.getValue("member-b"))
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), assignments.targetAssignment.getValue("member-a"))
+        assertEquals(setOf(ShardId(0), ShardId(1)), assignments.targetAssignment.getValue("member-a"))
         assertTrue(assignments.invariantViolations.isEmpty())
     }
 
@@ -1330,7 +1952,7 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `migration scale creates next version`() {
+    fun `migration scale updates shard count`() {
         service.createGroup("summary", "summary-consumer", createGroupRequest(initialShardCount = 2))
 
         val migration = service.scaleGroup(
@@ -1344,15 +1966,67 @@ class CoordinatorServiceTest {
         )
         val group = service.getGroup("summary", "summary-consumer")
 
-        assertEquals(1, migration.fromVersion)
-        assertEquals(2, migration.toVersion)
-        assertEquals(3, group.shardCount)
-        assertEquals(setOf(1, 2), group.readableVersions)
+                        assertEquals(3, group.shardCount)
+            }
+
+    @Test
+    fun `stream scale updates every consumer group and assignments arrive on heartbeat`() {
+        service.createGroup("stream-scale", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        service.createGroup("stream-scale", "analytics-consumer", createGroupRequest(initialShardCount = 2))
+
+        val ordersJoin = service.heartbeat(
+            "stream-scale",
+            "orders-consumer",
+            "orders-member",
+            heartbeat("orders-member", memberEpoch = 0),
+        )
+        val analyticsJoin = service.heartbeat(
+            "stream-scale",
+            "analytics-consumer",
+            "analytics-member",
+            heartbeat("analytics-member", memberEpoch = 0),
+        )
+
+        val response = service.scaleStream(
+            "stream-scale",
+            ScaleStreamRequest(targetShardCount = 4, requestedBy = "test", reason = "stream level scale"),
+        )
+
+        assertEquals("stream-scale", response.streamPrefix)
+        assertEquals(4, response.targetShardCount)
+        assertEquals(listOf("analytics-consumer", "orders-consumer"), response.affectedConsumerGroups)
+        assertEquals(2, response.migrations.size)
+        assertEquals(4, service.getGroup("stream-scale", "orders-consumer").shardCount)
+        assertEquals(4, service.getGroup("stream-scale", "analytics-consumer").shardCount)
+
+        val ordersHeartbeat = service.heartbeat(
+            "stream-scale",
+            "orders-consumer",
+            "orders-member",
+            heartbeat(
+                "orders-member",
+                memberEpoch = ordersJoin.memberEpoch,
+                ownedShards = ordersJoin.assignment.assignedShards,
+            ),
+        )
+        val analyticsHeartbeat = service.heartbeat(
+            "stream-scale",
+            "analytics-consumer",
+            "analytics-member",
+            heartbeat(
+                "analytics-member",
+                memberEpoch = analyticsJoin.memberEpoch,
+                ownedShards = analyticsJoin.assignment.assignedShards,
+            ),
+        )
+
+        assertEquals(setOf(ShardId(0), ShardId(1), ShardId(2), ShardId(3)), ordersHeartbeat.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0), ShardId(1), ShardId(2), ShardId(3)), analyticsHeartbeat.assignment.assignedShards)
     }
 
     @Test
-    fun `migration completes after old version shards are drained`() {
-        service.createGroup("drain", "orders-consumer", createGroupRequest(initialShardCount = 2))
+    fun `scale in migration completes after removed shards are drained`() {
+        service.createGroup("drain", "orders-consumer", createGroupRequest(initialShardCount = 3))
         val joined = service.heartbeat("drain", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
         val oldOwned = service.heartbeat(
             "drain",
@@ -1363,7 +2037,7 @@ class CoordinatorServiceTest {
         val migration = service.scaleGroup(
             "drain",
             "orders-consumer",
-            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "scale out"),
+            ScaleGroupRequest(targetShardCount = 1, requestedBy = "test", reason = "scale in"),
         )
         val oldAndNew = service.heartbeat(
             "drain",
@@ -1382,11 +2056,10 @@ class CoordinatorServiceTest {
         val drainingMigration = service.getMigration("drain", "orders-consumer", migration.reshardingId)
 
         assertEquals(MigrationState.DRAINING, drainingMigration.state)
-        assertEquals(setOf(2), drainingGroup.readableVersions)
-        assertEquals((0 until 3).map { ShardId(2, it) }.toSet(), drainingResponse.assignment.assignedShards)
-        assertEquals((0 until 3).map { ShardId(2, it) }.toSet(), service.assignments("drain", "orders-consumer").targetAssignment.getValue("member-a"))
+        assertEquals(setOf(ShardId(0)), drainingResponse.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0)), service.assignments("drain", "orders-consumer").targetAssignment.getValue("member-a"))
 
-        service.heartbeat(
+        val finalized = service.heartbeat(
             "drain",
             "orders-consumer",
             "member-a",
@@ -1394,35 +2067,15 @@ class CoordinatorServiceTest {
                 "member-a",
                 memberEpoch = drainingResponse.memberEpoch,
                 ownedShards = drainingResponse.assignment.assignedShards,
-                revokingShards = listOf(
-                    RevokingShardReport(ShardId(1, 0), RevokingShardState.DRAINING, inFlight = 1),
-                    RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED, inFlight = 0),
-                ),
             ),
         )
-        assertEquals(MigrationState.DRAINING, service.getMigration("drain", "orders-consumer", migration.reshardingId).state)
-
-        val completed = service.heartbeat(
-            "drain",
-            "orders-consumer",
-            "member-a",
-            heartbeat(
-                "member-a",
-                memberEpoch = drainingResponse.memberEpoch,
-                ownedShards = drainingResponse.assignment.assignedShards,
-                revokingShards = listOf(
-                    RevokingShardReport(ShardId(1, 0), RevokingShardState.REVOKED, inFlight = 0),
-                    RevokingShardReport(ShardId(1, 1), RevokingShardState.REVOKED, inFlight = 0),
-                ),
-            ),
-        )
+        assertEquals(HeartbeatStatus.OK, finalized.status)
         val completedGroup = service.getGroup("drain", "orders-consumer")
         val completedMigration = service.getMigration("drain", "orders-consumer", migration.reshardingId)
 
         assertEquals(MigrationState.DEPRECATED, completedMigration.state)
         assertEquals(null, completedGroup.activeMigration)
-        assertEquals(setOf(2), completedGroup.readableVersions)
-        assertEquals((0 until 3).map { ShardId(2, it) }.toSet(), completed.assignment.assignedShards)
+        assertEquals(setOf(ShardId(0)), finalized.assignment.assignedShards)
     }
 
     @Test
@@ -1470,11 +2123,10 @@ class CoordinatorServiceTest {
         assertTrue(assignments.invariantViolations.isEmpty())
         assertEquals(assignments.targetAssignment, assignments.currentAssignments.filterValues { it.isNotEmpty() })
         assertTrue(members.all { it.state == MemberState.ACTIVE })
-        assertTrue(assignments.targetAssignment.values.flatten().all { it.streamVersion == 2 })
-    }
+            }
 
     @Test
-    fun `producer routing returns active write metadata`() {
+    fun `producer routing returns shard routing metadata`() {
         service.createGroup(
             "route-orders",
             "orders-consumer",
@@ -1492,21 +2144,19 @@ class CoordinatorServiceTest {
         )
         val afterScale = service.producerRouting("route-orders", "orders-consumer")
 
-        assertEquals(1, beforeScale.activeWriteVersion)
-        assertEquals(2, beforeScale.shardCount)
-        assertEquals("route-orders:v{streamVersion}:shard:{shardIndex}", beforeScale.streamKeyPattern)
-        assertEquals(listOf("route-orders:v1:shard:0", "route-orders:v1:shard:1"), beforeScale.shards.map { it.streamKey })
-        assertEquals(2, afterScale.activeWriteVersion)
-        assertEquals(3, afterScale.shardCount)
+                assertEquals(2, beforeScale.shardCount)
+        assertEquals("route-orders:{shardIndex}", beforeScale.streamKeyPattern)
+        assertEquals(listOf("route-orders:0", "route-orders:1"), beforeScale.shards.map { it.streamKey })
+                assertEquals(3, afterScale.shardCount)
         assertTrue(afterScale.metadataVersion > beforeScale.metadataVersion)
         assertEquals(
-            listOf("route-orders:v2:shard:0", "route-orders:v2:shard:1", "route-orders:v2:shard:2"),
+            listOf("route-orders:0", "route-orders:1", "route-orders:2"),
             afterScale.shards.map { it.streamKey },
         )
     }
 
     @Test
-    fun `group creation provisions initial stream version`() {
+    fun `group creation provisions initial shard plan`() {
         val provisioner = RecordingStreamShardProvisioner()
         val service = service(clock, InMemoryCoordinatorStateStore(), provisioner)
 
@@ -1514,14 +2164,14 @@ class CoordinatorServiceTest {
 
         assertEquals(
             listOf(
-                ProvisionedVersion("provision-create", "orders-consumer", streamVersion = 1, shardCount = 2),
+                ProvisionedPlan("provision-create", "orders-consumer", shardCount = 2),
             ),
             provisioner.provisioned,
         )
     }
 
     @Test
-    fun `scale provisions next stream version after preparing migration state is committed`() {
+    fun `scale provisions target shard plan after preparing migration state is committed`() {
         val provisioner = RecordingStreamShardProvisioner()
         val service = service(clock, InMemoryCoordinatorStateStore(), provisioner)
 
@@ -1529,13 +2179,13 @@ class CoordinatorServiceTest {
         service.scaleGroup(
             "provision-scale",
             "orders-consumer",
-            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "provision next version"),
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "provision target shard count"),
         )
 
         assertEquals(
             listOf(
-                ProvisionedVersion("provision-scale", "orders-consumer", streamVersion = 1, shardCount = 2),
-                ProvisionedVersion("provision-scale", "orders-consumer", streamVersion = 2, shardCount = 3),
+                ProvisionedPlan("provision-scale", "orders-consumer", shardCount = 2),
+                ProvisionedPlan("provision-scale", "orders-consumer", shardCount = 3),
             ),
             provisioner.provisioned,
         )
@@ -1548,13 +2198,18 @@ class CoordinatorServiceTest {
         clock: Clock,
         stateStore: CoordinatorStateStore = InMemoryCoordinatorStateStore(),
         streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
+        rebalanceTimeout: Duration = CoordinatorProtocol.DEFAULT_TIMING.rebalanceTimeout,
         properties: CoordinatorProperties = CoordinatorProperties(
             heartbeatInterval = Duration.ofSeconds(3),
             memberLeaseTtl = Duration.ofSeconds(15),
+            rebalanceTimeout = rebalanceTimeout,
             defaults = CoordinatorProperties.Defaults(
                 initialShardCount = 4,
                 consumerMaxConcurrency = 4,
             ),
+        ),
+        redisCommands: CoordinatorRedisCommands = CoordinatorRedisCommands(
+            redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java).ifAvailable,
         ),
     ): CoordinatorService =
         CoordinatorService(
@@ -1563,6 +2218,7 @@ class CoordinatorServiceTest {
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
             streamProvisioner = streamProvisioner,
             clock = clock,
+            redisCommands = redisCommands,
         )
 
     private data class ConvergedTwoMemberGroup(
@@ -1692,7 +2348,6 @@ class CoordinatorServiceTest {
         memberEpoch: Long,
         ownedShards: Set<ShardId> = emptySet(),
         revokingShards: List<RevokingShardReport> = emptyList(),
-        rebalanceTimeoutMs: Long = 60_000,
         protocolVersion: Int = 1,
         metadataVersion: Long = 0,
     ): HeartbeatRequest =
@@ -1702,7 +2357,6 @@ class CoordinatorServiceTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = rebalanceTimeoutMs,
             metadataVersion = metadataVersion,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,
@@ -1713,23 +2367,71 @@ class CoordinatorServiceTest {
         )
 }
 
-private data class ProvisionedVersion(
+private data class ProvisionedPlan(
     val streamPrefix: String,
     val consumerGroup: String,
-    val streamVersion: Int,
     val shardCount: Int,
 )
 
 private class RecordingStreamShardProvisioner : StreamShardProvisioner {
-    val provisioned = mutableListOf<ProvisionedVersion>()
+    val provisioned = mutableListOf<ProvisionedPlan>()
 
     override fun provision(plan: RedisStreamShardProvisioningPlan) {
-        provisioned += ProvisionedVersion(
+        provisioned += ProvisionedPlan(
             streamPrefix = plan.streamPrefix,
             consumerGroup = plan.consumerGroup,
-            streamVersion = plan.streamVersion,
             shardCount = plan.shardCount,
         )
+    }
+}
+
+private class FakeMessageRedisCommands(
+    private val recordsByStreamKey: Map<String, List<RedisStreamRecord>>,
+) : CoordinatorRedisCommands() {
+    val rangeRequests = mutableListOf<String>()
+
+    override fun xInfoStream(streamKey: String): RedisStreamInfo =
+        RedisStreamInfo(
+            length = recordsByStreamKey[streamKey]?.size?.toLong() ?: 0,
+            firstEntryId = recordsByStreamKey[streamKey]?.firstOrNull()?.id,
+            lastEntryId = recordsByStreamKey[streamKey]?.lastOrNull()?.id,
+            lastGeneratedId = recordsByStreamKey[streamKey]?.lastOrNull()?.id,
+            entriesAdded = recordsByStreamKey[streamKey]?.size?.toLong() ?: 0,
+        )
+
+    override fun xRange(streamKey: String, start: String, end: String, count: Long): List<RedisStreamRecord> {
+        rangeRequests += streamKey
+        return recordsByStreamKey[streamKey]
+            .orEmpty()
+            .filter { record -> afterOrEqual(record.id, start) && beforeOrEqual(record.id, end) }
+            .take(count.toInt())
+    }
+
+    override fun xRevRange(streamKey: String, start: String, end: String, count: Long): List<RedisStreamRecord> {
+        rangeRequests += streamKey
+        return recordsByStreamKey[streamKey]
+            .orEmpty()
+            .asReversed()
+            .filter { record -> beforeOrEqual(record.id, start) && afterOrEqual(record.id, end) }
+            .take(count.toInt())
+    }
+
+    private fun afterOrEqual(recordId: String, bound: String): Boolean =
+        bound == "-" || compareRecordIds(recordId, bound) >= 0
+
+    private fun beforeOrEqual(recordId: String, bound: String): Boolean =
+        bound == "+" || compareRecordIds(recordId, bound) <= 0
+
+    private fun compareRecordIds(left: String, right: String): Int {
+        val leftParts = left.split("-", limit = 2)
+        val rightParts = right.split("-", limit = 2)
+        val msCompare = leftParts.getOrNull(0).orEmpty().toLong()
+            .compareTo(rightParts.getOrNull(0).orEmpty().toLong())
+        if (msCompare != 0) {
+            return msCompare
+        }
+        return leftParts.getOrNull(1).orEmpty().toLong()
+            .compareTo(rightParts.getOrNull(1).orEmpty().toLong())
     }
 }
 
@@ -1781,8 +2483,6 @@ private class CopyingConflictOnceStateStore : CoordinatorStateStore {
 
     private fun GroupMetadata.deepCopy(): GroupMetadata =
         copy(
-            readableVersions = readableVersions.toSet(),
-            shardCountsByVersion = shardCountsByVersion.toMutableMap(),
             consumerConcurrencyPolicy = consumerConcurrencyPolicy.copy(
                 memberOverrides = consumerConcurrencyPolicy.memberOverrides.toMap(),
             ),

@@ -40,13 +40,13 @@ class OrdersConsumer {
 }
 ```
 
-For annotation listeners, `concurrency = "4"` creates four logical coordinator members in the same application process. Each logical member has its own generated `memberId`, heartbeat loop, Redis consumer name, assignment state, and shard ownership. This is the Kafka-like listener concurrency model.
+For annotation listeners, `concurrency = "4"` creates four logical coordinator members in the same application process. Each logical member has its own `memberId`, heartbeat loop, Redis consumer name, assignment state, and shard ownership. The starter derives the base member id from pod IP context and appends concurrency suffixes such as `-m0`, `-m1`, `-m2`, and `-m3`. This is the Kafka-like listener concurrency model.
 
 The annotation listener always uses this logical-member split model. The starter does not expose a split toggle, and there is no supported mode where `concurrency = "4"` means one coordinator member with four local pollers.
 
 Shard ownership and member concurrency are not the same thing. The coordinator assigns each shard to exactly one live member, while a single member can own many shards. Listener concurrency increases the number of logical members participating in assignment; it does not change the rule that a shard has one live owner.
 
-For annotation-based consumers, the starter generates the runtime `memberId` automatically. `id` is the listener endpoint identity, not the coordinator member ID.
+For annotation-based consumers, the starter creates the runtime `memberId` automatically from `POD_IP`, local host address, or hostname. In Kubernetes, expose `status.podIP` as `POD_IP` with the Downward API. `id` is the listener endpoint identity, not the coordinator member ID.
 
 Heartbeat interval and rebalance timeout default to the shared coordination version timing. `rebalanceTimeout` is the maximum time the coordinator waits for this member to drain revoked shards before it may fence the member and reassign those shards.
 
@@ -104,7 +104,7 @@ class OrdersConsumerConfiguration {
 }
 ```
 
-`consumerGroupName` is the public name for the logical Redis Stream consumer group. The starter does not expose `member-name` as a YAML property; heartbeat compatibility fields are derived internally from `consumerGroupName`.
+`consumerGroupName` is the Redis Stream consumer group name. The starter does not expose `member-name` as a YAML property; heartbeat compatibility fields are derived internally from `consumerGroupName`.
 
 When a managed consumer bean is created, the starter fetches coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`. If the group does not exist, `shardCount` is zero, or active shard metadata is incomplete, application startup fails immediately.
 
@@ -222,7 +222,7 @@ class OrdersProducerConfiguration {
             consumerGroupName = "orders-consumer",
         ) {
             routingRefreshInterval = Duration.ofSeconds(5)
-            publishMaxAttempts = 1
+            publishMaxAttempts = 2
             xadd.maxLen = 100_000
             xadd.approximateTrimming = true
         }
@@ -247,9 +247,11 @@ The publisher:
 * reads producer routing metadata,
 * caches metadata by `metadataVersion`,
 * routes partition keys to active stream shards,
-* sends XADD with configured max length policy,
+* sends `XADD NOMKSTREAM` with configured max length policy,
 * refreshes routing metadata on stale route signals,
 * returns the produced stream key and Redis Stream ID.
+
+`NOMKSTREAM` is the default producer safety guard for scale-in. If a producer has stale routing metadata and targets a shard key that was removed, Redis must not recreate that stream key. The publish attempt fails, the routing cache is invalidated, and the default second attempt fetches fresh routing metadata before recalculating the target shard.
 
 ## Redis Command Template
 
@@ -258,7 +260,7 @@ Redis commands should be centralized behind shared templates instead of scattere
 Benefits:
 
 * Redis version compatibility checks happen in one place.
-* `XACKDEL`, `XACK`, `XREADGROUP`, `XADD`, and fallback behavior are easier to test.
+* `XACKDEL`, `XACK`, `XREADGROUP`, `XADD NOMKSTREAM`, and fallback behavior are easier to test.
 * Producer and consumer modules use consistent serialization.
 * Unsupported command paths can fail fast with clear errors.
 

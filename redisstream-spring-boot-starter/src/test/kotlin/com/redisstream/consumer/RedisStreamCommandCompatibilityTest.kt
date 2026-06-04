@@ -13,14 +13,14 @@ class RedisStreamCommandCompatibilityTest {
             RedisStreamResolvedAckMode.XACK,
             RedisStreamCommandCompatibility.resolveAckMode(
                 RedisStreamAckMode.AUTO,
-                RedisStreamCommandSupport.fromVersion(RedisServerVersion.parse("7.4.9")),
+                RedisStreamCommandSupport.forRedisVersion(RedisServerVersion.parse("7.4.9")),
             ),
         )
         assertEquals(
             RedisStreamResolvedAckMode.XACKDEL,
             RedisStreamCommandCompatibility.resolveAckMode(
                 RedisStreamAckMode.AUTO,
-                RedisStreamCommandSupport.fromVersion(RedisServerVersion.parse("8.2.0")),
+                RedisStreamCommandSupport.forRedisVersion(RedisServerVersion.parse("8.2.0")),
             ),
         )
     }
@@ -30,19 +30,19 @@ class RedisStreamCommandCompatibilityTest {
         assertFailsWith<IllegalArgumentException> {
             RedisStreamCommandCompatibility.resolveAckMode(
                 RedisStreamAckMode.XACKDEL,
-                RedisStreamCommandSupport.fromVersion(RedisServerVersion.parse("8.0.0")),
+                RedisStreamCommandSupport.forRedisVersion(RedisServerVersion.parse("8.0.0")),
             )
         }
     }
 
     @Test
     fun `xnack is guarded by redis 8_8 capability`() {
-        assertFalse(RedisStreamCommandSupport.fromVersion(RedisServerVersion.parse("8.6.3")).supportsXNack)
-        assertTrue(RedisStreamCommandSupport.fromVersion(RedisServerVersion.parse("8.8.0")).supportsXNack)
+        assertFalse(RedisStreamCommandSupport.forRedisVersion(RedisServerVersion.parse("8.6.3")).supportsXNack)
+        assertTrue(RedisStreamCommandSupport.forRedisVersion(RedisServerVersion.parse("8.8.0")).supportsXNack)
         assertFailsWith<IllegalArgumentException> {
             RedisStreamCommandCompatibility.validateFailureMode(
                 RedisStreamFailureMode.XNACK,
-                RedisStreamCommandSupport.fromVersion(RedisServerVersion.parse("8.6.3")),
+                RedisStreamCommandSupport.forRedisVersion(RedisServerVersion.parse("8.6.3")),
             )
         }
     }

@@ -107,7 +107,7 @@ Excluded scope:
 
 ## Open Questions
 
-* member UUID를 member runtime이 직접 생성하는 방식을 유지할지, coordinator가 registration ack와 함께 부여할지?
+* pod IP context 기반 member id를 유지할지, coordinator가 registration ack와 함께 부여할지?
 * shard 분배 가중치는 MVP에서 동일 가중치로 고정할지?
 * Metadata update에 별도 audit/history stream을 둘지?
 * KIP-848과 다른 잔여 gap은 [`08-kip848-implementation-coverage.md`](08-kip848-implementation-coverage.md)의 `Residual Gaps To Decide`에서 관리한다.
@@ -116,7 +116,7 @@ Excluded scope:
 
 * MVP coordinator deployment: direct Coordinator API control plane
 * MVP assignment: sticky partition 고정
-* MVP member identity: member-runtime-generated UUID
+* MVP member identity: pod-IP-context-derived member id
 * MVP state store: Redis metadata hash + JSON aggregate + storeRevision CAS
 * MVP access control: Basic Auth `admin/password`
 * MVP rebalance style: coordinator-driven incremental reconciliation

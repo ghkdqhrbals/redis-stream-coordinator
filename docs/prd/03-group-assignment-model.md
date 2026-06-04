@@ -40,7 +40,7 @@ Members own:
 
 The design separates logical coordinator membership from local worker capacity.
 
-Annotation-based consumers use Kafka-style listener concurrency: `@StreamListener(concurrency = "4")` creates four logical coordinator members inside the same application process. The starter derives member IDs by appending member suffixes such as `-m0`, `-m1`, `-m2`, and `-m3` to a generated base ID. Each logical member has its own heartbeat loop, Redis consumer name, assignment state, member epoch, metadata version, and shard ownership. Annotation listeners do not have a single-member toggle.
+Annotation-based consumers use Kafka-style listener concurrency: `@StreamListener(concurrency = "4")` creates four logical coordinator members inside the same application process. The starter derives the base member ID from pod IP context, then appends member suffixes such as `-m0`, `-m1`, `-m2`, and `-m3`. Each logical member has its own heartbeat loop, Redis consumer name, assignment state, member epoch, metadata version, and shard ownership. Annotation listeners do not have a single-member toggle.
 
 Bean-based consumers can still register one coordinator member explicitly with `CoordinatorConsumerProperties.consumer(...)`. In that path, `runtimeMaxConcurrency` is local worker capacity for that one member. It controls how many handler executions or poll workers that member can run locally; it does not create additional coordinator members.
 

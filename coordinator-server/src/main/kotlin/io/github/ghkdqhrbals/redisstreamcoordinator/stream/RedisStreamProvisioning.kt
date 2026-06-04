@@ -11,9 +11,9 @@ import org.springframework.stereotype.Component
 
 interface StreamShardProvisioner {
     /**
-     * Ensures the Redis Stream keys and consumer group for a shard version exist.
+     * Ensures the Redis Stream keys and consumer group for a shard count exist.
      * Coordinator state claims or PREPARING migrations should be committed before this runs,
-     * so failed state races cannot leave untracked stream versions behind.
+     * so failed state races cannot leave untracked shard keys behind.
      */
     fun provision(plan: RedisStreamShardProvisioningPlan)
 }
@@ -28,7 +28,7 @@ class RedisStreamShardProvisioner(
     private val redisCommands: ObjectProvider<CoordinatorRedisCommands>,
 ) : StreamShardProvisioner {
     /**
-     * Creates every stream key and consumer group required by a stream version.
+     * Creates every stream key and consumer group required by the current shard count.
      */
     override fun provision(plan: RedisStreamShardProvisioningPlan) {
         if (!properties.streams.provisioningEnabled) {

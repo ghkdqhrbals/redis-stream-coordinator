@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Redis Stream Coordinator Console</title>
+    <link rel="stylesheet" href="/console/styles.css">
+</head>
+<body>
+<main id="loginView" class="login-shell">
+    <section class="login-panel" aria-labelledby="loginTitle">
+        <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true">RC</div>
+            <div>
+                <h1 id="loginTitle">Redis Stream Coordinator</h1>
+                <p>Monitoring Console</p>
+            </div>
+        </div>
+        <form id="loginForm" class="login-form">
+            <label>
+                Username
+                <input id="username" name="username" autocomplete="username" required>
+            </label>
+            <label>
+                Password
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </label>
+            <button id="loginButton" type="submit">Sign in</button>
+            <p id="loginError" class="form-error" role="alert"></p>
+        </form>
+    </section>
+</main>
+
+<main id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+        <header class="sidebar-header">
+            <div class="brand-lockup compact">
+                <div class="brand-mark" aria-hidden="true">RC</div>
+                <div>
+                    <h1>Coordinator</h1>
+                    <p id="coordinatorId">Not connected</p>
+                </div>
+            </div>
+            <a class="ghost-link" href="/console/access.html">Access</a>
+            <button id="logoutButton" class="ghost-button" type="button">Sign out</button>
+        </header>
+
+        <section class="side-panel">
+            <div class="panel-heading">
+                <h2>Health</h2>
+                <span id="healthBadge" class="status-badge muted">Unknown</span>
+            </div>
+            <dl class="health-list">
+                <div>
+                    <dt>Redis</dt>
+                    <dd id="redisStatus">-</dd>
+                </div>
+                <div>
+                    <dt>Loop</dt>
+                    <dd id="loopStatus">-</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="side-panel group-panel">
+            <div class="panel-heading">
+                <h2>Groups</h2>
+                <button id="refreshButton" class="ghost-button small" type="button">Refresh</button>
+            </div>
+            <div id="groupList" class="group-list" aria-live="polite"></div>
+        </section>
+    </aside>
+
+    <section class="workspace">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Monitoring</p>
+                <h2 id="pageTitle">Select a group</h2>
+                <p id="pageSubtitle" class="page-subtitle">No active stream group selected.</p>
+            </div>
+            <div class="toolbar">
+                <span id="lastUpdated" class="last-updated">Not refreshed</span>
+                <label class="refresh-toggle">
+                    <input id="autoRefresh" type="checkbox" checked>
+                    Auto refresh
+                </label>
+                <select id="refreshInterval" aria-label="Refresh interval">
+                    <option value="5000">5s</option>
+                    <option value="10000">10s</option>
+                    <option value="30000">30s</option>
+                </select>
+            </div>
+        </header>
+
+        <section id="emptyState" class="empty-state">
+            <h3>No group selected</h3>
+            <p>Choose a coordinator group from the left rail.</p>
+        </section>
+
+        <section id="detailView" class="dashboard-grid hidden" aria-live="polite">
+            <section class="signal-strip" aria-label="Runtime signals">
+                <article>
+                    <span>Members</span>
+                    <strong id="memberSignal">-</strong>
+                    <small id="memberSignalHint">active / total</small>
+                </article>
+                <article>
+                    <span>Shard ownership</span>
+                    <strong id="shardSignal">-</strong>
+                    <small id="shardSignalHint">current / target</small>
+                </article>
+                <article>
+                    <span>Revoking shards</span>
+                    <strong id="revokingSignal">-</strong>
+                    <small>drain in progress</small>
+                </article>
+                <article>
+                    <span>Pending records</span>
+                    <strong id="pendingSignal">-</strong>
+                    <small>reported by consumers</small>
+                </article>
+                <article>
+                    <span>Last heartbeat</span>
+                    <strong id="heartbeatSignal">-</strong>
+                    <small id="heartbeatSignalHint">latest member report</small>
+                </article>
+            </section>
+
+            <section class="summary-strip" aria-label="Group metadata">
+                <article>
+                    <span>Group state</span>
+                    <strong id="groupState">-</strong>
+                </article>
+                <article>
+                    <span>Metadata version</span>
+                    <strong id="metadataVersion">-</strong>
+                </article>
+                <article>
+                    <span>Group epoch</span>
+                    <strong id="groupEpoch">-</strong>
+                </article>
+                <article>
+                    <span>Assignment epoch</span>
+                    <strong id="assignmentEpoch">-</strong>
+                </article>
+                <article>
+                    <span>Shard count</span>
+                    <strong id="shardCount">-</strong>
+                </article>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <h3>Members</h3>
+                    <span id="memberCount" class="count-label">0</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>State</th>
+                            <th>Epoch</th>
+                            <th>Metadata</th>
+                            <th>Current</th>
+                            <th>Revoking</th>
+                            <th>Capacity</th>
+                            <th>Last heartbeat</th>
+                        </tr>
+                        </thead>
+                        <tbody id="membersTable"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <h3>Shard Offsets & Lag</h3>
+                    <span id="assignmentStatus" class="status-badge muted">Unknown</span>
+                </div>
+                <div id="shardMatrix" class="shard-matrix"></div>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <h3>Message Browser</h3>
+                    <div class="browser-controls">
+                        <select id="messageShardSelect" aria-label="Message shard"></select>
+                        <button id="messageRefreshButton" class="ghost-button small" type="button">Load</button>
+                    </div>
+                </div>
+                <div id="messageBrowser" class="message-browser"></div>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <h3>Member Workload</h3>
+                    <span id="workloadCount" class="count-label">0</span>
+                </div>
+                <div id="memberWorkload" class="workload-list"></div>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <h3>Assignment Detail</h3>
+                    <span class="count-label">target / current / revoking</span>
+                </div>
+                <div id="assignmentGrid" class="assignment-grid"></div>
+            </section>
+
+            <section class="content-panel">
+                <div class="panel-heading">
+                    <h3>Consumption Progress</h3>
+                    <span id="progressCount" class="count-label">0</span>
+                </div>
+                <div id="progressList" class="progress-list"></div>
+            </section>
+
+            <section class="content-panel">
+                <div class="panel-heading">
+                    <h3>Resharding</h3>
+                    <span id="migrationStatus" class="status-badge muted">Idle</span>
+                </div>
+                <div id="migrationList" class="migration-list"></div>
+            </section>
+        </section>
+    </section>
+</main>
+
+<script src="/console/app.js"></script>
+</body>
+</html>

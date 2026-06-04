@@ -77,7 +77,7 @@ class ConsumerPodEventLog {
     }
 
     private fun CoordinatorShard.label(): String =
-        "v$streamVersion:$shardIndex"
+        shardIndex.toString()
 
     private companion object {
         const val MAX_EVENTS = 200

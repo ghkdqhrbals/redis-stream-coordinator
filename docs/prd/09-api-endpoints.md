@@ -28,15 +28,18 @@ Common headers:
 Content-Type: application/json
 Accept: application/json
 Authorization: Basic <base64(admin:password)>
+X-Request-Id: <caller-generated-id>
 ```
+
+`X-Request-Id` is optional but strongly recommended for admin mutations, Terraform applies, CI automation, and incident replay. The coordinator records it in audit logs when present.
 
 Path parameters:
 
 | Parameter | Meaning |
 | --- | --- |
-| `streamPrefix` | Logical Redis Stream prefix managed by the coordinator. |
-| `consumerGroup` | Logical Redis Stream consumer group name. |
-| `memberId` | Runtime-generated member id, normally a UUID. |
+| `streamPrefix` | Sharded Redis Stream prefix managed by the coordinator. Physical stream keys are built as `{streamPrefix}:{shardIndex}`. |
+| `consumerGroup` | Redis Stream consumer group name. |
+| `memberId` | Runtime-generated member id. The starter derives it from pod IP context by default. |
 | `reshardingId` | Coordinator-generated resharding id. |
 
 Auth policy:
@@ -77,10 +80,11 @@ Common status codes:
 
 | Area | Method | Path | Purpose | Mutates State |
 | --- | --- | --- | --- | --- |
-| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Create a group. | yes |
+| Admin | `POST` | `/coord/v1/streams/{streamPrefix}` | Create a stream shard group. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Read group metadata. | no |
+| Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Delete inactive group metadata. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing` | Read producer routing metadata. | no |
-| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale` | Start shard scale-out or scale-in. | yes |
+| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/scale` | Start stream-wide shard scale-out or scale-in. | yes |
 | Admin | `PATCH` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` | Update server-side consumer concurrency policy. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | Read one migration. | no |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | Request migration rollback. | yes |
@@ -108,39 +112,33 @@ Common status codes:
 ### Create Group
 
 ```http
-POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+POST /coord/v1/streams/{streamPrefix}
 ```
 
-Creates initial group metadata and the configured shard count. Member startup, local YAML, producers, and consumers cannot create group metadata directly.
+Creates initial stream shard metadata and the configured shard count. The official create path only requires `streamPrefix`; consumer groups come from consumer runtime configuration and converge through heartbeat.
 
 Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `initialShardCount` | no | Initial shard count. If omitted, coordinator defaults are used. |
-| `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Default member worker limit. If omitted, coordinator defaults are used. |
-| `consumerConcurrencyPolicy.memberOverrides` | no | Optional per-member-name worker limit override. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `reason` | no | Human-readable change reason. |
 
-Response: `201 Created` with `GroupResponse`.
+Response: `201 Created` with `StreamCreateResponse`.
 
 Important response fields:
 
 | Field | Meaning |
 | --- | --- |
-| `streamPrefix` / `consumerGroup` | Created group identifier. |
-| `state` | Current group state: `EMPTY`, `ASSIGNING`, `RECONCILING`, or `STABLE`. |
-| `groupEpoch` | Group metadata epoch. |
-| `assignmentEpoch` | Target assignment epoch. |
-| `metadataVersion` | Coordinator metadata version. |
+| `streamPrefix` | Created stream prefix. |
 | `shardCount` | Stored shard count. |
-| `consumerConcurrencyPolicy` | Stored server-side consumer concurrency policy. |
+| `metadataVersion` | Coordinator metadata version. |
 
 Duplicate request behavior:
 
-* If the group already exists, the coordinator returns `409 Conflict` with `GROUP_ALREADY_EXISTS`.
-* Use `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` to read existing metadata.
+* If the stream prefix already has coordinator metadata, the coordinator returns `409 Conflict`.
+* `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` remains only as a compatibility endpoint for older automation.
 
 ### Get Group
 
@@ -151,6 +149,29 @@ GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 Returns group source-of-truth metadata. This is an admin/debug endpoint. Consumers receive assignments through heartbeat responses.
 
 Response: `200 OK` with `GroupResponse`.
+
+### Delete Group
+
+```http
+DELETE /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+```
+
+Deletes coordinator metadata for an inactive group. Use `force=true` only for operational recovery when live members cannot leave cleanly.
+
+Request body:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `requestedBy` | yes | Operator or automation identity for audit. |
+| `reason` | yes | Human-readable delete reason. |
+| `force` | no | Delete even when live members are still registered. |
+
+Response: `200 OK` with the deleted `GroupResponse` snapshot.
+
+Failure behavior:
+
+* If the group does not exist, the coordinator returns `404 Not Found` with `GROUP_NOT_FOUND`.
+* If live members exist and `force=false`, the coordinator returns `422 Unprocessable Entity`.
 
 ### Get Producer Routing Metadata
 
@@ -180,13 +201,13 @@ Important response fields:
 | `streamKeyPattern` | Redis Stream key pattern. |
 | `shards[]` | Concrete shard keys and Redis Cluster slots. |
 
-### Scale Group
+### Scale Stream
 
 ```http
-POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
+POST /coord/v1/streams/{streamPrefix}/scale
 ```
 
-Starts shard scale-out or scale-in by creating a next resharding. This is the only supported shard count mutation path.
+Starts shard scale-out or scale-in for the stream prefix. Consumer group is intentionally not part of this request. Every registered consumer group for the stream observes the changed shard set on the next heartbeat and reconciles assignment independently.
 
 For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across shards.
 
@@ -195,22 +216,24 @@ Request body:
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `targetShardCount` | yes | New shard count. Must be positive and different from the current active shard count. |
-| `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Optional worker limit update in the same metadata change. |
-| `consumerConcurrencyPolicy.memberOverrides` | no | Optional per-member-name worker limit override. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `reason` | yes | Human-readable change reason. |
 | `deprecatedAfter` | no | Operational hint for rollback/drain timing. |
 
-Response: `202 Accepted` with `Migration`.
+Stream-level scale does not accept `consumerConcurrencyPolicy`. Consumer concurrency is a group runtime policy and remains managed through the group-scoped consumer concurrency endpoint.
+
+Compatibility note: `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale` remains available during the current implementation phase, but stream-scoped scale is the official operator-facing path.
+
+Response: `202 Accepted` with `StreamScaleResponse`.
 
 Important response fields:
 
 | Field | Meaning |
 | --- | --- |
-| `reshardingId` | Created migration id. |
-| `fromShardCount` / `toShardCount` | Old and new shard counts. |
-| `state` | Migration state. |
-| `createdAt` / `updatedAt` | Metadata timestamps. |
+| `streamPrefix` | Stream prefix that was scaled. |
+| `targetShardCount` | Requested shard count. |
+| `affectedConsumerGroups` | Consumer groups whose metadata was updated. |
+| `migrations[]` | Per-group migration records. Each group converges through heartbeat responses. |
 
 Conflict behavior:
 

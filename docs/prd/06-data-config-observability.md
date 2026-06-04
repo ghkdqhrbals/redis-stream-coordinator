@@ -55,10 +55,21 @@ coordinator:
     admin-username: admin
     admin-password: ${COORDINATOR_ADMIN_PASSWORD:password}
     authenticate-member-api: false
+    users:
+      - username: admin
+        password: ${COORDINATOR_WRITE_PASSWORD}
+        roles: [WRITE]
+      - username: grafana
+        password: ${COORDINATOR_READ_PASSWORD}
+        roles: [READ]
     rate-limit:
       enabled: true
       window: 1m
       max-requests: 60
+  store:
+    # memory for local development, redis for Redis-backed metadata, or jdbc for database-backed metadata.
+    type: redis
+    key-prefix: redis-stream:coord
   audit:
     sink: redis
   redis:
@@ -120,6 +131,18 @@ If the expected revision does not match the current revision, the write fails an
 
 This prevents stale snapshots from overwriting fresh heartbeat, assignment, or resharding updates.
 
+## Metadata Store Options
+
+The coordinator supports three metadata stores:
+
+| Store | Use case | Consistency boundary |
+| --- | --- | --- |
+| `memory` | Local development and unit tests only | Process-local map |
+| `redis` | Redis-only deployments | Single group metadata hash plus Redis mutex and `storeRevision` compare-and-set |
+| `jdbc` | Deployments that want metadata in a database | One row per `{streamPrefix, consumerGroup}` with JSON metadata and `storeRevision` compare-and-set |
+
+The JDBC table stores the same aggregate metadata JSON used by the Redis store. The primary key is `{streamPrefix, consumerGroup}` and every update is guarded by the previous `storeRevision`.
+
 ## ACL
 
 The MVP security model uses Basic Auth.
@@ -128,9 +151,11 @@ Roles:
 
 | Role | Permission |
 | --- | --- |
-| `ADMIN` | Create, scale, rollback, update consumer concurrency |
-| `MONITOR` | Read monitoring, routing, group, and resharding APIs |
+| `READ` | Read monitoring, Grafana datasource, health, compatibility, and message inspection APIs |
+| `WRITE` | All `READ` APIs plus coordinator control-plane APIs such as create, delete, scale, rollback, and producer routing metadata |
 | `MEMBER` | Send heartbeat when member API authentication is enabled |
+
+Legacy `ADMIN` and `MONITOR` role names are accepted as aliases for compatibility. `ADMIN` grants the legacy full coordinator permission set; `MONITOR` grants `READ`.
 
 Authentication failures return `401 Unauthorized`. Authorization failures return `403 Forbidden`.
 
@@ -143,12 +168,22 @@ Admin mutations record:
 * consumer group,
 * requested values,
 * authenticated principal,
+* granted roles,
 * reason,
+* request id,
+* client address,
+* user agent,
+* route and query string,
+* request duration,
+* request summary,
+* SHA-256 request body fingerprint,
 * coordinator ID,
 * timestamp,
 * result.
 
 Audit events can be written to logs or Redis.
+
+Audit logging is runtime evidence. It complements, but does not replace, Terraform or GitOps change management. Terraform can show the intended desired state and approval history; coordinator audit logs show what the coordinator actually received and how it responded, including failed, forbidden, and retried requests.
 
 ## Rate Limiting
 

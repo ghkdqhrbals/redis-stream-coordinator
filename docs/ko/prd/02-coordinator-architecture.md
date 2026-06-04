@@ -10,7 +10,7 @@ sequenceDiagram
     participant Store as Redis Metadata Store
     participant Stream as Redis Stream Shards
 
-    M->>M: memberId UUID 생성
+    M->>M: pod IP context에서 memberId 생성
     M->>Coord: HeartbeatRequest ownedShards와 revoke ack 보고
     Coord->>Store: Redis mutex 획득
     Coord->>Store: group metadata hash load
@@ -51,7 +51,7 @@ sequenceDiagram
 
 ### Member Runtime
 
-* runtime 시작 시 `memberId` UUID를 만든다.
+* runtime 시작 시 pod IP context에서 `memberId`를 만든다. Kubernetes에서는 Downward API로 `status.podIP`를 `POD_IP` 환경변수로 노출하는 것을 권장한다.
 * coordinator heartbeat API로 현재 owned shard, revocation progress, revoke ack를 보고한다.
 * 같은 heartbeat response에서 member epoch, assigned/pending shard, fencing status를 받는다.
 * revoke 대상 shard는 신규 read를 멈추고 in-flight를 비운다.
@@ -99,7 +99,7 @@ POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/
 KIP-848 mapping:
 
 * `GroupId`: HTTP path의 `{streamPrefix, consumerGroup}`이다.
-* `MemberId`: HTTP path의 `{memberId}`이며 member runtime이 생성한 UUID이다.
+* `MemberId`: HTTP path의 `{memberId}`이며 member runtime이 pod IP context에서 생성한다.
 * `MemberEpoch=0`: join 또는 rejoin heartbeat이다. member는 full state를 보내야 한다.
 * `MemberEpoch=-1`: leave heartbeat이다. member는 더 이상 shard를 소유하지 않겠다는 의사를 보낸다.
 * `TopicPartitions`: Redis Stream에서는 `ownedShards`이다. member가 지금 사용할 수 있다고 보고하는 shard set이다.
@@ -174,7 +174,7 @@ Heartbeat response 예시:
 | --- | --- | --- |
 | `protocolVersion` | yes | Coordinator-module coordination version. incompatible version은 `UNSUPPORTED_PROTOCOL`로 거절한다. |
 | `requestId` | yes | 중복 응답과 로그 추적용 id. |
-| `memberId` | yes | path의 `{memberId}`와 같아야 한다. member runtime 시작 시 생성한 UUID이며 이 runtime incarnation을 식별한다. coordinator는 이 id에 member epoch을 부여하고 fencing한다. |
+| `memberId` | yes | path의 `{memberId}`와 같아야 한다. starter는 기본적으로 pod IP context에서 이 값을 만들고 concurrency suffix를 붙인다. coordinator는 이 id에 member epoch을 부여하고 fencing한다. |
 | `memberEpoch` | yes | `0`이면 신규 join 또는 coordinator가 이미 `EXPIRED`/`FENCED`로 판단한 member의 rejoin, `-1`이면 leave, 양수이면 coordinator가 직전 response로 발급한 epoch이다. stale 값이면 `FENCED_MEMBER_EPOCH`, coordinator가 발급하지 않은 값이면 `INVALID_REQUEST` 대상이다. |
 | `metadataVersion` | yes | member가 캐시한 group metadata version. 낮으면 response의 assignment metadata version 기준으로 갱신한다. |
 | `runtimeConsumerCapacity` | yes | member runtime이 보고하는 처리 가능 상태. `runtimeMaxConcurrency`는 process local consumer worker limit이고, coordinator의 server-side `maxConcurrency`를 올릴 수 없다. |
@@ -269,7 +269,7 @@ sequenceDiagram
     participant N as New Member
     participant Store as Redis Store
 
-    N->>N: memberId UUID 생성
+    N->>N: pod IP context에서 memberId 생성
     N->>C: heartbeat memberEpoch=0 full state 보고
     C->>Store: member N 등록, memberEpoch 부여
     C->>Store: groupEpoch 증가

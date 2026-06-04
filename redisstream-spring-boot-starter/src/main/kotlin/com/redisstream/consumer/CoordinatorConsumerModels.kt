@@ -30,15 +30,14 @@ enum class HeartbeatStatus {
 enum class RevokingShardState { REVOKING, DRAINING, REVOKED }
 
 data class CoordinatorShard(
-    val streamVersion: Int,
     val shardIndex: Int,
 ) : Comparable<CoordinatorShard> {
     override fun compareTo(other: CoordinatorShard): Int =
-        compareValuesBy(this, other, CoordinatorShard::streamVersion, CoordinatorShard::shardIndex)
+        compareValuesBy(this, other, CoordinatorShard::shardIndex)
 }
 
 fun CoordinatorShard.streamKey(streamPrefix: String): String =
-    "$streamPrefix:v$streamVersion:shard:$shardIndex"
+    "$streamPrefix:$shardIndex"
 
 data class RuntimeConsumerCapacity(
     val runtimeMaxConcurrency: Int,
@@ -67,7 +66,6 @@ data class HeartbeatRequest(
     val memberId: String,
     val memberName: String? = null,
     val memberEpoch: Long,
-    val rebalanceTimeoutMs: Long? = null,
     val metadataVersion: Long,
     val runtimeConsumerCapacity: RuntimeConsumerCapacity,
     val ownedShards: Set<CoordinatorShard> = emptySet(),
@@ -87,6 +85,7 @@ data class HeartbeatResponse(
     val memberId: String,
     val memberEpoch: Long,
     val heartbeatIntervalMs: Long,
+    val rebalanceTimeoutMs: Long = CoordinatorConsumerProtocol.DEFAULT_TIMING.rebalanceTimeout.toMillis(),
     val groupEpoch: Long,
     val assignmentEpoch: Long,
     val metadataVersion: Long,
@@ -95,7 +94,6 @@ data class HeartbeatResponse(
 )
 
 data class ProducerRoutingShard(
-    val streamVersion: Int,
     val shardIndex: Int,
     val streamKey: String,
     val redisSlot: Int,
@@ -105,7 +103,6 @@ data class ProducerRoutingResponse(
     val streamPrefix: String,
     val consumerGroup: String,
     val metadataVersion: Long,
-    val activeWriteVersion: Int,
     val shardCount: Int,
     val streamKeyPattern: String,
     val shards: List<ProducerRoutingShard>,

@@ -25,6 +25,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework:spring-jdbc")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     implementation("org.springframework:spring-aop")
     implementation("org.aspectj:aspectjweaver")
@@ -35,6 +36,7 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation(kotlin("test"))
+    testRuntimeOnly("com.h2database:h2")
 }
 
 tasks.withType<Test> {

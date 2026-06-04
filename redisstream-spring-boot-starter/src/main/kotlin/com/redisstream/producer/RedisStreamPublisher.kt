@@ -62,10 +62,13 @@ interface RedisStreamPublisher {
 class RoutingRedisStreamPublisher(
     private val routingCache: ProducerRoutingCache,
     private val writer: RedisStreamWriter,
-    private val maxAttempts: Int = 1,
+    private val maxAttempts: Int = 2,
 ) : RedisStreamPublisher {
     /**
      * Performs route lookup, Redis append, and cache invalidation on failures.
+     *
+     * A failed XADD can mean the producer used stale routing after scale-in. The next attempt
+     * reloads routing metadata and recalculates the target shard before writing again.
      */
     override fun publish(
         partitionKey: String,
@@ -126,7 +129,11 @@ class SpringDataRedisStreamWriter(
         add(streamKey, fields, RedisStreamPublishOptions())
 
     /**
-     * Executes XADD with configured MAXLEN trimming so stream keys do not grow unbounded.
+     * Executes XADD with NOMKSTREAM and configured MAXLEN trimming.
+     *
+     * NOMKSTREAM prevents an older producer routing cache from recreating a shard stream that was
+     * removed during scale-in. If Redis returns no record id, the publisher treats it as a write
+     * failure, invalidates routing metadata, and may retry with refreshed routing when configured.
      */
     override fun add(streamKey: String, fields: Map<String, String>, options: RedisStreamPublishOptions): String {
         require(streamKey.isNotBlank()) { "streamKey must not be blank" }

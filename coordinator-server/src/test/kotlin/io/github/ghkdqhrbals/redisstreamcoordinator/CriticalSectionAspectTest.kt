@@ -1,20 +1,24 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
+import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CriticalSection
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CriticalSectionAspect
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorStateMutex
+import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorShutdownGate
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.reflect.MethodSignature
 import org.mockito.Mockito
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class CriticalSectionAspectTest {
     @Test
     fun `critical section annotation applies local monitor and coordinator mutex`() {
         val mutex = RecordingStateMutex()
-        val aspect = CriticalSectionAspect(mutex)
+        val aspect = CriticalSectionAspect(mutex, CoordinatorShutdownGate())
         val target = AnnotatedTarget()
         val method = AnnotatedTarget::class.java.getMethod("guarded")
         val signature = Mockito.mock(MethodSignature::class.java)
@@ -32,6 +36,31 @@ class CriticalSectionAspectTest {
 
         assertEquals("ok", result)
         assertEquals(listOf("test-operation"), mutex.operations)
+    }
+
+    @Test
+    fun `critical section rejects new work after coordinator starts terminating`() {
+        val mutex = RecordingStateMutex()
+        val shutdownGate = CoordinatorShutdownGate()
+        val aspect = CriticalSectionAspect(mutex, shutdownGate)
+        val target = AnnotatedTarget()
+        val method = AnnotatedTarget::class.java.getMethod("guarded")
+        val signature = Mockito.mock(MethodSignature::class.java)
+        val joinPoint = Mockito.mock(ProceedingJoinPoint::class.java)
+
+        Mockito.`when`(signature.method).thenReturn(method)
+        Mockito.`when`(joinPoint.signature).thenReturn(signature)
+        Mockito.`when`(joinPoint.target).thenReturn(target)
+
+        shutdownGate.markTerminating()
+
+        val error = assertFailsWith<CoordinatorException> {
+            aspect.around(joinPoint)
+        }
+
+        assertEquals(CoordinatorError.COORDINATOR_TERMINATING, error.error)
+        assertTrue(mutex.operations.isEmpty())
+        Mockito.verify(joinPoint, Mockito.never()).proceed()
     }
 
     private class AnnotatedTarget {

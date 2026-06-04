@@ -12,7 +12,6 @@ data class ProducerRoute(
     val streamKey: String,
     val shard: ProducerRoutingShard,
     val metadataVersion: Long,
-    val activeWriteVersion: Int,
 )
 
 class ProducerRoutingCache(
@@ -38,18 +37,15 @@ class ProducerRoutingCache(
     fun route(partitionKey: ByteArray): ProducerRoute {
         val routing = currentRouting(forceRefresh = false)
         val shardIndex = RedisStreamPartitionHasher.shardIndex(routing, partitionKey)
-        val shard = routing.shards.firstOrNull {
-            it.streamVersion == routing.activeWriteVersion && it.shardIndex == shardIndex
-        } ?: error(
+        val shard = routing.shards.firstOrNull { it.shardIndex == shardIndex } ?: error(
             "Producer routing metadata version ${routing.metadataVersion} is missing " +
-                "active shard ${routing.activeWriteVersion}/$shardIndex",
+                "shard $shardIndex",
         )
 
         return ProducerRoute(
             streamKey = shard.streamKey,
             shard = shard,
             metadataVersion = routing.metadataVersion,
-            activeWriteVersion = routing.activeWriteVersion,
         )
     }
 

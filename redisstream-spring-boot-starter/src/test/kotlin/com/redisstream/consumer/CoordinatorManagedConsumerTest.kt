@@ -20,7 +20,7 @@ class CoordinatorManagedConsumerTest {
                 metadataVersion = 2,
                 assignedMaxConcurrency = 4,
                 assignment = AssignmentView(
-                    assignedShards = setOf(CoordinatorShard(1, 0), CoordinatorShard(1, 1)),
+                    assignedShards = setOf(CoordinatorShard(0), CoordinatorShard(1)),
                     pendingShards = emptySet(),
                     metadataVersion = 2,
                 ),
@@ -31,7 +31,7 @@ class CoordinatorManagedConsumerTest {
 
         consumer.pollOnce()
 
-        assertEquals(setOf(CoordinatorShard(1, 0), CoordinatorShard(1, 1)), lifecycle.assigned.single())
+        assertEquals(setOf(CoordinatorShard(0), CoordinatorShard(1)), lifecycle.assigned.single())
         assertEquals(0, client.requests.single().memberEpoch)
         assertEquals(CoordinatorConsumerProtocol.CURRENT_COORDINATION_VERSION, client.requests.single().protocolVersion)
     }
@@ -49,7 +49,7 @@ class CoordinatorManagedConsumerTest {
                 assignmentEpoch = 1,
                 metadataVersion = 2,
                 assignedMaxConcurrency = 4,
-                assignment = AssignmentView(setOf(CoordinatorShard(1, 0), CoordinatorShard(1, 1)), emptySet(), 2),
+                assignment = AssignmentView(setOf(CoordinatorShard(0), CoordinatorShard(1)), emptySet(), 2),
             ),
             HeartbeatResponse(
                 responseTo = "response-2",
@@ -61,7 +61,7 @@ class CoordinatorManagedConsumerTest {
                 assignmentEpoch = 2,
                 metadataVersion = 3,
                 assignedMaxConcurrency = 4,
-                assignment = AssignmentView(setOf(CoordinatorShard(1, 1)), emptySet(), 3),
+                assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
         )
         val lifecycle = RecordingShardLifecycle()
@@ -70,13 +70,13 @@ class CoordinatorManagedConsumerTest {
         consumer.pollOnce()
         consumer.pollOnce()
 
-        assertEquals(setOf(CoordinatorShard(1, 0)), lifecycle.revoked.single())
-        assertTrue(client.requests[1].ownedShards.contains(CoordinatorShard(1, 0)))
+        assertEquals(setOf(CoordinatorShard(0)), lifecycle.revoked.single())
+        assertTrue(client.requests[1].ownedShards.contains(CoordinatorShard(0)))
     }
 
     @Test
     fun `incomplete revoke is retried and later reported as revoked`() {
-        val revokedShard = CoordinatorShard(1, 0)
+        val revokedShard = CoordinatorShard(0)
         val client = ScriptedCoordinatorClient(
             HeartbeatResponse(
                 responseTo = "response-1",
@@ -88,7 +88,7 @@ class CoordinatorManagedConsumerTest {
                 assignmentEpoch = 1,
                 metadataVersion = 2,
                 assignedMaxConcurrency = 4,
-                assignment = AssignmentView(setOf(revokedShard, CoordinatorShard(1, 1)), emptySet(), 2),
+                assignment = AssignmentView(setOf(revokedShard, CoordinatorShard(1)), emptySet(), 2),
             ),
             HeartbeatResponse(
                 responseTo = "response-2",
@@ -100,7 +100,7 @@ class CoordinatorManagedConsumerTest {
                 assignmentEpoch = 2,
                 metadataVersion = 3,
                 assignedMaxConcurrency = 4,
-                assignment = AssignmentView(setOf(CoordinatorShard(1, 1)), emptySet(), 3),
+                assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
             HeartbeatResponse(
                 responseTo = "response-3",
@@ -112,7 +112,7 @@ class CoordinatorManagedConsumerTest {
                 assignmentEpoch = 2,
                 metadataVersion = 3,
                 assignedMaxConcurrency = 4,
-                assignment = AssignmentView(setOf(CoordinatorShard(1, 1)), emptySet(), 3),
+                assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
         )
         val lifecycle = RecordingShardLifecycle()
@@ -130,9 +130,9 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `new revokes keep earlier draining revoke reports`() {
-        val shardA = CoordinatorShard(1, 0)
-        val shardB = CoordinatorShard(1, 1)
-        val shardC = CoordinatorShard(1, 2)
+        val shardA = CoordinatorShard(0)
+        val shardB = CoordinatorShard(1)
+        val shardC = CoordinatorShard(2)
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
@@ -171,12 +171,12 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `pending shards are notified without being reported as owned`() {
-        val pendingShard = CoordinatorShard(1, 1)
+        val pendingShard = CoordinatorShard(1)
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
                 assignment = AssignmentView(
-                    assignedShards = setOf(CoordinatorShard(1, 0)),
+                    assignedShards = setOf(CoordinatorShard(0)),
                     pendingShards = setOf(pendingShard),
                     metadataVersion = 2,
                 ),
@@ -193,8 +193,8 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `sync metadata revokes stale reads without starting new shards`() {
-        val oldShard = CoordinatorShard(1, 0)
-        val newShard = CoordinatorShard(1, 1)
+        val oldShard = CoordinatorShard(0)
+        val newShard = CoordinatorShard(1)
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
@@ -228,8 +228,8 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `revoke pending keeps new shards pending until ok`() {
-        val oldShard = CoordinatorShard(1, 0)
-        val newShard = CoordinatorShard(1, 1)
+        val oldShard = CoordinatorShard(0)
+        val newShard = CoordinatorShard(1)
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
@@ -260,7 +260,7 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `retry response keeps owned shards and reports full state again`() {
-        val assigned = setOf(CoordinatorShard(1, 0), CoordinatorShard(1, 1))
+        val assigned = setOf(CoordinatorShard(0), CoordinatorShard(1))
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
@@ -287,7 +287,7 @@ class CoordinatorManagedConsumerTest {
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
-                assignment = AssignmentView(setOf(CoordinatorShard(1, 0)), emptySet(), 2),
+                assignment = AssignmentView(setOf(CoordinatorShard(0)), emptySet(), 2),
             ),
         )
         val consumer = CoordinatorManagedConsumer(properties(), client, lifecycle)
@@ -299,20 +299,20 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `managed consumer sends shard progress only for owned shards`() {
-        val owned = CoordinatorShard(1, 0)
-        val other = CoordinatorShard(1, 1)
+        val owned = CoordinatorShard(0)
+        val other = CoordinatorShard(1)
         val lifecycle = ProgressReportingShardLifecycle(
             listOf(
                 ShardConsumptionProgress(
                     shard = owned,
-                    streamKey = "orders:v1:shard:0",
+                    streamKey = "orders:0",
                     lastDeliveredId = "10-0",
                     lastAckedId = "9-0",
                     pendingCount = 1,
                 ),
                 ShardConsumptionProgress(
                     shard = other,
-                    streamKey = "orders:v1:shard:1",
+                    streamKey = "orders:1",
                     lastDeliveredId = "11-0",
                     lastAckedId = "11-0",
                 ),
@@ -349,7 +349,7 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `fenced response stops local ownership and next heartbeat rejoins`() {
-        val assigned = setOf(CoordinatorShard(1, 0))
+        val assigned = setOf(CoordinatorShard(0))
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
@@ -379,7 +379,7 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `stop sends graceful leave heartbeat with revoked shards`() {
-        val assigned = setOf(CoordinatorShard(1, 0), CoordinatorShard(1, 1))
+        val assigned = setOf(CoordinatorShard(0), CoordinatorShard(1))
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
@@ -411,7 +411,7 @@ class CoordinatorManagedConsumerTest {
 
     @Test
     fun `stop can skip graceful leave heartbeat when disabled`() {
-        val assigned = setOf(CoordinatorShard(1, 0))
+        val assigned = setOf(CoordinatorShard(0))
         val client = ScriptedCoordinatorClient(
             heartbeatResponse(
                 memberEpoch = 1,
@@ -502,14 +502,12 @@ class CoordinatorManagedConsumerTest {
             streamPrefix = "orders",
             consumerGroup = "orders-consumer",
             metadataVersion = 1,
-            activeWriteVersion = 1,
-            shardCount = shardCount,
-            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+                        shardCount = shardCount,
+            streamKeyPattern = "orders:{shardIndex}",
             shards = (0 until shardCount).map { shardIndex ->
                 ProducerRoutingShard(
-                    streamVersion = 1,
                     shardIndex = shardIndex,
-                    streamKey = "orders:v1:shard:$shardIndex",
+                    streamKey = "orders:$shardIndex",
                     redisSlot = shardIndex,
                 )
             },

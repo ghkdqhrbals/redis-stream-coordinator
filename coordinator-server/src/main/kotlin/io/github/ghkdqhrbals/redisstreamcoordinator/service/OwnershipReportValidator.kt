@@ -56,7 +56,7 @@ internal object OwnershipReportValidator {
                 readableShards: Set<ShardId>,
                 blockedTargetShards: Set<ShardId>,
             ): OwnershipAuthority {
-                val previouslyAccepted = member.currentAssignment + member.revoking
+                val previouslyAccepted = member.currentAssignment + member.revoking + member.grantedAssignment
                 val coordinatorGranted = group.targetAssignments[member.memberId].orEmpty()
                     .filter { it !in blockedTargetShards && it in readableShards }
                     .toSet()

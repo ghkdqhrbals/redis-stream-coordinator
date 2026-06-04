@@ -10,6 +10,7 @@ COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts gradle.properties 
 COPY gradle ./gradle
 
 COPY coordinator-server ./coordinator-server
+COPY redisstream-core ./redisstream-core
 COPY redisstream-spring-boot-starter ./redisstream-spring-boot-starter
 COPY samples ./samples
 

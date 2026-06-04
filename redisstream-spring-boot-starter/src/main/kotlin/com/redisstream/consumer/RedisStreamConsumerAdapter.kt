@@ -5,17 +5,83 @@ import org.springframework.data.redis.connection.RedisConnectionFactory
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 data class ConsumedRedisStreamMessage(
     val streamKey: String,
     val recordId: String,
     val shard: CoordinatorShard,
     val fields: Map<String, String>,
-)
+) {
+    @Transient
+    internal var acknowledgement: RedisStreamAcknowledgement = UnavailableRedisStreamAcknowledgement
+
+    /**
+     * Sends Redis XACK for this record. Call this only after the business side effect succeeds.
+     */
+    fun ack() {
+        acknowledgement.ack()
+    }
+
+    /**
+     * Sends Redis XACKDEL for this record. Call this only after the business side effect succeeds
+     * and the application intentionally wants the stream entry deleted.
+     */
+    fun ackDel(referencePolicy: RedisStreamXAckDelReferencePolicy? = null) {
+        acknowledgement.ackDel(referencePolicy)
+    }
+
+    /**
+     * Sends Redis XNACK for this record when the connected Redis version supports it.
+     */
+    fun nack(
+        mode: RedisStreamXNackMode? = null,
+        retryCount: Long? = null,
+        force: Boolean? = null,
+    ) {
+        acknowledgement.nack(mode, retryCount, force)
+    }
+}
+
+interface RedisStreamAcknowledgement {
+    /**
+     * Sends Redis XACK for the current record.
+     */
+    fun ack()
+
+    /**
+     * Sends Redis XACKDEL for the current record.
+     */
+    fun ackDel(referencePolicy: RedisStreamXAckDelReferencePolicy? = null)
+
+    /**
+     * Sends Redis XNACK for the current record.
+     */
+    fun nack(
+        mode: RedisStreamXNackMode? = null,
+        retryCount: Long? = null,
+        force: Boolean? = null,
+    )
+}
+
+private object UnavailableRedisStreamAcknowledgement : RedisStreamAcknowledgement {
+    override fun ack() {
+        error("Redis Stream acknowledgement is only available for records read by RedisStreamConsumerLifecycle")
+    }
+
+    override fun ackDel(referencePolicy: RedisStreamXAckDelReferencePolicy?) {
+        error("Redis Stream acknowledgement is only available for records read by RedisStreamConsumerLifecycle")
+    }
+
+    override fun nack(mode: RedisStreamXNackMode?, retryCount: Long?, force: Boolean?) {
+        error("Redis Stream acknowledgement is only available for records read by RedisStreamConsumerLifecycle")
+    }
+}
 
 fun interface RedisStreamMessageHandler {
     /**
@@ -29,13 +95,16 @@ class RedisStreamConsumerLifecycle(
     private val reader: RedisStreamReader,
     private val handler: RedisStreamMessageHandler,
     private val startPollersOnAssignment: Boolean = true,
+    executor: Executor? = null,
 ) : CoordinatorShardLifecycle, CoordinatorRuntimeCapacityProvider, CoordinatorShardProgressProvider, AutoCloseable {
     private val shardStates = ConcurrentHashMap<CoordinatorShard, ShardState>()
-    private val executor: ExecutorService = Executors.newCachedThreadPool { runnable ->
-        Thread(runnable, "redis-stream-consumer-${properties.memberId}").apply {
-            isDaemon = true
-        }
-    }
+    private val runtimeMaxConcurrency = properties.runtimeMaxConcurrency.coerceAtLeast(1)
+    private val runtimePermits = Semaphore(runtimeMaxConcurrency)
+    private val ownedExecutor: ExecutorService? =
+        if (executor == null) Executors.newFixedThreadPool(runtimeMaxConcurrency, ::consumerThread) else null
+    private val executor: Executor = executor ?: ownedExecutor!!
+    private val pollingStarted = AtomicBoolean(false)
+    private val nextShardCursor = AtomicInteger(0)
 
     /**
      * Starts polling workers for newly assigned shards.
@@ -44,9 +113,9 @@ class RedisStreamConsumerLifecycle(
         shards.forEach { shard ->
             val state = shardStates.computeIfAbsent(shard) { ShardState() }
             state.stopping.set(false)
-            if (startPollersOnAssignment && state.started.compareAndSet(false, true)) {
-                executor.submit { pollLoop(shard, state) }
-            }
+        }
+        if (startPollersOnAssignment) {
+            startPollingWorkers()
         }
     }
 
@@ -86,11 +155,9 @@ class RedisStreamConsumerLifecycle(
      * Reports available local concurrency based on currently in-flight handler calls.
      */
     override fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity {
-        val inFlight = shardStates.values.sumOf { it.inFlight.get() }
-        val runtimeMaxConcurrency = properties.runtimeMaxConcurrency.coerceAtLeast(1)
         return RuntimeConsumerCapacity(
             runtimeMaxConcurrency = runtimeMaxConcurrency,
-            availableConcurrency = (runtimeMaxConcurrency - inFlight).coerceAtLeast(0),
+            availableConcurrency = runtimePermits.availablePermits().coerceAtLeast(0),
         )
     }
 
@@ -100,72 +167,145 @@ class RedisStreamConsumerLifecycle(
     override fun shardProgress(context: CoordinatorConsumerContext): List<ShardConsumptionProgress> =
         shardStates.entries
             .mapNotNull { (shard, state) -> state.progress(shard, shard.streamKey(properties.streamPrefix)) }
-            .sortedWith(compareBy<ShardConsumptionProgress> { it.shard.streamVersion }.thenBy { it.shard.shardIndex })
+            .sortedBy { it.shard.shardIndex }
 
     /**
-     * Reads, handles, and acknowledges one batch for an assigned shard.
+     * Reads and handles one batch for an assigned shard. ACK, ACKDEL, or NACK is controlled by
+     * application code through the message acknowledgement helpers.
      */
     fun pollOnce(shard: CoordinatorShard): Int {
         val state = shardStates[shard] ?: return 0
         if (state.stopping.get()) {
             return 0
         }
-
-        val streamKey = shard.streamKey(properties.streamPrefix)
-        val messages = reader.read(
-            streamKey = streamKey,
-            shard = shard,
-            consumerGroup = properties.consumerGroupName,
-            consumerName = properties.memberId,
-            count = properties.redis.pollBatchSize,
-            block = properties.redis.pollTimeout,
-        )
-
-        messages.forEach { message ->
-            state.inFlight.incrementAndGet()
-            state.recordDelivered(message.recordId)
-            try {
-                try {
-                    handler.handle(message)
-                } catch (error: RuntimeException) {
-                    if (properties.redis.failure.mode == RedisStreamFailureMode.XNACK) {
-                        runCatching {
-                            reader.nack(message.streamKey, properties.consumerGroupName, message.recordId)
-                        }.onFailure(error::addSuppressed)
-                    }
-                    throw error
-                }
-
-                try {
-                    reader.ack(message.streamKey, properties.consumerGroupName, message.recordId)
-                    state.recordAcked(message.recordId)
-                } catch (error: RuntimeException) {
-                    throw error
-                }
-            } finally {
-                state.inFlight.decrementAndGet()
-            }
+        if (!state.polling.compareAndSet(false, true)) {
+            return 0
         }
-        return messages.size
+
+        try {
+            val acquiredPermits = acquireRuntimePermits(properties.redis.pollBatchSize)
+            if (acquiredPermits == 0) {
+                return 0
+            }
+
+            val streamKey = shard.streamKey(properties.streamPrefix)
+            val messages = try {
+                reader.read(
+                    streamKey = streamKey,
+                    shard = shard,
+                    consumerGroup = properties.consumerGroupName,
+                    consumerName = properties.memberId,
+                    count = acquiredPermits.toLong(),
+                    block = properties.redis.pollTimeout,
+                )
+            } catch (error: RuntimeException) {
+                runtimePermits.release(acquiredPermits)
+                throw error
+            }
+
+            val processableMessages = messages.take(acquiredPermits)
+            val unusedPermits = acquiredPermits - processableMessages.size
+            if (unusedPermits > 0) {
+                runtimePermits.release(unusedPermits)
+            }
+
+            var handledMessages = 0
+            try {
+                processableMessages.forEach { message ->
+                    state.inFlight.incrementAndGet()
+                    state.recordDelivered(message.recordId)
+                    message.acknowledgement = ReaderBackedRedisStreamAcknowledgement(
+                        reader = reader,
+                        message = message,
+                        consumerGroup = properties.consumerGroupName,
+                        acknowledgement = properties.redis.ack,
+                        failureHandling = properties.redis.failure,
+                        state = state,
+                    )
+                    try {
+                        handler.handle(message)
+                    } finally {
+                        state.inFlight.decrementAndGet()
+                        runtimePermits.release()
+                        handledMessages += 1
+                    }
+                }
+            } catch (error: RuntimeException) {
+                val unhandledPermits = processableMessages.size - handledMessages
+                if (unhandledPermits > 0) {
+                    runtimePermits.release(unhandledPermits)
+                }
+                throw error
+            }
+            return processableMessages.size
+        } finally {
+            state.polling.set(false)
+        }
     }
 
     override fun close() {
         shardStates.values.forEach { it.stopping.set(true) }
         shardStates.clear()
-        executor.shutdownNow()
+        pollingStarted.set(false)
+        ownedExecutor?.shutdownNow()
     }
 
-    private fun pollLoop(shard: CoordinatorShard, state: ShardState) {
-        while (!state.stopping.get()) {
+    private fun consumerThread(runnable: Runnable): Thread =
+        Thread(runnable, "redis-stream-consumer-${properties.memberId}").apply {
+            isDaemon = true
+        }
+
+    private fun startPollingWorkers() {
+        if (!pollingStarted.compareAndSet(false, true)) {
+            return
+        }
+        repeat(runtimeMaxConcurrency) {
+            executor.execute { pollLoop() }
+        }
+    }
+
+    private fun pollLoop() {
+        while (pollingStarted.get()) {
+            val shard = nextPollableShard()
+            if (shard == null) {
+                Thread.sleep(properties.redis.pollTimeout.toMillis().coerceAtLeast(1))
+                continue
+            }
             runCatching { pollOnce(shard) }
+                .onSuccess { polled ->
+                    if (polled == 0) {
+                        Thread.sleep(properties.redis.pollTimeout.toMillis().coerceAtLeast(1))
+                    }
+                }
                 .onFailure { Thread.sleep(properties.redis.pollTimeout.toMillis().coerceAtLeast(1)) }
         }
-        state.started.set(false)
     }
 
-    private class ShardState {
+    private fun nextPollableShard(): CoordinatorShard? {
+        // Multiple local workers can share one member, but a shard must have at most one active poll.
+        val shards = shardStates.entries
+            .filterNot { it.value.stopping.get() || it.value.polling.get() }
+            .map { it.key }
+            .sortedBy { it.shardIndex }
+        if (shards.isEmpty()) {
+            return null
+        }
+        val index = Math.floorMod(nextShardCursor.getAndIncrement(), shards.size)
+        return shards[index]
+    }
+
+    private fun acquireRuntimePermits(maxCount: Long): Int {
+        val limit = maxCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        var acquired = 0
+        while (acquired < limit && runtimePermits.tryAcquire()) {
+            acquired += 1
+        }
+        return acquired
+    }
+
+    internal class ShardState {
         val stopping = AtomicBoolean(false)
-        val started = AtomicBoolean(false)
+        val polling = AtomicBoolean(false)
         val inFlight = AtomicInteger(0)
         @Volatile
         private var lastDeliveredId: String? = null
@@ -202,6 +342,45 @@ class RedisStreamConsumerLifecycle(
     }
 }
 
+private class ReaderBackedRedisStreamAcknowledgement(
+    private val reader: RedisStreamReader,
+    private val message: ConsumedRedisStreamMessage,
+    private val consumerGroup: String,
+    private val acknowledgement: CoordinatorConsumerProperties.RedisAcknowledgement,
+    private val failureHandling: CoordinatorConsumerProperties.RedisFailureHandling,
+    private val state: RedisStreamConsumerLifecycle.ShardState,
+) : RedisStreamAcknowledgement {
+    override fun ack() {
+        reader.ack(message.streamKey, consumerGroup, message.recordId)
+        state.recordAcked(message.recordId)
+    }
+
+    override fun ackDel(referencePolicy: RedisStreamXAckDelReferencePolicy?) {
+        reader.ackDel(
+            streamKey = message.streamKey,
+            consumerGroup = consumerGroup,
+            recordId = message.recordId,
+            referencePolicy = referencePolicy ?: acknowledgement.xackdelReferencePolicy,
+        )
+        state.recordAcked(message.recordId)
+    }
+
+    override fun nack(
+        mode: RedisStreamXNackMode?,
+        retryCount: Long?,
+        force: Boolean?,
+    ) {
+        reader.nack(
+            streamKey = message.streamKey,
+            consumerGroup = consumerGroup,
+            recordId = message.recordId,
+            mode = mode ?: failureHandling.xnackMode,
+            retryCount = retryCount ?: failureHandling.retryCount,
+            force = force ?: failureHandling.force,
+        )
+    }
+}
+
 interface RedisStreamReader {
     /**
      * Reads records for one stream shard using a Redis consumer group.
@@ -221,9 +400,28 @@ interface RedisStreamReader {
     fun ack(streamKey: String, consumerGroup: String, recordId: String)
 
     /**
+     * Acknowledges and deletes a successfully handled record.
+     */
+    fun ackDel(
+        streamKey: String,
+        consumerGroup: String,
+        recordId: String,
+        referencePolicy: RedisStreamXAckDelReferencePolicy = RedisStreamXAckDelReferencePolicy.ACKED,
+    ) {
+        ack(streamKey, consumerGroup, recordId)
+    }
+
+    /**
      * Reports a failed record when the configured Redis version supports negative acknowledgement.
      */
-    fun nack(streamKey: String, consumerGroup: String, recordId: String) {
+    fun nack(
+        streamKey: String,
+        consumerGroup: String,
+        recordId: String,
+        mode: RedisStreamXNackMode = RedisStreamXNackMode.FAIL,
+        retryCount: Long? = null,
+        force: Boolean = false,
+    ) {
     }
 }
 
@@ -246,9 +444,6 @@ class SpringDataRedisStreamReader(
         failureHandling,
         commandSupportProvider,
     )
-
-    @Volatile
-    private var resolvedAckMode: RedisStreamResolvedAckMode? = null
 
     /**
      * Executes XREADGROUP and converts raw Redis records into shard-aware consumer messages.
@@ -278,52 +473,58 @@ class SpringDataRedisStreamReader(
     }
 
     /**
-     * Sends XACK or XACKDEL according to configured acknowledgement mode and Redis version support.
+     * Sends XACK for records explicitly acknowledged by application code.
      */
     override fun ack(streamKey: String, consumerGroup: String, recordId: String) {
-        ensureCompatible()
-        val ackMode = resolvedAckMode()
-        when (ackMode) {
-            RedisStreamResolvedAckMode.XACK ->
-                commands.xAck(streamKey, consumerGroup, recordId)
-            RedisStreamResolvedAckMode.XACKDEL ->
-                commands.xAckDel(streamKey, consumerGroup, acknowledgement.xackdelReferencePolicy.name, recordId)
-        }
+        commands.xAck(streamKey, consumerGroup, recordId)
     }
 
     /**
-     * Sends XNACK for failed records when failure handling is explicitly enabled.
+     * Sends XACKDEL for records explicitly acknowledged and deleted by application code.
      */
-    override fun nack(streamKey: String, consumerGroup: String, recordId: String) {
-        if (failureHandling.mode != RedisStreamFailureMode.XNACK) {
-            return
-        }
-        ensureCompatible()
+    override fun ackDel(
+        streamKey: String,
+        consumerGroup: String,
+        recordId: String,
+        referencePolicy: RedisStreamXAckDelReferencePolicy,
+    ) {
+        ensureXAckDelCompatible()
+        commands.xAckDel(streamKey, consumerGroup, referencePolicy.name, recordId)
+    }
+
+    /**
+     * Sends XNACK for records explicitly released by application code.
+     */
+    override fun nack(
+        streamKey: String,
+        consumerGroup: String,
+        recordId: String,
+        mode: RedisStreamXNackMode,
+        retryCount: Long?,
+        force: Boolean,
+    ) {
+        ensureXNackCompatible()
         commands.xNack(
             streamKey = streamKey,
             consumerGroup = consumerGroup,
-            mode = failureHandling.xnackMode.name,
+            mode = mode.name,
             recordId = recordId,
-            retryCount = failureHandling.retryCount,
-            force = failureHandling.force,
+            retryCount = retryCount,
+            force = force,
         )
     }
 
     /**
-     * Loads command support before sending newer Redis Stream commands.
+     * Checks Redis command support before sending XACKDEL.
      */
-    private fun ensureCompatible() {
-        val support = commandSupportProvider.current()
-        resolvedAckMode ?: RedisStreamCommandCompatibility
-            .resolveAckMode(acknowledgement.mode, support)
-            .also { resolvedAckMode = it }
-        RedisStreamCommandCompatibility.validateFailureMode(failureHandling.mode, support)
+    private fun ensureXAckDelCompatible() {
+        RedisStreamCommandCompatibility.resolveAckMode(RedisStreamAckMode.XACKDEL, commandSupportProvider.current())
     }
 
-    private fun resolvedAckMode(): RedisStreamResolvedAckMode =
-        resolvedAckMode ?: synchronized(this) {
-            resolvedAckMode ?: RedisStreamCommandCompatibility
-                .resolveAckMode(acknowledgement.mode, commandSupportProvider.current())
-                .also { resolvedAckMode = it }
-        }
+    /**
+     * Checks Redis command support before sending XNACK.
+     */
+    private fun ensureXNackCompatible() {
+        RedisStreamCommandCompatibility.validateFailureMode(RedisStreamFailureMode.XNACK, commandSupportProvider.current())
+    }
 }

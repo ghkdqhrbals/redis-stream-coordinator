@@ -44,7 +44,7 @@ services:
         done
         if wget -qO- \
           --header="Authorization: Basic YWRtaW46cGFzc3dvcmQ=" \
-          http://coordinator:8080/coord/v1/streams/demo.orders/groups/demo-workers >/dev/null 2>&1; then
+          http://coordinator:8080/coord/v1/streams/create-order/groups/demo-workers >/dev/null 2>&1; then
           echo "Coordinator group already exists"
           exit 0
         fi
@@ -52,7 +52,7 @@ services:
           --header="Content-Type: application/json" \
           --header="Authorization: Basic YWRtaW46cGFzc3dvcmQ=" \
           --post-data='{"initialShardCount":6,"consumerConcurrencyPolicy":{"defaultMaxConcurrency":6},"requestedBy":"compose.aws-public-redis","reason":"aws public redis pod smoke"}' \
-          http://coordinator:8080/coord/v1/streams/demo.orders/groups/demo-workers
+          http://coordinator:8080/coord/v1/streams/create-order/groups/demo-workers
         echo
         echo "Coordinator group initialized"
     networks:
@@ -72,11 +72,11 @@ services:
       SERVER_PORT: "18081"
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       COORDINATOR_BASE_URL: http://coordinator:8080
-      STREAM_PREFIX: demo.orders
+      STREAM_PREFIX: create-order
       CONSUMER_GROUP: demo-workers
       CONSUMER_MEMBER_ID: consumer-pod-1
       CONSUMER_MEMBER_NAME: consumer-pod-1
-      CONSUMER_RUNTIME_MAX_CONCURRENCY: "4"
+      CONSUMER_MEMBER_CONCURRENCY: "4"
       CONSUMER_REDIS_ACK_MODE: XACKDEL
       CONSUMER_REDIS_FAILURE_MODE: LEAVE_PENDING
       COORDINATOR_USERNAME: admin
@@ -110,11 +110,11 @@ services:
       SERVER_PORT: "18082"
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       COORDINATOR_BASE_URL: http://coordinator:8080
-      STREAM_PREFIX: demo.orders
+      STREAM_PREFIX: create-order
       CONSUMER_GROUP: demo-workers
       CONSUMER_MEMBER_ID: consumer-pod-2
       CONSUMER_MEMBER_NAME: consumer-pod-2
-      CONSUMER_RUNTIME_MAX_CONCURRENCY: "4"
+      CONSUMER_MEMBER_CONCURRENCY: "4"
       CONSUMER_REDIS_ACK_MODE: XACKDEL
       CONSUMER_REDIS_FAILURE_MODE: LEAVE_PENDING
       COORDINATOR_USERNAME: admin
@@ -148,7 +148,7 @@ services:
       SERVER_PORT: "18090"
       SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       COORDINATOR_BASE_URL: http://coordinator:8080
-      STREAM_PREFIX: demo.orders
+      STREAM_PREFIX: create-order
       CONSUMER_GROUP: demo-workers
       COORDINATOR_USERNAME: admin
       COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}

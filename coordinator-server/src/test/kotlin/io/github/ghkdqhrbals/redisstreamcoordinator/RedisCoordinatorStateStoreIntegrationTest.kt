@@ -66,7 +66,7 @@ class RedisCoordinatorStateStoreIntegrationTest {
         touchedGroups += key
 
         coordinator.createGroup(key.streamPrefix, key.consumerGroup, createGroupRequest(initialShardCount = 2))
-        touchStreamKeys(key.streamPrefix, streamVersion = 1, shardCount = 2)
+        touchStreamKeys(key.streamPrefix, shardCount = 2)
         val first = coordinator.heartbeat(
             key.streamPrefix,
             key.consumerGroup,
@@ -84,7 +84,7 @@ class RedisCoordinatorStateStoreIntegrationTest {
             key.consumerGroup,
             ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "redis projection"),
         )
-        touchStreamKeys(key.streamPrefix, streamVersion = migration.toVersion, shardCount = 3)
+        touchStreamKeys(key.streamPrefix, shardCount = 3)
 
         val keys = stateKeys.forGroup(key)
         val storedGroup = redisTemplate.opsForHash<String, String>().get(keys.metadata, "aggregate")
@@ -92,10 +92,9 @@ class RedisCoordinatorStateStoreIntegrationTest {
         val revision = redisTemplate.opsForHash<String, String>().get(keys.metadata, "revision")
 
         assertNotNull(storedGroup)
-        assertEquals(2, storedGroup.activeWriteVersion)
-        assertEquals("member-a", storedGroup.members.getValue("member-a").memberId)
-        assertTrue(storedGroup.targetAssignments.getValue("member-a").containsAll(setOf(ShardId(1, 0), ShardId(1, 1))))
-        assertEquals(setOf(ShardId(1, 0), ShardId(1, 1)), storedGroup.members.getValue("member-a").currentAssignment)
+                assertEquals("member-a", storedGroup.members.getValue("member-a").memberId)
+        assertTrue(storedGroup.targetAssignments.getValue("member-a").containsAll(setOf(ShardId(0), ShardId(1))))
+        assertEquals(setOf(ShardId(0), ShardId(1)), storedGroup.members.getValue("member-a").currentAssignment)
         assertEquals(MigrationState.ACTIVE, storedGroup.migrations.getValue(migration.reshardingId).state)
         assertEquals(migration.reshardingId, storedGroup.activeReshardingId)
         assertEquals(storedGroup.storeRevision.toString(), revision)
@@ -107,17 +106,17 @@ class RedisCoordinatorStateStoreIntegrationTest {
         touchedGroups += key
 
         coordinator.createGroup(key.streamPrefix, key.consumerGroup, createGroupRequest(initialShardCount = 2))
-        touchStreamKeys(key.streamPrefix, streamVersion = 1, shardCount = 2)
+        touchStreamKeys(key.streamPrefix, shardCount = 2)
         val firstSnapshot = assertNotNull(stateStore.get(key))
         val staleSnapshot = assertNotNull(stateStore.get(key))
 
         firstSnapshot.members["member-a"] = member("member-a")
-        firstSnapshot.targetAssignments["member-a"] = mutableSetOf(ShardId(1, 0))
+        firstSnapshot.targetAssignments["member-a"] = mutableSetOf(ShardId(0))
         firstSnapshot.metadataVersion += 1
         stateStore.save(key, firstSnapshot)
 
         staleSnapshot.members["member-b"] = member("member-b")
-        staleSnapshot.targetAssignments["member-b"] = mutableSetOf(ShardId(1, 1))
+        staleSnapshot.targetAssignments["member-b"] = mutableSetOf(ShardId(1))
         staleSnapshot.metadataVersion += 1
 
         assertFailsWith<CoordinatorStateConflictException> {
@@ -137,25 +136,23 @@ class RedisCoordinatorStateStoreIntegrationTest {
         touchedGroups += key
 
         coordinator.createGroup(key.streamPrefix, key.consumerGroup, createGroupRequest(initialShardCount = 2))
-        val version1Keys = RedisStreamShardKeys.forVersion(key.streamPrefix, streamVersion = 1, shardCount = 2)
-        touchStreamKeys(version1Keys)
+        val initialKeys = RedisStreamShardKeys.forShardCount(key.streamPrefix, shardCount = 2)
+        touchStreamKeys(initialKeys)
 
-        version1Keys.assertConsumerGroups(key.consumerGroup)
+        initialKeys.assertConsumerGroups(key.consumerGroup)
 
         val migration = coordinator.scaleGroup(
             key.streamPrefix,
             key.consumerGroup,
             ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "provision streams"),
         )
-        val version2Keys = RedisStreamShardKeys.forVersion(
+        val scaledKeys = RedisStreamShardKeys.forShardCount(
             key.streamPrefix,
-            streamVersion = migration.toVersion,
             shardCount = 3,
         )
-        touchStreamKeys(version2Keys)
+        touchStreamKeys(scaledKeys)
 
-        assertEquals(2, migration.toVersion)
-        version2Keys.assertConsumerGroups(key.consumerGroup)
+        scaledKeys.assertConsumerGroups(key.consumerGroup)
     }
 
     private fun createGroupRequest(initialShardCount: Int): CreateGroupRequest =
@@ -175,7 +172,6 @@ class RedisCoordinatorStateStoreIntegrationTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,
@@ -200,8 +196,8 @@ class RedisCoordinatorStateStoreIntegrationTest {
             memberLeaseExpiresAt = Instant.parse("2026-05-21T00:00:15Z"),
         )
 
-    private fun touchStreamKeys(streamPrefix: String, streamVersion: Int, shardCount: Int) {
-        touchStreamKeys(RedisStreamShardKeys.forVersion(streamPrefix, streamVersion, shardCount))
+    private fun touchStreamKeys(streamPrefix: String, shardCount: Int) {
+        touchStreamKeys(RedisStreamShardKeys.forShardCount(streamPrefix, shardCount))
     }
 
     private fun touchStreamKeys(shardKeys: List<RedisStreamShardKey>) {

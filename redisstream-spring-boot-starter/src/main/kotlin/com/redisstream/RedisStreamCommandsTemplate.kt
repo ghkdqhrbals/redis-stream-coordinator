@@ -2,7 +2,6 @@ package com.redisstream
 
 import org.springframework.data.redis.connection.RedisConnection
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.data.redis.connection.RedisStreamCommands
 import org.springframework.data.redis.connection.stream.Consumer
 import org.springframework.data.redis.connection.stream.ReadOffset
 import org.springframework.data.redis.connection.stream.RecordId
@@ -124,7 +123,10 @@ class RedisStreamCommandsTemplate(
     }
 
     /**
-     * Executes XADD with MAXLEN trimming and returns the generated Redis Stream record id.
+     * Executes XADD with NOMKSTREAM and MAXLEN trimming, then returns the generated Redis Stream record id.
+     *
+     * NOMKSTREAM is intentional: during shard scale-in, an older producer routing cache must not recreate
+     * a shard stream key that the coordinator has already removed from the active write set.
      */
     fun xAdd(
         streamKey: String,
@@ -137,14 +139,13 @@ class RedisStreamCommandsTemplate(
         require(maxLen > 0) { "Redis Stream XADD maxLen must be positive" }
 
         return withConnection { connection ->
-            val record = StreamRecords.newRecord()
-                .`in`(streamKey.bytes())
-                .ofBytes(fields.mapKeys { it.key.bytes() }.mapValues { it.value.bytes() })
-            val options = RedisStreamCommands.XAddOptions.maxlen(maxLen)
-                .approximateTrimming(approximateTrimming)
-            connection.streamCommands().xAdd(record, options)
-                ?.value
-                ?: error("Redis XADD returned no record id for $streamKey")
+            parseXAddRecordId(
+                connection.execute(
+                    "XADD",
+                    *xAddNomkstreamArguments(streamKey, fields, maxLen, approximateTrimming).toTypedArray(),
+                ),
+                streamKey,
+            )
         }
     }
 
@@ -196,3 +197,43 @@ class RedisStreamCommandsTemplate(
     private fun ByteArray.string(): String =
         toString(Charsets.UTF_8)
 }
+
+internal fun xAddNomkstreamArguments(
+    streamKey: String,
+    fields: Map<String, String>,
+    maxLen: Long,
+    approximateTrimming: Boolean,
+): List<ByteArray> {
+    require(streamKey.isNotBlank()) { "streamKey must not be blank" }
+    require(fields.isNotEmpty()) { "Redis Stream message fields must not be empty" }
+    require(maxLen > 0) { "Redis Stream XADD maxLen must be positive" }
+
+    val args = mutableListOf(
+        streamKey.bytes(),
+        "NOMKSTREAM".bytes(),
+        "MAXLEN".bytes(),
+        (if (approximateTrimming) "~" else "=").bytes(),
+        maxLen.toString().bytes(),
+        "*".bytes(),
+    )
+    fields.forEach { (field, value) ->
+        require(field.isNotBlank()) { "Redis Stream message field names must not be blank" }
+        args += field.bytes()
+        args += value.bytes()
+    }
+    return args
+}
+
+private fun parseXAddRecordId(response: Any?, streamKey: String): String =
+    when (response) {
+        is ByteArray -> response.string()
+        is String -> response
+        null -> error("Redis XADD NOMKSTREAM returned no record id for $streamKey; the stream key may not exist")
+        else -> error("Redis XADD returned unsupported response type ${response::class.qualifiedName} for $streamKey")
+    }
+
+private fun String.bytes(): ByteArray =
+    toByteArray(Charsets.UTF_8)
+
+private fun ByteArray.string(): String =
+    toString(Charsets.UTF_8)

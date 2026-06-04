@@ -48,10 +48,9 @@ class RedisStreamProvisioningIntegrationTest {
 
     @Test
     fun `stream provisioner is idempotent for existing Redis consumer groups`() {
-        val plan = RedisStreamShardProvisioningPlan.forVersion(
+        val plan = RedisStreamShardProvisioningPlan.forShardCount(
             streamPrefix = uniqueStreamPrefix("direct"),
             consumerGroup = "orders-consumer",
-            streamVersion = 1,
             shardCount = 2,
         )
         touch(plan)
@@ -66,10 +65,9 @@ class RedisStreamProvisioningIntegrationTest {
 
     @Test
     fun `stream provisioner retry succeeds after partial Redis failure leaves existing groups`() {
-        val plan = RedisStreamShardProvisioningPlan.forVersion(
+        val plan = RedisStreamShardProvisioningPlan.forShardCount(
             streamPrefix = uniqueStreamPrefix("retry"),
             consumerGroup = "orders-consumer",
-            streamVersion = 1,
             shardCount = 3,
         )
         val poisonedShardKey = plan.shardKeys[1]
@@ -97,10 +95,10 @@ class RedisStreamProvisioningIntegrationTest {
         val consumerGroup = "orders-consumer"
 
         coordinator.createGroup(streamPrefix, consumerGroup, createGroupRequest(initialShardCount = 2))
-        val version1Keys = RedisStreamShardKeys.forVersion(streamPrefix, streamVersion = 1, shardCount = 2)
-        touch(version1Keys)
+        val initialKeys = RedisStreamShardKeys.forShardCount(streamPrefix, shardCount = 2)
+        touch(initialKeys)
 
-        version1Keys.assertConsumerGroup(consumerGroup)
+        initialKeys.assertConsumerGroup(consumerGroup)
 
         val migration = coordinator.scaleGroup(
             streamPrefix,
@@ -111,11 +109,73 @@ class RedisStreamProvisioningIntegrationTest {
                 reason = "integration provisioning",
             ),
         )
-        val version2Keys = RedisStreamShardKeys.forVersion(streamPrefix, migration.toVersion, shardCount = 3)
-        touch(version2Keys)
+        val scaledKeys = RedisStreamShardKeys.forShardCount(streamPrefix, shardCount = 3)
+        touch(scaledKeys)
 
-        assertEquals(2, migration.toVersion)
-        version2Keys.assertConsumerGroup(consumerGroup)
+        scaledKeys.assertConsumerGroup(consumerGroup)
+    }
+
+    @Test
+    fun `monitoring exposes shard offsets lag and paged stream messages`() {
+        val streamPrefix = uniqueStreamPrefix("monitoring")
+        val consumerGroup = "orders-consumer"
+
+        coordinator.createGroup(streamPrefix, consumerGroup, createGroupRequest(initialShardCount = 1))
+        val shardKey = RedisStreamShardKeys.forShard(streamPrefix, shardIndex = 0)
+        touch(listOf(shardKey))
+        val firstId = redisTemplate.opsForStream<String, String>().add(
+            shardKey.value,
+            mapOf("payload" to "created", "eventId" to "event-1"),
+        )?.value
+        val secondId = redisTemplate.opsForStream<String, String>().add(
+            shardKey.value,
+            mapOf("payload" to "paid", "eventId" to "event-2"),
+        )?.value
+
+        val firstHeartbeat = coordinator.heartbeat(
+            streamPrefix,
+            consumerGroup,
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        coordinator.heartbeat(
+            streamPrefix,
+            consumerGroup,
+            "member-a",
+            heartbeat(
+                memberId = "member-a",
+                memberEpoch = firstHeartbeat.memberEpoch,
+                ownedShards = firstHeartbeat.assignment.assignedShards,
+                shardProgress = listOf(
+                    ShardConsumptionProgress(
+                        shard = ShardId(0),
+                        streamKey = shardKey.value,
+                        lastDeliveredId = secondId,
+                        lastAckedId = firstId,
+                        pendingCount = 1,
+                    ),
+                ),
+            ),
+        )
+
+        val offsets = coordinator.streamShardOffsets(streamPrefix, consumerGroup)
+        val messages = coordinator.streamMessages(
+            streamPrefix = streamPrefix,
+            consumerGroup = consumerGroup,
+            shardIndex = 0,
+            direction = StreamMessagePageDirection.BACKWARD,
+            cursor = null,
+            limit = 1,
+        )
+
+        assertEquals(1, offsets.shards.size)
+        assertEquals(shardKey.value, offsets.shards.single().streamKey)
+        assertEquals(2, offsets.shards.single().streamLength)
+        assertEquals(firstId, offsets.shards.single().consumerLastAckedId)
+        assertEquals(1, messages.records.size)
+        assertEquals(secondId, messages.records.single().recordId)
+        assertEquals("paid", messages.records.single().payload)
+        assertEquals(secondId, messages.nextCursor)
     }
 
     private fun createGroupRequest(initialShardCount: Int): CreateGroupRequest =
@@ -126,6 +186,27 @@ class RedisStreamProvisioningIntegrationTest {
 
     private fun uniqueStreamPrefix(label: String): String =
         "redis-it-stream-$label-${UUID.randomUUID()}"
+
+    private fun heartbeat(
+        memberId: String,
+        memberEpoch: Long,
+        ownedShards: Set<ShardId> = emptySet(),
+        shardProgress: List<ShardConsumptionProgress> = emptyList(),
+    ): HeartbeatRequest =
+        HeartbeatRequest(
+            protocolVersion = 1,
+            requestId = "hb-$memberId-$memberEpoch",
+            memberId = memberId,
+            memberName = memberId,
+            memberEpoch = memberEpoch,
+            metadataVersion = 0,
+            runtimeConsumerCapacity = RuntimeConsumerCapacity(
+                runtimeMaxConcurrency = 4,
+                availableConcurrency = 4,
+            ),
+            ownedShards = ownedShards,
+            shardProgress = shardProgress,
+        )
 
     private fun touch(plan: RedisStreamShardProvisioningPlan) {
         touch(plan.shardKeys)

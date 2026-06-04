@@ -1,6 +1,7 @@
 package com.redisstream.consumer
 
 import org.springframework.context.SmartLifecycle
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -82,6 +83,17 @@ class CoordinatorManagedConsumer(
     }
 
     /**
+     * Validates coordinator routing only for listeners that are configured to start automatically.
+     */
+    @Synchronized
+    fun validateInitialRoutingIfAutoStartup(): ProducerRoutingResponse? =
+        if (properties.autoStartup) {
+            validateInitialRouting()
+        } else {
+            null
+        }
+
+    /**
      * Sends one heartbeat and applies the coordinator response to local shard lifecycle state.
      */
     @Synchronized
@@ -101,7 +113,6 @@ class CoordinatorManagedConsumer(
                 memberId = properties.memberId,
                 memberName = properties.heartbeatMemberName,
                 memberEpoch = memberEpoch,
-                rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
                 metadataVersion = metadataVersion,
                 runtimeConsumerCapacity = runtimeCapacity,
                 ownedShards = ownedShards,
@@ -147,7 +158,6 @@ class CoordinatorManagedConsumer(
                 memberId = properties.memberId,
                 memberName = properties.heartbeatMemberName,
                 memberEpoch = -1,
-                rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis(),
                 metadataVersion = metadataVersion,
                 runtimeConsumerCapacity = RuntimeConsumerCapacity(
                     runtimeMaxConcurrency = properties.runtimeMaxConcurrency,
@@ -196,6 +206,9 @@ class CoordinatorManagedConsumer(
      * Interprets coordinator heartbeat status and either applies assignments or resets fenced state.
      */
     private fun apply(response: HeartbeatResponse) {
+        if (response.rebalanceTimeoutMs > 0) {
+            properties.rebalanceTimeout = Duration.ofMillis(response.rebalanceTimeoutMs)
+        }
         val context = context(response.groupEpoch, response.assignmentEpoch)
         lastContext = context
 

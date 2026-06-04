@@ -29,7 +29,7 @@ class RedisStreamPublisherTest {
         assertEquals("1-0", published.recordId)
         assertEquals(published.streamKey, writer.writes.single().streamKey)
         assertEquals(mapOf("payload" to "created"), writer.writes.single().fields)
-        assertEquals(1, published.route.activeWriteVersion)
+        assertEquals(1, published.route.metadataVersion)
     }
 
     @Test
@@ -148,12 +148,12 @@ class RedisStreamPublisherTest {
     }
 
     @Test
-    fun `publisher invalidates routing cache after write failure so next publish refreshes metadata`() {
+    fun `publisher retries write failure after refreshing routing metadata by default`() {
         val client = ScriptedPublisherRoutingClient(
-            routing(version = 1, activeWriteVersion = 1),
-            routing(version = 2, activeWriteVersion = 2),
+            routing(version = 1, streamKeyPrefix = "orders-old"),
+            routing(version = 2, streamKeyPrefix = "orders-new"),
         )
-        val writer = FailingOnceRedisStreamWriter()
+        val writer = FailingFirstAttemptWriter()
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
@@ -161,57 +161,54 @@ class RedisStreamPublisherTest {
                 client = client,
             ),
             writer = writer,
+        )
+
+        val published = publisher.publish("order-1", mapOf("payload" to "created"))
+
+        assertEquals(2, client.calls)
+        assertEquals(2, published.route.metadataVersion)
+        assertEquals(listOf("orders-old", "orders-new"), writer.attemptedStreams.map { it.substringBeforeLast(":") })
+    }
+
+    @Test
+    fun `publisher surfaces write failure after configured attempts are exhausted`() {
+        val client = ScriptedPublisherRoutingClient(
+            routing(version = 1),
+            routing(version = 2),
+        )
+        val writer = FailingFirstAttemptWriter()
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                consumerGroupName = "orders-consumer",
+                client = client,
+            ),
+            writer = writer,
+            maxAttempts = 1,
         )
 
         assertFailsWith<IllegalStateException> {
             publisher.publish("order-1", mapOf("payload" to "created"))
         }
-        val published = publisher.publish("order-1", mapOf("payload" to "created"))
 
-        assertEquals(2, client.calls)
-        assertEquals(2, published.route.activeWriteVersion)
-    }
-
-    @Test
-    fun `publisher can opt into stale routing write retry after refreshing metadata`() {
-        val client = ScriptedPublisherRoutingClient(
-            routing(version = 1, activeWriteVersion = 1),
-            routing(version = 2, activeWriteVersion = 2),
-        )
-        val writer = FailingStreamVersionWriter(failingVersion = 1)
-        val publisher = RoutingRedisStreamPublisher(
-            routingCache = ProducerRoutingCache(
-                streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
-                client = client,
-            ),
-            writer = writer,
-            maxAttempts = 2,
-        )
-
-        val published = publisher.publish("order-1", mapOf("payload" to "created"))
-
-        assertEquals(2, client.calls)
-        assertEquals(2, published.route.activeWriteVersion)
-        assertEquals(listOf("orders:v1", "orders:v2"), writer.attemptedVersions)
+        assertEquals(1, client.calls)
+        assertEquals(listOf("orders"), writer.attemptedStreams.map { it.substringBeforeLast(":") })
     }
 
     private fun routing(
         version: Long = 1,
-        activeWriteVersion: Int = 1,
+        streamKeyPrefix: String = "orders",
     ): ProducerRoutingResponse =
         ProducerRoutingResponse(
             streamPrefix = "orders",
             consumerGroup = "orders-consumer",
             metadataVersion = version,
-            activeWriteVersion = activeWriteVersion,
             shardCount = 2,
-            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+            streamKeyPattern = "orders:{shardIndex}",
             shards = (0 until 2).map { shardIndex ->
                 ProducerRoutingShard(
-                    streamVersion = activeWriteVersion,
                     shardIndex = shardIndex,
-                    streamKey = "orders:v$activeWriteVersion:shard:$shardIndex",
+                    streamKey = "$streamKeyPrefix:$shardIndex",
                     redisSlot = shardIndex,
                 )
             },
@@ -238,26 +235,14 @@ private class RecordingRedisStreamWriter : RedisStreamWriter {
     )
 }
 
-private class FailingOnceRedisStreamWriter : RedisStreamWriter {
+private class FailingFirstAttemptWriter : RedisStreamWriter {
+    val attemptedStreams = mutableListOf<String>()
     private var failed = false
 
     override fun add(streamKey: String, fields: Map<String, String>): String {
+        attemptedStreams += streamKey
         if (!failed) {
             failed = true
-            error("write failed")
-        }
-        return "2-0"
-    }
-}
-
-private class FailingStreamVersionWriter(
-    private val failingVersion: Int,
-) : RedisStreamWriter {
-    val attemptedVersions = mutableListOf<String>()
-
-    override fun add(streamKey: String, fields: Map<String, String>): String {
-        attemptedVersions += streamKey.substringBefore(":shard")
-        if (streamKey.startsWith("orders:v$failingVersion:")) {
             error("stale stream key")
         }
         return "2-0"

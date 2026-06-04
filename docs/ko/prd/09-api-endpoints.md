@@ -28,7 +28,10 @@ Common headers:
 Content-Type: application/json
 Accept: application/json
 Authorization: Basic <base64(admin:password)>
+X-Request-Id: <caller-generated-id>
 ```
+
+`X-Request-Id`는 선택값이지만 admin mutation, Terraform apply, CI automation, incident replay에서는 강하게 권장한다. 값이 있으면 coordinator audit log에 기록한다.
 
 Path parameters:
 
@@ -36,7 +39,7 @@ Path parameters:
 | --- | --- |
 | `streamPrefix` | Coordinator가 관리하는 Redis Stream logical prefix. |
 | `consumerGroup` | Redis Stream consumer group logical name. |
-| `memberId` | member runtime이 생성한 UUID. |
+| `memberId` | member runtime이 생성한 member id. starter는 기본적으로 pod IP context에서 생성한다. |
 | `reshardingId` | Coordinator가 생성한 resharding id. |
 
 Auth policy:
@@ -77,9 +80,10 @@ Common status codes:
 
 | Area | Method | Path | Purpose | Mutates State | Duplicate Request Handling |
 | --- | --- | --- | --- | --- | --- |
-| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | group 생성 | yes | existing group is `409 Conflict` |
+| Admin | `POST` | `/coord/v1/streams/{streamPrefix}` | stream shard group 생성 | yes | existing stream metadata is `409 Conflict` |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | group metadata 조회 | no | not required |
-| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale` | shard scale-out/in migration 시작 | yes | active migration or same target is rejected/no-op |
+| Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | inactive group metadata 삭제 | yes | live member가 있으면 force 없이는 reject |
+| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/scale` | stream 전체 shard scale-out/in migration 시작 | yes | active migration or same target is rejected/no-op |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing` | producer 라우팅 메타데이터 조회 | no | not required |
 | Admin | `PATCH` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` | server-side consumer `maxConcurrency` 변경 | yes | same policy returns current policy |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | migration 상태 조회 | no | not required |
@@ -108,17 +112,16 @@ Common status codes:
 ### Create Group
 
 ```http
-POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+POST /coord/v1/streams/{streamPrefix}
 ```
 
-Creates initial group metadata and the configured shard count. Member startup, local YAML, producers, and consumers cannot create group metadata directly.
+초기 stream shard metadata와 shard count를 생성한다. 공식 create path는 `streamPrefix`만 받는다. Consumer group은 consumer runtime configuration에서 오며 heartbeat를 통해 수렴한다.
 
 Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `initialShardCount` | no | Initial shard count. Omitted value uses coordinator `defaults.initial-shard-count`. |
-| `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Default member consumer worker limit. Omitted value uses coordinator `defaults.consumer-max-concurrency`. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `reason` | no | Human-readable change reason. |
 
@@ -126,16 +129,14 @@ Response summary:
 
 | Field | Meaning |
 | --- | --- |
-| `streamPrefix` / `consumerGroup` | Created group identifier. |
-| `groupEpoch` | Initial group epoch. |
-| `metadataVersion` | Initial metadata version. |
+| `streamPrefix` | 생성된 stream prefix. |
 | `shardCount` | Stored shard count. |
-| `consumerConcurrencyPolicy` | Stored server-side consumer concurrency policy. |
+| `metadataVersion` | 생성된 coordinator metadata version. |
 
 Duplicate request behavior:
 
-* 같은 `{streamPrefix, consumerGroup}` metadata가 이미 있으면 `409 Conflict`로 거절한다.
-* 기존 metadata 조회는 `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`를 사용한다.
+* stream prefix에 coordinator metadata가 이미 있으면 `409 Conflict`로 거절한다.
+* `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`는 이전 automation 호환용으로만 남긴다.
 
 ### Get Group Metadata
 
@@ -158,6 +159,35 @@ Response summary:
 | `activeMigration` | Active migration summary or null. |
 | `targetAssignmentSummary` | Desired ownership summary. |
 | `currentAssignmentSummary` | Member-reported ownership summary. |
+
+### Delete Group
+
+```http
+DELETE /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+```
+
+Inactive group의 coordinator metadata를 삭제한다. Live member가 정상 leave할 수 없는 운영 복구 상황에서만 `force=true`를 사용한다.
+
+Request body:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `requestedBy` | yes | Operator or automation identity for audit. |
+| `reason` | yes | Human-readable delete reason. |
+| `force` | no | Live member가 남아 있어도 삭제할지 여부. |
+
+Response summary:
+
+| Field | Meaning |
+| --- | --- |
+| `streamPrefix` / `consumerGroup` | 삭제된 group identifier. |
+| `metadataVersion` | 삭제 직전 metadata version. |
+| `shardCount` | 삭제 직전 shard count. |
+
+Failure behavior:
+
+* group이 없으면 `404 Not Found`와 `GROUP_NOT_FOUND`를 반환한다.
+* live member가 있고 `force=false`이면 `422 Unprocessable Entity`로 거절한다.
 
 ### Get Producer Routing Metadata
 
@@ -187,33 +217,37 @@ Response summary:
 | `streamKeyPattern` | Redis Stream key pattern with `{shardIndex}` placeholders. |
 | `shards` | Concrete shard keys and Redis Cluster slots. |
 
-### Scale Group
+### Scale Stream
 
 ```http
-POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
+POST /coord/v1/streams/{streamPrefix}/scale
 ```
 
-Starts shard scale-out or scale-in by creating a next resharding. This is the only supported shard count mutation path. For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.
+Stream prefix의 shard scale-out/in을 시작한다. Consumer group은 이 요청 path에 포함하지 않는다. 해당 stream을 읽는 모든 consumer group은 다음 heartbeat에서 변경된 shard set을 보고 각자 assignment를 재계산한다.
+
+For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.
 
 Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `targetShardCount` | yes | New shard count. Must be positive and different from current active shard count. |
-| `consumerConcurrencyPolicy.defaultMaxConcurrency` | no | Optional server-side consumer worker limit update in the same metadata change. |
 | `reason` | yes | Human-readable change reason. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `deprecatedAfter` | no | Operational hint for rollback/drain window. |
+
+stream-level scale request에는 `consumerConcurrencyPolicy`를 넣지 않는다. consumer concurrency는 group runtime policy이므로 group-scoped consumer concurrency endpoint에서 별도로 관리한다.
+
+Compatibility note: 현재 구현 단계에서는 `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale`도 남아 있지만, 운영자가 사용할 공식 scale path는 stream-scoped endpoint이다.
 
 Response summary:
 
 | Field | Meaning |
 | --- | --- |
-| `reshardingId` | Created resharding id. |
-| `fromShardCount` / `toShardCount` | Old/new shard counts. |
-| `state` | Initial migration state, usually `PREPARING`. |
-| `groupEpoch` | Group epoch after metadata mutation. |
-| `assignmentEpoch` | Assignment epoch before or after recompute depending on loop timing. |
+| `streamPrefix` | scale 대상 stream prefix. |
+| `targetShardCount` | 요청한 shard count. |
+| `affectedConsumerGroups` | metadata가 변경된 consumer group 목록. |
+| `migrations[]` | group별 migration record. 각 group은 heartbeat 응답으로 수렴한다. |
 
 Duplicate request behavior:
 
@@ -321,7 +355,7 @@ Request body:
 | --- | --- | --- |
 | `protocolVersion` | yes | Coordinator-module coordination version carried by the heartbeat request. |
 | `requestId` | yes | Request trace and retry id. |
-| `memberId` | yes | Must match path parameter. Runtime-start UUID that identifies this member incarnation. |
+| `memberId` | yes | Must match path parameter. Runtime member id derived from pod IP context by default. |
 | `memberEpoch` | yes | `0` means join/rejoin, `-1` means leave, positive value means active member epoch. |
 | `metadataVersion` | yes | Member's cached metadata version. |
 | `runtimeConsumerCapacity.runtimeMaxConcurrency` | yes | Process-local maximum consumer workers. Does not change server-side `maxConcurrency`. |

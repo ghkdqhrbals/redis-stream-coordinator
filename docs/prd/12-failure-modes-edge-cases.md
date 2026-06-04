@@ -195,6 +195,14 @@ It also covers temporary coordinator loss:
 
 The coordinator cannot control Kubernetes readiness, service endpoint propagation, or external load balancers. It only owns process-local terminating state and Redis critical sections.
 
+Implementation guardrails:
+
+* `CoordinatorShutdownGate` enters terminating mode on Spring context shutdown.
+* `@CriticalSection` service methods acquire the local monitor, then pass the shutdown gate, then acquire the Redis mutex.
+* New heartbeat/admin mutations after terminating mode receive `503 COORDINATOR_TERMINATING` and should retry against another coordinator instance.
+* Already-entered short critical sections are allowed to finish so their Redis write and mutex release can complete.
+* Event-loop ticks stop scheduling state transitions after terminating mode starts.
+
 | Edge case | Risk | Required behavior |
 | --- | --- | --- |
 | Old and new coordinators both receive traffic | Concurrent metadata mutation | Both must use the same Redis mutex and store revision CAS |
@@ -247,9 +255,10 @@ Refresh rules:
 | Coordinator unavailable and routing cache is valid | Publish would stop unnecessarily | Continue publishing with cached routing metadata |
 | Coordinator unavailable and routing cache is expired | Stale routing can continue forever | Fail publish with retryable coordinator-unavailable error |
 | Coordinator adds shards but producer has not refreshed yet | Producer keeps writing to the old shard count | Continue with cached route until refresh; refresh interval/cache TTL bounds propagation delay |
+| Coordinator scales in shards but producer has stale routing | Producer may target a removed shard | Producer `XADD` uses `NOMKSTREAM`; missing removed shard keys fail instead of being recreated, routing cache is invalidated, and the default second attempt refreshes routing before retry |
 | Lower `metadataVersion` response | Redis metadata rollback or stale coordinator response | Treat as metadata sync. Downgrade only when the coordinator explicitly returns current routing metadata |
 | Higher `metadataVersion` response | Local route is stale | Replace cache |
-| Publish fails after uncertain `XADD` | Duplicate records on retry | Keep default publish attempts conservative; application owns event idempotency |
+| Publish fails after uncertain `XADD` | Duplicate records on retry | Default retry is one refresh-and-retry attempt; application owns event idempotency |
 | Shard scale happens during produce | Same partition key can route differently | Duplicate-sensitive workloads must quiesce producers before scale |
 
 ## Redis Metadata Volatility and Corruption

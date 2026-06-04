@@ -18,7 +18,8 @@ The reason for this module is practical: Redis Stream is useful as a lightweight
 10. [RedisStream Spring Boot Starter and Integration Contract](prd/10-redisstream-spring-boot-starter.md)
 11. [Versioning and Compatibility Policy](prd/11-versioning-compatibility.md)
 12. [Failure Modes and Edge Cases](prd/12-failure-modes-edge-cases.md)
-13. [Scalar API Reference](../api.html)
+13. [Terraform and GitOps Governance](prd/13-terraform-governance.md)
+14. [Scalar API Reference](../api.html)
 
 ## Why This Exists
 
@@ -41,8 +42,8 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Use a central Group Coordinator.
 * Identify a group from `{streamPrefix, consumerGroup}` in the API path instead of hard-coding group identity in coordinator YAML.
 * Let the coordinator expire members whose heartbeat age exceeds `member-lease-ttl`, fence stale owners, and recalculate target assignment.
-* Let member runtimes create their own UUID member IDs while the coordinator owns registration state, epochs, and fencing.
-* For annotation-based consumers, treat `@StreamListener(concurrency = "N")` as `N` logical coordinator members in the same application process. Each logical member has its own generated `memberId`, heartbeat loop, Redis consumer name, assignment state, and shard ownership.
+* Let member runtimes derive their own member IDs from pod IP context while the coordinator owns registration state, epochs, and fencing.
+* For annotation-based consumers, treat `@StreamListener(concurrency = "N")` as `N` logical coordinator members in the same application process. Each logical member has its own pod-IP-based `memberId` with a concurrency suffix, heartbeat loop, Redis consumer name, assignment state, and shard ownership.
 * Store shard ownership as coordinator-calculated target assignment and member-reported current assignment.
 * Require revoke-before-assign: a shard is not assigned to a new live member until the previous owner has acknowledged revocation or expired.
 * Run rebalance as member-level reconciliation, not a group-wide stop-the-world barrier.
@@ -58,6 +59,7 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Do not claim exactly-once side effects. Business side effects cannot be committed atomically with Redis Stream ACK across arbitrary databases, Redis writes, HTTP calls, or external APIs.
 * The same partition key can route to a different Redis Stream shard after shard count changes.
 * Version public APIs, coordinator-module compatibility, and metadata schema explicitly.
+* Prefer Terraform or another GitOps workflow for production admin mutations. Terraform records desired state and approval history; coordinator audit logs remain the runtime evidence for actual API calls, failed attempts, forbidden requests, request ids, caller identity, and request body fingerprints.
 
 ## Success Criteria
 
