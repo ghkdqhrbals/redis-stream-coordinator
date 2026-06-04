@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Redis Stream Coordinator Access</title>
+    <link rel="stylesheet" href="/console/styles.css">
+</head>
+<body>
+<main class="access-shell">
+    <section class="access-header">
+        <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true">RC</div>
+            <div>
+                <h1>Access Control</h1>
+                <p>READ / WRITE authorization model</p>
+            </div>
+        </div>
+        <a class="ghost-link" href="/console">Monitoring Console</a>
+    </section>
+
+    <section class="access-grid">
+        <article class="access-card">
+            <h2>Current Session</h2>
+            <form id="accessLoginForm" class="access-login-form">
+                <label>
+                    Username
+                    <input id="accessUsername" autocomplete="username">
+                </label>
+                <label>
+                    Password
+                    <input id="accessPassword" type="password" autocomplete="current-password">
+                </label>
+                <button type="submit">Sign in</button>
+            </form>
+            <dl class="access-session">
+                <div>
+                    <dt>Username</dt>
+                    <dd id="sessionUsername">-</dd>
+                </div>
+                <div>
+                    <dt>Roles</dt>
+                    <dd id="sessionRoles">-</dd>
+                </div>
+            </dl>
+            <p id="accessError" class="form-error" role="alert"></p>
+        </article>
+
+        <article class="access-card">
+            <h2>Role Contract</h2>
+            <table class="access-table">
+                <thead>
+                <tr>
+                    <th>Role</th>
+                    <th>Allowed APIs</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><span class="role-pill read">READ</span></td>
+                    <td>Monitoring, Grafana datasource, health, compatibility, and message inspection APIs.</td>
+                </tr>
+                <tr>
+                    <td><span class="role-pill write">WRITE</span></td>
+                    <td>All READ APIs plus coordinator control-plane APIs such as create, delete, scale, rollback, and producer routing metadata.</td>
+                </tr>
+                <tr>
+                    <td><span class="role-pill member">MEMBER</span></td>
+                    <td>Consumer heartbeat API when member API authentication is enabled.</td>
+                </tr>
+                </tbody>
+            </table>
+        </article>
+
+        <article class="access-card wide">
+            <h2>Configuration Example</h2>
+            <pre class="config-block"><code>coordinator:
+  api:
+    users:
+      - username: admin
+        password: ${COORDINATOR_WRITE_PASSWORD}
+        roles: [WRITE]
+      - username: grafana
+        password: ${COORDINATOR_READ_PASSWORD}
+        roles: [READ]
+      - username: consumer
+        password: ${COORDINATOR_MEMBER_PASSWORD}
+        roles: [MEMBER]</code></pre>
+        </article>
+    </section>
+</main>
+<script src="/console/access.js"></script>
+</body>
+</html>

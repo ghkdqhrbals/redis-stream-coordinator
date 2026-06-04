@@ -56,7 +56,7 @@ class CoordinatorRebalanceStateMachineFlowTest {
                 { assertEquals(setOf("member-a", "member-c"), rebalancedTargets.keys) },
                 { assertTrue(rebalancedTargets.getValue("member-a").containsAll(beforeExpiration.getValue("member-a"))) },
                 { assertTrue(rebalancedTargets.getValue("member-c").containsAll(beforeExpiration.getValue("member-c"))) },
-                { assertTargetCoverage(rebalancedTargets, (0 until 6).map { ShardId(1, it) }.toSet()) },
+                { assertTargetCoverage(rebalancedTargets, (0 until 6).map { ShardId(it) }.toSet()) },
                 { assertEquals(3, rebalancedTargets.getValue("member-a").size) },
                 { assertEquals(3, rebalancedTargets.getValue("member-c").size) },
                 { assertEquals(rebalancedTargets.getValue("member-a"), firstMemberA.assignment.assignedShards) },
@@ -121,7 +121,7 @@ class CoordinatorRebalanceStateMachineFlowTest {
             assertEquals(detected.groupEpoch, detected.assignmentEpoch)
             assertEquals(GroupState.RECONCILING, detected.state)
             assertEquals(MemberState.EXPIRED, harness.memberState("member-b"))
-            assertEquals((0 until 4).map { ShardId(1, it) }.toSet(), memberA.assignment.assignedShards)
+            assertEquals((0 until 4).map { ShardId(it) }.toSet(), memberA.assignment.assignedShards)
         }
     }
 
@@ -149,7 +149,7 @@ class CoordinatorRebalanceStateMachineFlowTest {
                 { assertTrue(after.getValue("member-c").containsAll(before.getValue("member-c"))) },
                 { assertEquals(3, after.getValue("member-a").size) },
                 { assertEquals(3, after.getValue("member-c").size) },
-                { assertTargetCoverage(after, (0 until 6).map { ShardId(1, it) }.toSet()) },
+                { assertTargetCoverage(after, (0 until 6).map { ShardId(it) }.toSet()) },
                 { assertTrue(harness.assignments().invariantViolations.isEmpty()) },
             )
         }
@@ -209,6 +209,7 @@ private class RebalanceFlowHarness(
             liveMemberIds.forEach { heartbeat(it) }
         }
         clock.advance(Duration.ofSeconds(1))
+        service.tick()
         return service.getGroup(streamPrefix, consumerGroup)
     }
 
@@ -242,7 +243,6 @@ private class RebalanceFlowHarness(
             memberId = memberId,
             memberName = memberId,
             memberEpoch = if (joining) 0 else consumer.memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = consumer.metadataVersion,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,

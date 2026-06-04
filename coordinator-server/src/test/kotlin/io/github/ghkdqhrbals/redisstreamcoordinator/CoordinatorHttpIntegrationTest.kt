@@ -7,6 +7,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
 
+import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -69,12 +71,61 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `monitoring console is exposed without triggering api basic auth`() {
+        mockMvc.perform(get("/console"))
+            .andExpect(status().isOk)
+
+        mockMvc.perform(get("/console/index.html"))
+            .andExpect(status().isOk)
+            .andExpect(content().string(containsString("Redis Stream Coordinator")))
+            .andExpect(content().string(containsString("/console/app.js")))
+
+        mockMvc.perform(get("/console/app.js"))
+            .andExpect(status().isOk)
+            .andExpect(content().string(containsString("redisStreamCoordinator.console.auth")))
+    }
+
+    @Test
+    fun `monitoring session verifies credentials without reading coordinator state`() {
+        mockMvc.perform(get("/coord/v1/monitoring/session"))
+            .andExpect(status().isUnauthorized)
+
+        mockMvc.perform(
+            get("/coord/v1/monitoring/session")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.authenticated").value(true))
+            .andExpect(jsonPath("$.username").value("admin"))
+    }
+
+    @Test
     fun `basic auth scheme is parsed case insensitively`() {
         mockMvc.perform(
             get("/coord/v1/monitoring/groups")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth().replaceFirst("Basic ", "basic ")),
         )
             .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `monitoring exposes coordination version compatibility lifecycle`() {
+        mockMvc.perform(
+            get("/coord/v1/monitoring/compatibility")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.currentCoordinationVersion").value(1))
+            .andExpect(jsonPath("$.supportedCoordinationVersions.min").value(1))
+            .andExpect(jsonPath("$.supportedCoordinationVersions.max").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].version").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].status").value("ACTIVE"))
+            .andExpect(jsonPath("$.coordinationVersions[0].introducedIn.major").value(0))
+            .andExpect(jsonPath("$.coordinationVersions[0].introducedIn.minor").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].introducedIn.patch").value(0))
+            .andExpect(jsonPath("$.coordinationVersions[0].minimumSupportedUntil.major").value(1))
+            .andExpect(jsonPath("$.coordinationVersions[0].minimumSupportedUntil.minor").value(0))
+            .andExpect(jsonPath("$.coordinationVersions[0].minimumSupportedUntil.patch").value(0))
     }
 
     @Test
@@ -137,12 +188,11 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.streamPrefix").value("http-routing"))
             .andExpect(jsonPath("$.consumerGroup").value("orders-consumer"))
             .andExpect(jsonPath("$.metadataVersion").value(1))
-            .andExpect(jsonPath("$.activeWriteVersion").value(1))
-            .andExpect(jsonPath("$.shardCount").value(2))
-            .andExpect(jsonPath("$.streamKeyPattern").value("http-routing:v{streamVersion}:shard:{shardIndex}"))
+                        .andExpect(jsonPath("$.shardCount").value(2))
+            .andExpect(jsonPath("$.streamKeyPattern").value("http-routing:{shardIndex}"))
             .andExpect(jsonPath("$.shards.length()").value(2))
-            .andExpect(jsonPath("$.shards[0].streamKey").value("http-routing:v1:shard:0"))
-            .andExpect(jsonPath("$.shards[1].streamKey").value("http-routing:v1:shard:1"))
+            .andExpect(jsonPath("$.shards[0].streamKey").value("http-routing:0"))
+            .andExpect(jsonPath("$.shards[1].streamKey").value("http-routing:1"))
     }
 
     @Test
@@ -171,9 +221,7 @@ class CoordinatorHttpIntegrationTest {
         )
             .andExpect(status().isAccepted)
             .andExpect(jsonPath("$.reshardingId").exists())
-            .andExpect(jsonPath("$.fromVersion").value(1))
-            .andExpect(jsonPath("$.toVersion").value(2))
-            .andExpect(jsonPath("$.toShardCount").value(4))
+                                    .andExpect(jsonPath("$.toShardCount").value(4))
 
         mockMvc.perform(
             get("/coord/v1/streams/http-scale-routing/groups/orders-consumer/producer-routing")
@@ -181,11 +229,10 @@ class CoordinatorHttpIntegrationTest {
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.metadataVersion").value(2))
-            .andExpect(jsonPath("$.activeWriteVersion").value(2))
-            .andExpect(jsonPath("$.shardCount").value(4))
+                        .andExpect(jsonPath("$.shardCount").value(4))
             .andExpect(jsonPath("$.shards.length()").value(4))
-            .andExpect(jsonPath("$.shards[0].streamKey").value("http-scale-routing:v2:shard:0"))
-            .andExpect(jsonPath("$.shards[3].streamKey").value("http-scale-routing:v2:shard:3"))
+            .andExpect(jsonPath("$.shards[0].streamKey").value("http-scale-routing:0"))
+            .andExpect(jsonPath("$.shards[3].streamKey").value("http-scale-routing:3"))
 
         mockMvc.perform(
             get("/coord/v1/monitoring/streams/http-scale-routing/groups/orders-consumer/migrations")
@@ -223,7 +270,7 @@ class CoordinatorHttpIntegrationTest {
                         heartbeat(
                             "member-a",
                             memberEpoch = -1,
-                            ownedShards = setOf(ShardId(1, 0)),
+                            ownedShards = setOf(ShardId(0)),
                         ),
                     ),
                 ),
@@ -280,7 +327,6 @@ class CoordinatorHttpIntegrationTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,
@@ -359,7 +405,6 @@ class CoordinatorAuthenticatedMemberHttpIntegrationTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = memberEpoch,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,

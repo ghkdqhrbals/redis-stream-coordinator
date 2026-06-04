@@ -4,23 +4,11 @@
 
 Redis Stream Coordinator separates the control plane from the data plane. The coordinator decides which member should own each Redis Stream shard. Consumer applications still perform message reads, business handling, retry, DLQ, and acknowledgement.
 
-```mermaid
-flowchart LR
-  Producer[Producer Application] -->|routing request| Coordinator
-  Producer -->|XADD| RedisStreams[(Redis Stream Shards)]
-  Consumer[Consumer Application] -->|heartbeat| Coordinator
-  Consumer -->|XREADGROUP / XACK| RedisStreams
-  Coordinator -->|metadata read/write| RedisState[(Redis Coordinator Metadata)]
-  Coordinator -->|optional provisioning| RedisStreams
-  Operator[Operator / Automation] -->|Admin API| Coordinator
-  Monitor[Dashboards / Alerts] -->|Monitoring API| Coordinator
-```
-
 ## Responsibilities
 
 ### Coordinator Server
 
-* Own group metadata and stream version metadata.
+* Own group metadata and shard metadata.
 * Track member liveness from heartbeats.
 * Fence stale or expired owners.
 * Calculate sticky target assignment.
@@ -29,7 +17,7 @@ flowchart LR
 * Start, monitor, and roll back shard count migrations.
 * Serve producer routing metadata.
 * Expose monitoring APIs and Micrometer metrics.
-* Serialize state changes through Redis state mutex and store revision checks.
+* Serialize state changes through the Redis mutex and store revision checks.
 
 ### Consumer Module
 
@@ -51,10 +39,9 @@ flowchart LR
 
 ### Redis Metadata Store
 
-* Store group metadata, stream versions, assignments, member state, audit events, and derived projections.
-* Use Cluster-safe hash-tagged keys.
-* Use Lua scripts and store revision checks for atomic aggregate/projection updates.
-* Use a Redis mutex to serialize coordinator critical sections in open source deployments.
+* Store group metadata, shard count, assignments, member state, resharding state, audit pointers, and derived monitoring columns.
+* Keep the canonical `GroupMetadata` aggregate as JSON in a single Redis hash key per `{streamPrefix, consumerGroup}`.
+* Use Redis mutex and `storeRevision` compare-and-set updates to reject stale writers.
 
 ## Control-Plane Flow
 
@@ -66,13 +53,13 @@ sequenceDiagram
     participant R as Redis Stream
 
     M->>C: Heartbeat(memberId, ownedShards, revokingShards, capacity)
-    C->>S: Acquire state mutex
-    C->>S: Read latest group metadata
+    C->>S: Acquire Redis mutex
+    C->>S: Read latest group metadata hash
     C->>C: Validate ownership report
     C->>C: Expire stale members if needed
     C->>C: Recalculate target assignment if metadata changed
     C->>S: Save with storeRevision check
-    C->>S: Release state mutex
+    C->>S: Release Redis mutex
     C-->>M: HeartbeatResponse(assignment, epochs, fencing status)
     M->>R: Start/stop reads according to assigned shards
 ```
@@ -87,21 +74,22 @@ The coordinator event loop runs periodically and performs operational reconcilia
 * update monitoring projections,
 * record invariant violations.
 
-The event loop also uses the Redis state mutex. If another coordinator instance already owns the mutex, a tick can be skipped safely because the next tick or another instance can continue reconciliation.
+The event loop uses the same Redis mutex and store revision boundary as heartbeat and admin requests. If another coordinator instance updates the same group first, the losing instance reloads or skips that group and the next tick continues reconciliation.
 
-## State Mutex
+## State Serialization
 
-The Redis-backed state mutex is intended to make open source deployments easier to operate. Users should not need to perfectly enforce `replicas=1`, Kubernetes `Recreate`, or blue/green active-passive behavior before trying the project.
+Metadata state changes are serialized by the Redis mutex and store revision CAS for the group. Users should not need to perfectly enforce `replicas=1`, Kubernetes `Recreate`, or blue/green active-passive behavior before trying the project.
 
 State-changing requests follow this order:
 
-1. acquire mutex,
-2. read the latest Redis state,
+1. acquire Redis mutex,
+2. read the latest group metadata hash,
 3. validate and process the request,
 4. save with store revision compare-and-set,
-5. release mutex.
+5. release mutex,
+6. return a response derived from the written metadata.
 
-The mutex provides request-level serialization. Store revision checks remain as a final stale-write guard.
+Store revision checks remain as a final stale-write guard.
 
 ## Rebalance Model
 
@@ -122,16 +110,16 @@ This avoids a global stop-the-world barrier and keeps unaffected members consumi
 | --- | --- | --- |
 | Member heartbeat timeout | Mark member `EXPIRED`, fence its ownership, recalculate assignment | Rejoin with full heartbeat if it comes back |
 | Stale ownership report | Reject or fence the member depending on severity | Stop reads and rejoin |
-| Coordinator restart | Reload state from Redis and continue from persisted epochs | Continue heartbeating |
+| Coordinator restart | Reload state from the Redis metadata key and continue from stored epochs | Continue heartbeating |
 | Redis metadata outage | Fail control-plane writes and report degraded health | Keep local policy or stop based on application risk policy |
-| Resharding provisioning failure | Keep migration in failed/preparing state and expose it through monitoring | Continue reading existing readable versions |
+| Resharding provisioning failure | Keep migration in failed/preparing state and expose it through monitoring | Continue reading existing readable shard set |
 
 ## Consistency Boundaries
 
-* Coordinator metadata updates are serialized by mutex and protected by store revision checks.
+* Coordinator metadata updates are serialized by Redis mutex and protected by store revision checks.
 * Redis Stream data-plane messages are not part of the coordinator metadata transaction.
 * Producer publish and consumer business processing remain at-least-once.
-* Monitoring projections are derived from persisted coordinator state and can be rebuilt.
+* Monitoring projections are derived from persisted Redis coordinator state and can be rebuilt.
 
 ## Deployment Shape
 
@@ -139,6 +127,6 @@ The recommended deployment is:
 
 * one coordinator service behind a stable HTTP endpoint,
 * Redis metadata store reachable from coordinator instances,
-* optional multiple coordinator replicas with Redis state mutex enabled,
+* optional multiple coordinator replicas using Redis state mutex,
 * consumer and producer applications using the Spring Boot starter,
 * external dashboards consuming actuator metrics and monitoring APIs.

@@ -15,7 +15,7 @@
 * coordinator가 group metadata, target assignment, member current assignment를 source of truth로 관리한다.
 * member는 직접 shard owner를 최종 결정하지 않는다. coordinator가 내려준 assigned/pending shard assignment에 수렴한다.
 * 권한 획득은 member의 무한 루프가 아니라 coordinator event loop와 heartbeat/reconciliation loop로 구동한다.
-* shard count 변경은 같은 stream version의 in-place 변경이 아니라 새 stream version migration으로 처리한다.
+* shard count 변경은 in-place key rewrite가 아니라 resharding으로 처리한다.
 * coordinator는 KIP-848 스타일 rebalance control plane만 담당한다.
 * message read/ack, handler, retry, DLQ, idempotency marker는 member data-plane 책임으로 분리한다.
 
@@ -31,7 +31,7 @@
 * KIP-848 대응 범위와 구현/비구현 목록은 `prd/08-kip848-implementation-coverage.md`에만 둔다.
 * heartbeat request/response와 member lifecycle flow는 `prd/02-coordinator-architecture.md`에만 둔다.
 * group state, epoch, target/current assignment data model은 `prd/03-group-assignment-model.md`에만 둔다.
-* shard scale-out/in, stream version migration, Admin API는 `prd/04-stream-version-migration.md`에만 둔다.
+* shard scale-out/in, resharding, Admin API는 `prd/04-resharding-routing.md`에만 둔다.
 * coordinator-owned metrics, logs, config, Redis key naming은 `prd/06-data-config-observability.md`에만 둔다.
 * 전체 HTTP endpoint catalog는 `prd/09-api-endpoints.md`에만 둔다.
 * 같은 내용을 여러 문서에 복사하지 말고, entrypoint나 다른 문서에서는 링크와 짧은 요약만 둔다.

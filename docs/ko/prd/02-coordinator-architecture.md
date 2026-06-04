@@ -7,16 +7,17 @@ sequenceDiagram
     autonumber
     participant M as Member
     participant Coord as Coordinator
-    participant Store as Redis Coordinator Store
+    participant Store as Redis Metadata Store
     participant Stream as Redis Stream Shards
 
-    M->>M: memberId UUID 생성
+    M->>M: pod IP context에서 memberId 생성
     M->>Coord: HeartbeatRequest ownedShards와 revoke ack 보고
-    Coord->>Store: member heartbeat와 current assignment 저장
-    Coord->>Store: group metadata와 member heartbeat 읽기
+    Coord->>Store: Redis mutex 획득
+    Coord->>Store: group metadata hash load
     Coord->>Coord: group epoch 변경 여부 판단
     Coord->>Coord: target assignment 계산
     Coord->>Store: target assignment와 assignment epoch 저장
+    Coord->>Store: Redis mutex release
     Coord-->>M: HeartbeatResponse assignment assigned/pending 전달
     M->>Stream: revoke 대상 shard 신규 read 중단
     M->>Coord: 다음 heartbeat로 revoke 완료와 ownedShards 보고
@@ -32,7 +33,7 @@ sequenceDiagram
 * Coordinator API로 들어온 `{streamPrefix, consumerGroup}`을 group identifier로 사용한다.
 * group metadata 변경을 event loop에서 처리한다.
 * member heartbeat와 `member-lease-ttl`을 보고 join/leave/fence를 판단한다.
-* target assignment를 계산하고 Redis에 저장한다.
+* target assignment를 계산하고 Redis metadata hash에 저장한다.
 * member current assignment를 보고 revoke 완료 여부를 확인한다.
 * revoke 완료 전 해당 shard를 새 member에게 assign하지 않는다.
 
@@ -44,14 +45,13 @@ sequenceDiagram
 
 ### Coordinator Store
 
-* Redis keyspace에 group metadata, member metadata, target assignment, current assignment를 저장한다.
-* group metadata와 assignment는 durable key이다.
-* heartbeat와 ephemeral liveness는 TTL key이다.
-* Redis mailbox 구현을 선택하면 heartbeat request와 response를 member별 key로 저장하되, 프로토콜 의미는 direct heartbeat request/response와 동일하게 유지한다.
+* Redis에 group metadata, member metadata, target assignment, current assignment를 저장한다.
+* `{streamPrefix, consumerGroup}` metadata hash의 `aggregate` field가 canonical source of truth이다.
+* Redis mutex와 `storeRevision` compare-and-set으로 stale writer를 막는다.
 
 ### Member Runtime
 
-* runtime 시작 시 `memberId` UUID를 만든다.
+* runtime 시작 시 pod IP context에서 `memberId`를 만든다. Kubernetes에서는 Downward API로 `status.podIP`를 `POD_IP` 환경변수로 노출하는 것을 권장한다.
 * coordinator heartbeat API로 현재 owned shard, revocation progress, revoke ack를 보고한다.
 * 같은 heartbeat response에서 member epoch, assigned/pending shard, fencing status를 받는다.
 * revoke 대상 shard는 신규 read를 멈추고 in-flight를 비운다.
@@ -86,7 +86,7 @@ steps:
   7. metrics publish
 ```
 
-Redis-backed deployment에서는 event loop와 state 접근 API가 먼저 Redis state mutex를 획득한다. 같은 Redis state store를 바라보는 coordinator pod가 여러 개 있어도 한 순간에 하나의 request 또는 tick만 state를 읽고 처리하고 저장한다. Mutex를 획득하지 못한 tick은 skip되고, request는 짧게 대기한 뒤 계속 실패하면 retry 가능한 `503`을 반환한다.
+Event loop와 state 접근 API는 같은 Redis mutex와 `storeRevision` CAS boundary를 사용한다. 같은 Redis metadata store를 바라보는 coordinator pod가 여러 개 있어도 같은 group은 mutex와 revision check로 직렬화된다. 먼저 update한 pod가 저장하고, 늦은 pod는 reload 후 retry하거나 conflict를 반환한다.
 
 ## Heartbeat Reconciliation Plane
 
@@ -99,7 +99,7 @@ POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/
 KIP-848 mapping:
 
 * `GroupId`: HTTP path의 `{streamPrefix, consumerGroup}`이다.
-* `MemberId`: HTTP path의 `{memberId}`이며 member runtime이 생성한 UUID이다.
+* `MemberId`: HTTP path의 `{memberId}`이며 member runtime이 pod IP context에서 생성한다.
 * `MemberEpoch=0`: join 또는 rejoin heartbeat이다. member는 full state를 보내야 한다.
 * `MemberEpoch=-1`: leave heartbeat이다. member는 더 이상 shard를 소유하지 않겠다는 의사를 보낸다.
 * `TopicPartitions`: Redis Stream에서는 `ownedShards`이다. member가 지금 사용할 수 있다고 보고하는 shard set이다.
@@ -119,7 +119,6 @@ Heartbeat request 예시:
   "requestId": "hb-member-a-000042",
   "memberId": "member-a",
   "memberEpoch": 11,
-  "rebalanceTimeoutMs": 60000,
   "metadataVersion": 8,
   "runtimeConsumerCapacity": {
     "runtimeMaxConcurrency": 12,
@@ -127,14 +126,12 @@ Heartbeat request 예시:
   },
   "ownedShards": [
     {
-      "streamVersion": 2,
       "shardIndex": 0,
       "state": "OWNED"
     }
   ],
   "revokingShards": [
     {
-      "streamVersion": 1,
       "shardIndex": 3,
       "state": "DRAINING",
       "inFlight": 2,
@@ -153,6 +150,7 @@ Heartbeat response 예시:
   "memberId": "member-a",
   "memberEpoch": 12,
   "heartbeatIntervalMs": 3000,
+  "rebalanceTimeoutMs": 60000,
   "groupEpoch": 12,
   "assignmentEpoch": 12,
   "metadataVersion": 9,
@@ -160,10 +158,10 @@ Heartbeat response 예시:
   "assignment": {
     "error": "NONE",
     "assignedShards": [
-      {"streamVersion": 2, "shardIndex": 0}
+      {"shardIndex": 0}
     ],
     "pendingShards": [
-      {"streamVersion": 2, "shardIndex": 2}
+      {"shardIndex": 2}
     ],
     "metadataVersion": 9
   }
@@ -174,11 +172,10 @@ Heartbeat response 예시:
 
 | Field | Required | Role |
 | --- | --- | --- |
-| `protocolVersion` | yes | Heartbeat schema version. incompatible version은 `UNSUPPORTED_PROTOCOL`로 거절한다. |
+| `protocolVersion` | yes | Coordinator-module coordination version. incompatible version은 `UNSUPPORTED_PROTOCOL`로 거절한다. |
 | `requestId` | yes | 중복 응답과 로그 추적용 id. |
-| `memberId` | yes | path의 `{memberId}`와 같아야 한다. member runtime 시작 시 생성한 UUID이며 이 runtime incarnation을 식별한다. coordinator는 이 id에 member epoch을 부여하고 fencing한다. |
+| `memberId` | yes | path의 `{memberId}`와 같아야 한다. starter는 기본적으로 pod IP context에서 이 값을 만들고 concurrency suffix를 붙인다. coordinator는 이 id에 member epoch을 부여하고 fencing한다. |
 | `memberEpoch` | yes | `0`이면 신규 join 또는 coordinator가 이미 `EXPIRED`/`FENCED`로 판단한 member의 rejoin, `-1`이면 leave, 양수이면 coordinator가 직전 response로 발급한 epoch이다. stale 값이면 `FENCED_MEMBER_EPOCH`, coordinator가 발급하지 않은 값이면 `INVALID_REQUEST` 대상이다. |
-| `rebalanceTimeoutMs` | first heartbeat required | revoke를 완료할 수 있는 최대 시간이다. coordinator config가 아니라 member heartbeat contract이며, 값이 바뀌지 않으면 생략할 수 있다. |
 | `metadataVersion` | yes | member가 캐시한 group metadata version. 낮으면 response의 assignment metadata version 기준으로 갱신한다. |
 | `runtimeConsumerCapacity` | yes | member runtime이 보고하는 처리 가능 상태. `runtimeMaxConcurrency`는 process local consumer worker limit이고, coordinator의 server-side `maxConcurrency`를 올릴 수 없다. |
 | `ownedShards` | yes | KIP-848의 `TopicPartitions`에 해당한다. member가 지금 read 가능하다고 보고하는 shard 목록이다. |
@@ -194,6 +191,7 @@ Heartbeat response 예시:
 | `memberId` | yes | path의 member id를 echo한다. |
 | `memberEpoch` | yes | member가 다음 heartbeat부터 사용해야 하는 epoch. |
 | `heartbeatIntervalMs` | yes | member가 다음 정상 heartbeat를 보내야 하는 server-side 권장 주기이다. |
+| `rebalanceTimeoutMs` | yes | coordinator-owned revoke/drain deadline이다. 이 시간 안에 revoke 완료 보고가 없으면 coordinator는 member를 fence하고 shard를 재할당할 수 있다. |
 | `groupEpoch` | yes | coordinator가 본 최신 group metadata epoch. |
 | `assignmentEpoch` | yes | target assignment가 계산된 epoch. |
 | `metadataVersion` | yes | 최신 metadata version. member cache가 낮으면 metadata를 갱신한다. |
@@ -212,7 +210,8 @@ KIP-848처럼 member는 response의 assignment와 자신의 local owned shard를
 * active member의 `memberEpoch=0` reset, 현재 epoch보다 큰 positive epoch, `-1` 외의 negative epoch은 `INVALID_REQUEST`로 거절한다.
 * 현재 epoch보다 낮은 positive epoch은 stale heartbeat로 보고 `FENCED_MEMBER_EPOCH`로 거절한다.
 * local `ownedShards`에는 있지만 `assignment.assignedShards`에 없는 shard는 revoke 대상이다. member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 되면 다음 heartbeat에 `revokingShards.state=REVOKED`로 보고한다.
-* `assignment.assignedShards`에는 있지만 local `ownedShards`에 없는 shard는 새로 read 가능한 shard이다.
+* `OK` response의 `assignment.assignedShards`에는 있지만 local `ownedShards`에 없는 shard는 새로 read 가능한 shard이다.
+* `SYNC_METADATA`와 `REVOKE_PENDING` response에서는 `assignment.assignedShards`에 신규 shard가 있어도 read를 시작하지 않는다. 이미 읽고 있던 shard 중 `assignedShards`에 남은 shard만 유지한다.
 * `assignment.pendingShards`는 target assignment에는 포함되지만 아직 이전 owner가 release하지 않은 shard이다. member는 pending shard를 read하면 안 된다.
 * 한 response에서 revoke와 신규 assign을 동시에 강제하지 않는다. pending shard는 이전 owner의 release가 확인된 뒤 다음 heartbeat에서 `assignedShards`로 이동한다.
 * revoke가 발생한 member는 다음 heartbeat interval을 기다리지 않고 즉시 heartbeat를 보내 revoke ack를 보고한다.
@@ -249,9 +248,11 @@ KIP-848처럼 member는 response의 assignment와 자신의 local owned shard를
 | --- | --- |
 | `OK` | request가 반영됐고 assignment를 적용할 수 있다. |
 | `RETRY` | coordinator가 일시적으로 처리하지 못했다. member는 현재 assignment만 처리하고 다음 heartbeat에 full state로 재시도한다. |
+| `SYNC_METADATA` | member local metadata view가 coordinator보다 높거나 다르다. response metadata version으로 낮추고 초과 ownership만 revoke/drain한다. 신규 shard read는 시작하지 않는다. |
+| `REVOKE_PENDING` | metadata version은 맞았지만 revoke-before-assign handoff가 아직 끝나지 않았다. drain을 계속하고 신규 shard read는 시작하지 않는다. |
 | `UNKNOWN_MEMBER_ID` | coordinator가 member를 모른다. member는 같은 `memberId`, `memberEpoch=0`, full state heartbeat로 rejoin한다. |
 | `FENCED_MEMBER_EPOCH` | member epoch이 coordinator state와 맞지 않는다. member는 모든 read/ack를 중단하고 rejoin한다. |
-| `UNSUPPORTED_PROTOCOL` | heartbeat protocol version이 호환되지 않는다. |
+| `UNSUPPORTED_PROTOCOL` | coordinator-module coordination version이 호환되지 않는다. |
 | `INVALID_REQUEST` | 필수 필드 누락, 잘못된 epoch, path/body 불일치 등 request validation 실패이다. |
 | `GROUP_AUTHORIZATION_FAILED` | group 접근 권한이 없다. |
 
@@ -268,7 +269,7 @@ sequenceDiagram
     participant N as New Member
     participant Store as Redis Store
 
-    N->>N: memberId UUID 생성
+    N->>N: pod IP context에서 memberId 생성
     N->>C: heartbeat memberEpoch=0 full state 보고
     C->>Store: member N 등록, memberEpoch 부여
     C->>Store: groupEpoch 증가

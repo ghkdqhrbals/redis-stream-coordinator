@@ -5,23 +5,21 @@
 | Entity | Description |
 | --- | --- |
 | Group | A `{streamPrefix, consumerGroup}` pair managed by the coordinator |
-| Stream Version | A numbered routing domain with a fixed shard count |
+| Shard Count | The number of Redis Stream shard keys managed for the group |
 | Shard | The minimum Redis Stream routing and ownership unit |
-| Member | A consumer runtime instance identified by `memberId` |
+| Member | A logical consumer runtime member identified by `memberId` |
 | Target Assignment | Coordinator-owned desired shard ownership |
 | Current Assignment | Member-reported applied ownership |
 | Group Epoch | Generation of group metadata changes |
 | Assignment Epoch | Generation of target assignment calculation |
 | Member Epoch | Generation used to fence stale member state |
-| Store Revision | Optimistic write guard for Redis-backed state updates |
+| Store Revision | Durable compare-and-set guard for metadata state updates |
 
 ## Metadata Ownership
 
 The coordinator owns:
 
-* stream versions and shard count,
-* active write version,
-* readable versions,
+* shard count,
 * member registry and lease timestamps,
 * target assignment,
 * accepted current assignment,
@@ -37,6 +35,16 @@ Members own:
 * ACK/NACK/XACKDEL policy,
 * local progress reporting,
 * local graceful shutdown.
+
+## Logical Member and Worker Capacity
+
+The design separates logical coordinator membership from local worker capacity.
+
+Annotation-based consumers use Kafka-style listener concurrency: `@StreamListener(concurrency = "4")` creates four logical coordinator members inside the same application process. The starter derives the base member ID from pod IP context, then appends member suffixes such as `-m0`, `-m1`, `-m2`, and `-m3`. Each logical member has its own heartbeat loop, Redis consumer name, assignment state, member epoch, metadata version, and shard ownership. Annotation listeners do not have a single-member toggle.
+
+Bean-based consumers can still register one coordinator member explicitly with `CoordinatorConsumerProperties.consumer(...)`. In that path, `runtimeMaxConcurrency` is local worker capacity for that one member. It controls how many handler executions or poll workers that member can run locally; it does not create additional coordinator members.
+
+This split keeps the ownership rule simple: the coordinator assigns shards to live members, while each member decides how to multiplex its owned shards across its local worker capacity.
 
 ## Assignment State
 
@@ -60,9 +68,9 @@ The coordinator compares both views to enforce safety:
 * new member joins,
 * member gracefully leaves,
 * member expires,
-* shard count migration changes readable versions or active write version,
+* shard count migration changes the managed shard set,
 * consumer concurrency policy affects assignment weight,
-* rollback changes stream version state.
+* rollback changes resharding state.
 
 ### Assignment Epoch
 
@@ -74,7 +82,7 @@ The coordinator compares both views to enforce safety:
 
 ### Store Revision
 
-`storeRevision` protects Redis state from stale overwrites. Even with the Redis state mutex, it remains useful as a final compare-and-set guard when a process resumes with an old snapshot.
+`storeRevision` protects Redis-backed group metadata from stale overwrites. It is incremented only with committed metadata updates and remains the final compare-and-set guard when a process resumes with an old snapshot.
 
 ## Sticky Assignment
 
@@ -124,3 +132,20 @@ The coordinator validates every heartbeat ownership report:
 * terminal duplicate revoke reports are ignored rather than treated as violations.
 
 Invalid ownership reports are fenced to prevent split ownership.
+
+## Ownership and Consumer Concurrency
+
+Shard ownership and consumer concurrency are intentionally separate:
+
+* a shard can have exactly one live owner at a time,
+* a consumer member can own many shards,
+* annotation listener `concurrency` creates logical coordinator members, not local workers inside a single member,
+* bean-based `runtimeMaxConcurrency` describes local worker capacity for one member, not a hard ownership limit,
+* `assignedMaxConcurrency` caps the coordinator-approved local worker capacity reported by one member,
+* concurrency can be used as a balancing weight, but the coordinator must not require shard count to be less than or equal to member concurrency,
+* when one member owns more shards than its worker count, the member must multiplex owned shards across local workers,
+* the built-in polling adapter must keep one active Redis read loop per shard at most, even when several local workers are available.
+
+For annotation listeners, `concurrency = 4` means four independently assigned coordinator members. For bean-based integrations, `runtimeMaxConcurrency = 4` means one member can run up to four local handler executions in parallel. Neither setting means a member can own only four shards.
+
+If one member owns more shards than it has available local workers, the built-in polling adapter rotates across owned shards. Later shard indexes must continue to be polled and processed; assignment imbalance must not create permanent shard starvation.

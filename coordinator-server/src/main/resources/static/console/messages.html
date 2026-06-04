@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Redis Stream Messages</title>
+    <link rel="stylesheet" href="/console/styles.css">
+</head>
+<body class="message-explorer-page">
+<main class="message-explorer-shell">
+    <section id="messageLoginView" class="message-login-panel">
+        <div>
+            <p class="eyebrow">Redis Stream Coordinator</p>
+            <h1>Message Explorer</h1>
+            <p class="page-subtitle">Sign in with a coordinator user that has monitor access.</p>
+        </div>
+        <form id="messageLoginForm" class="message-login-form">
+            <input id="messageUsername" autocomplete="username" placeholder="Username" required>
+            <input id="messagePassword" autocomplete="current-password" type="password" placeholder="Password" required>
+            <button id="messageLoginButton" type="submit">Sign in</button>
+        </form>
+        <p id="messageLoginError" class="form-error" role="alert"></p>
+    </section>
+
+    <section id="messageAppView" class="message-app hidden">
+        <header class="message-header">
+            <div>
+                <p class="eyebrow">Message Explorer</p>
+                <h1>Redis Stream Records</h1>
+                <p id="messageExplorerSubtitle" class="page-subtitle">Select a stream, consumer group, and shard.</p>
+            </div>
+            <div class="message-actions">
+                <button id="messageExplorerRefresh" class="ghost-button small" type="button">Refresh</button>
+                <button id="messageExplorerSignOut" class="ghost-button small" type="button">Sign out</button>
+            </div>
+        </header>
+
+        <section class="message-controls">
+            <label>
+                Stream / Consumer Group
+                <select id="messageGroupSelect"></select>
+            </label>
+            <label>
+                Shard
+                <select id="messageShardPicker"></select>
+            </label>
+            <label>
+                Direction
+                <select id="messageDirection">
+                    <option value="BACKWARD">Latest first</option>
+                    <option value="FORWARD">Oldest first</option>
+                </select>
+            </label>
+            <label>
+                Page size
+                <select id="messageLimit">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="250">250</option>
+                    <option value="500">500</option>
+                    <option value="1000">1000</option>
+                </select>
+            </label>
+        </section>
+
+        <section class="message-status-strip">
+            <article><span>Stream length</span><strong id="messageStreamLength">-</strong></article>
+            <article><span>Lag</span><strong id="messageLag">-</strong></article>
+            <article><span>Pending</span><strong id="messagePending">-</strong></article>
+            <article><span>End offset</span><strong id="messageEndOffset">-</strong></article>
+            <article><span>Consumer offset</span><strong id="messageConsumerOffset">-</strong></article>
+        </section>
+
+        <section class="message-table-panel">
+            <div class="message-browser-header">
+                <div>
+                    <span id="messageStreamKey" class="shard-name">-</span>
+                    <span id="messagePageHint" class="shard-meta">No records loaded.</span>
+                </div>
+                <div class="message-actions">
+                    <button id="messageResetCursor" class="ghost-button small" type="button">First page</button>
+                    <button id="messageNextPage" class="ghost-button small" type="button" disabled>Next page</button>
+                </div>
+            </div>
+            <div id="messageError" class="form-error" role="alert"></div>
+            <div class="table-wrap">
+                <table class="message-table">
+                    <thead>
+                    <tr>
+                        <th>Offset</th>
+                        <th>Payload</th>
+                        <th>Fields</th>
+                    </tr>
+                    </thead>
+                    <tbody id="messageRows"></tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+</main>
+<script src="/console/messages.js"></script>
+</body>
+</html>

@@ -23,7 +23,7 @@ class CoordinatorProvisioningFailureIntegrationTest {
     fun `mocked provisioning failure during create does not publish group metadata`() {
         val store = InMemoryCoordinatorStateStore()
         val calls = mutableListOf<RedisStreamShardProvisioningPlan>()
-        val provisioner = mockedProvisioner(failingVersions = setOf(1), calls = calls)
+        val provisioner = mockedProvisioner(failingShardCounts = setOf(2), calls = calls)
         val service = service(store, provisioner)
 
         val error = assertFailsWith<IllegalStateException> {
@@ -34,17 +34,17 @@ class CoordinatorProvisioningFailureIntegrationTest {
             )
         }
 
-        assertEquals("mock provisioning failure for version 1", error.message)
+        assertEquals("mock provisioning failure for shard count 2", error.message)
         assertTrue(store.list().isEmpty())
-        assertEquals(listOf(1), calls.map { it.streamVersion })
+        assertEquals(listOf(2), calls.map { it.shardCount })
         assertEquals(1, Mockito.mockingDetails(provisioner).invocations.size)
     }
 
     @Test
-    fun `mocked losing create race does not provision rejected stream version`() {
+    fun `mocked losing create race does not provision rejected shard plan`() {
         val store = LosingCreateRaceStore()
         val calls = mutableListOf<RedisStreamShardProvisioningPlan>()
-        val provisioner = mockedProvisioner(failingVersions = emptySet(), calls = calls)
+        val provisioner = mockedProvisioner(failingShardCounts = emptySet(), calls = calls)
         val service = service(store, provisioner)
 
         val error = assertFailsWith<CoordinatorException> {
@@ -63,7 +63,7 @@ class CoordinatorProvisioningFailureIntegrationTest {
     fun `mocked save conflict during scale does not provision until preparing state is committed`() {
         val store = CopyingContendedStateStore(conflictsBeforeSave = 1)
         val calls = mutableListOf<RedisStreamShardProvisioningPlan>()
-        val provisioner = mockedProvisioner(failingVersions = emptySet(), calls = calls)
+        val provisioner = mockedProvisioner(failingShardCounts = emptySet(), calls = calls)
         val service = service(store, provisioner)
         service.createGroup("mock-scale-conflict", "orders-consumer", createGroupRequest(initialShardCount = 2))
         calls.clear()
@@ -80,15 +80,14 @@ class CoordinatorProvisioningFailureIntegrationTest {
         val after = service.getGroup("mock-scale-conflict", "orders-consumer")
 
         assertEquals(MigrationState.ACTIVE, migration.state)
-        assertEquals(2, after.activeWriteVersion)
-        assertEquals(listOf(2), calls.map { it.streamVersion })
+        assertEquals(listOf(4), calls.map { it.shardCount })
     }
 
     @Test
     fun `mocked provisioning failure during scale keeps retryable preparing migration metadata`() {
         val store = InMemoryCoordinatorStateStore()
         val calls = mutableListOf<RedisStreamShardProvisioningPlan>()
-        val provisioner = mockedProvisioner(failingVersions = setOf(2), calls = calls)
+        val provisioner = mockedProvisioner(failingShardCounts = setOf(4), calls = calls)
         val service = service(store, provisioner)
         service.createGroup("mock-scale-failure", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val before = service.getGroup("mock-scale-failure", "orders-consumer")
@@ -106,18 +105,15 @@ class CoordinatorProvisioningFailureIntegrationTest {
         }
         val after = service.getGroup("mock-scale-failure", "orders-consumer")
 
-        assertEquals("mock provisioning failure for version 2", error.message)
-        assertEquals(1, after.activeWriteVersion)
-        assertEquals(setOf(1), after.readableVersions)
+        assertEquals("mock provisioning failure for shard count 4", error.message)
         val preparing = assertNotNull(after.activeMigration)
         assertEquals(MigrationState.PREPARING, preparing.state)
-        assertEquals(2, preparing.toVersion)
         assertEquals(before.metadataVersion, after.metadataVersion)
-        assertEquals(listOf(1, 2), calls.map { it.streamVersion })
+        assertEquals(listOf(2, 4), calls.map { it.shardCount })
         assertEquals(2, Mockito.mockingDetails(provisioner).invocations.size)
 
         val retryCalls = mutableListOf<RedisStreamShardProvisioningPlan>()
-        val retryService = service(store, mockedProvisioner(failingVersions = emptySet(), calls = retryCalls))
+        val retryService = service(store, mockedProvisioner(failingShardCounts = emptySet(), calls = retryCalls))
         val migration = retryService.scaleGroup(
             "mock-scale-failure",
             "orders-consumer",
@@ -130,13 +126,11 @@ class CoordinatorProvisioningFailureIntegrationTest {
         val activated = retryService.getGroup("mock-scale-failure", "orders-consumer")
 
         assertEquals(MigrationState.ACTIVE, migration.state)
-        assertEquals(2, activated.activeWriteVersion)
-        assertEquals(setOf(1, 2), activated.readableVersions)
-        assertEquals(listOf(2), retryCalls.map { it.streamVersion })
+        assertEquals(listOf(4), retryCalls.map { it.shardCount })
     }
 
     private fun mockedProvisioner(
-        failingVersions: Set<Int>,
+        failingShardCounts: Set<Int>,
         calls: MutableList<RedisStreamShardProvisioningPlan>,
     ): StreamShardProvisioner =
         Mockito.mock(
@@ -144,8 +138,8 @@ class CoordinatorProvisioningFailureIntegrationTest {
             Answer { invocation ->
                 val plan = invocation.getArgument<RedisStreamShardProvisioningPlan>(0)
                 calls += plan
-                if (plan.streamVersion in failingVersions) {
-                    throw IllegalStateException("mock provisioning failure for version ${plan.streamVersion}")
+                if (plan.shardCount in failingShardCounts) {
+                    throw IllegalStateException("mock provisioning failure for shard count ${plan.shardCount}")
                 }
                 null
             },
@@ -236,7 +230,6 @@ private class CopyingContendedStateStore(
 
     private fun GroupMetadata.deepCopy(): GroupMetadata =
         copy(
-            shardCountsByVersion = shardCountsByVersion.toMutableMap(),
             consumerConcurrencyPolicy = consumerConcurrencyPolicy.copy(
                 memberOverrides = consumerConcurrencyPolicy.memberOverrides.toMap(),
             ),
@@ -245,6 +238,5 @@ private class CopyingContendedStateStore(
                 .mapValues { (_, shards) -> shards.toMutableSet() }
                 .toMutableMap(),
             migrations = migrations.mapValues { (_, migration) -> migration.copy() }.toMutableMap(),
-            readableVersions = readableVersions.toSet(),
         )
 }

@@ -9,8 +9,10 @@ on:
       - ".github/scripts/test_render_design_docs.py"
       - "docs/PRD.md"
       - "docs/ko/**/*.md"
+      - "docs/openapi/**/*.yaml"
+      - "docs/openapi/**/*.yml"
+      - "docs/openapi/**/*.json"
       - "docs/prd/**/*.md"
-      - "docs/implementation-status.md"
       - "docs/operations-runbook.md"
       - "docs/testing.md"
   workflow_dispatch:

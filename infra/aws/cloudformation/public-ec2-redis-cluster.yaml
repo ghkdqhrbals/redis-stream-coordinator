@@ -25,6 +25,10 @@ Parameters:
     MinLength: 16
     AllowedPattern: "^[A-Za-z0-9_+=,.@:-]+$"
     Description: "Redis AUTH password. Avoid shell metacharacters."
+  RedisImage:
+    Type: String
+    Default: redis:8.8-alpine
+    Description: "Redis Docker image for the public EC2 development cluster."
 
 Resources:
   RedisSecurityGroup:
@@ -102,7 +106,7 @@ Resources:
           TOKEN=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
           PUBLIC_IP=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/public-ipv4")
           REDIS_PASSWORD='${RedisPassword}'
-          REDIS_IMAGE="redis:7.4-alpine"
+          REDIS_IMAGE='${RedisImage}'
 
           docker pull "$REDIS_IMAGE"
 

@@ -1,0 +1,1209 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Stream Detail",
+      "type": "link",
+      "url": "/d/redis-stream-coordinator-stream-detail/redis-stream-coordinator-stream-detail"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "API Performance",
+      "type": "link",
+      "url": "/d/redis-stream-coordinator-api/redis-stream-coordinator-api"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "none",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(redis_stream_coord_up[$__range])",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Coordinator",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "none",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(redis_stream_coord_members{state=\"active\"}[$__range]))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Consumers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "none",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(redis_stream_coord_shard_stream_length[$__range]))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Stream Entries",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "bytes",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 21,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(redis_stream_coord_shard_memory_usage_bytes[$__range]))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Stream Memory (bytes)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "none",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(redis_stream_coord_shard_lag[$__range]))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total Lag",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "none",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(last_over_time(redis_stream_coord_shard_pending[$__range]))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Pending Entries",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "title": "Stream Sharding Overview",
+      "type": "gapit-htmlgraphics-panel",
+      "options": {
+        "add100Percentage": false,
+        "centerAlignContent": false,
+        "overflow": "auto",
+        "SVGBaseFix": true,
+        "codeData": "{}",
+        "css": ".rsc-stream-overview { height: 100%; font-family: Inter, Arial, sans-serif; color: inherit; --rsc-border: color-mix(in srgb, currentColor 16%, transparent); --rsc-border-soft: color-mix(in srgb, currentColor 9%, transparent); --rsc-bg: color-mix(in srgb, currentColor 3%, transparent); --rsc-soft: color-mix(in srgb, currentColor 6%, transparent); --rsc-muted: color-mix(in srgb, currentColor 58%, transparent); --rsc-green: #73bf69; --rsc-yellow: #f2cc0c; --rsc-red: #f2495c; --rsc-blue: #5794f2; }\n.rsc-overview-list { position: relative; display: grid; gap: 10px; }\n.rsc-stream-section { border: 1px solid var(--rsc-border); border-radius: 7px; background: var(--rsc-bg); overflow: visible; box-shadow: inset 0 1px 0 color-mix(in srgb, currentColor 4%, transparent); }\n.rsc-stream-section-head { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 12px; align-items: center; padding: 9px 11px; border-bottom: 1px solid var(--rsc-border-soft); background: color-mix(in srgb, currentColor 4%, transparent); }\n.rsc-stream-title { min-width: 0; display: grid; gap: 3px; }\n.rsc-stream-line, .rsc-group-line { display: flex; align-items: center; gap: 8px; min-width: 0; }\n.rsc-health-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 6%, transparent); }\n.rsc-health-dot.ok { background: var(--rsc-green); }\n.rsc-health-dot.warn { background: var(--rsc-yellow); }\n.rsc-health-dot.bad { background: var(--rsc-red); }\n.rsc-health-dot.unknown { background: var(--rsc-muted); }\n.rsc-stream-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 750; line-height: 1.25; color: inherit; }\n.rsc-stream-subtitle { font-size: 10px; color: var(--rsc-muted); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.rsc-stream-stats, .rsc-group-stats { display: flex; flex-wrap: wrap; gap: 5px; justify-content: end; }\n.rsc-stat { min-width: 58px; border: 1px solid var(--rsc-border-soft); border-radius: 4px; padding: 4px 6px; background: color-mix(in srgb, currentColor 4%, transparent); }\n.rsc-stat-label { display: block; font-size: 9px; line-height: 1.1; color: var(--rsc-muted); text-transform: uppercase; letter-spacing: 0; }\n.rsc-stat-value { display: block; margin-top: 2px; font-size: 12px; line-height: 1.1; font-weight: 700; color: inherit; font-variant-numeric: tabular-nums; }\n.rsc-stream-groups { display: grid; gap: 8px; padding: 9px; }\n.rsc-group-row { border: 1px solid var(--rsc-border-soft); border-radius: 6px; background: color-mix(in srgb, currentColor 2%, transparent); overflow: visible; }\n.rsc-group-head { display: grid; grid-template-columns: minmax(190px, 1fr) auto; gap: 9px; align-items: center; padding: 7px 9px; border-bottom: 1px solid var(--rsc-border-soft); }\n.rsc-group-title { min-width: 0; display: grid; gap: 2px; }\n.rsc-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; line-height: 1.25; }\n.rsc-group-subtitle { font-size: 10px; color: var(--rsc-muted); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.rsc-overview-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 9px; border-bottom: 1px solid var(--rsc-border-soft); font-size: 11px; line-height: 1.2; color: var(--rsc-muted); }\n.rsc-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }\n.rsc-legend-swatch { width: 9px; height: 9px; border-radius: 2px; }\n.rsc-legend-swatch.ok { background: var(--rsc-green); }\n.rsc-legend-swatch.warn { background: var(--rsc-yellow); }\n.rsc-legend-swatch.bad { background: var(--rsc-red); }\n.rsc-legend-swatch.unknown { background: var(--rsc-muted); }\n.rsc-shard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 5px; padding: 8px; }\n.rsc-shard { position: relative; min-height: 43px; border: 1px solid var(--rsc-border-soft); border-left-width: 3px; border-radius: 4px; background: color-mix(in srgb, currentColor 3%, transparent); color: inherit; display: grid; align-content: center; gap: 2px; padding: 5px 5px 4px; transition: transform 90ms ease, border-color 90ms ease, background 90ms ease, box-shadow 90ms ease; cursor: default; }\n.rsc-shard:hover, .rsc-shard:focus { z-index: 20; transform: translateY(1px) scale(0.992); border-color: color-mix(in srgb, var(--rsc-blue) 64%, var(--rsc-border)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rsc-blue) 18%, transparent), 0 6px 18px color-mix(in srgb, currentColor 14%, transparent); outline: none; }\n.rsc-shard.ok { border-left-color: var(--rsc-green); background: color-mix(in srgb, var(--rsc-green) 10%, transparent); }\n.rsc-shard.warn { border-left-color: var(--rsc-yellow); background: color-mix(in srgb, var(--rsc-yellow) 11%, transparent); }\n.rsc-shard.bad { border-left-color: var(--rsc-red); background: color-mix(in srgb, var(--rsc-red) 10%, transparent); }\n.rsc-shard.unknown { border-left-color: var(--rsc-muted); background: var(--rsc-soft); }\n.rsc-shard-top { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; }\n.rsc-shard-index { font-size: 11px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; }\n.rsc-shard-status { width: 7px; height: 7px; border-radius: 50%; background: var(--rsc-muted); opacity: .85; flex: 0 0 7px; }\n.rsc-shard.ok .rsc-shard-status { background: var(--rsc-green); }\n.rsc-shard.warn .rsc-shard-status { background: var(--rsc-yellow); }\n.rsc-shard.bad .rsc-shard-status { background: var(--rsc-red); }\n.rsc-shard-metric { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; font-variant-numeric: tabular-nums; }\n.rsc-shard-metric span { font-size: 9px; color: var(--rsc-muted); line-height: 1; }\n.rsc-shard-metric strong { font-size: 11px; line-height: 1; font-weight: 700; color: inherit; }\n.rsc-shard-length { font-size: 9px; line-height: 1; color: var(--rsc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }\n.rsc-shard-detail { display: none; }\n.rsc-detail-title { display: flex; justify-content: space-between; gap: 8px; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--rsc-border-soft); font-weight: 700; }\n.rsc-detail-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }\n.rsc-detail-row span { color: var(--rsc-muted); }\n.rsc-detail-row strong { color: inherit; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.rsc-hover-detail { position: absolute; z-index: 9999; width: 208px; opacity: 0; pointer-events: none; border: 1px solid var(--rsc-border); border-radius: 6px; background: color-mix(in srgb, Canvas 96%, currentColor 4%); color: CanvasText; box-shadow: 0 10px 28px color-mix(in srgb, currentColor 22%, transparent); padding: 8px; font-size: 11px; line-height: 1.25; font-variant-numeric: tabular-nums; transition: opacity 60ms linear; }\n.rsc-hover-detail.visible { opacity: 1; }\n.rsc-empty { border: 1px dashed var(--rsc-border); border-radius: 6px; padding: 18px; color: var(--rsc-muted); text-align: center; }\n@media (max-width: 900px) { .rsc-stream-section-head, .rsc-group-head { grid-template-columns: 1fr; } .rsc-stream-stats, .rsc-group-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; } .rsc-stat { min-width: 0; } }\n@media (max-width: 700px) { .rsc-shard-grid { grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); } }",
+        "html": "<div class=\"rsc-stream-overview\"><div class=\"rsc-overview-list\" data-role=\"sharding-overview\"></div></div>",
+        "renderOnMount": true,
+        "onRender": "",
+        "dynamicData": false,
+        "panelupdateOnMount": true,
+        "onInit": "const root = htmlNode.querySelector('[data-role=\"sharding-overview\"]');\nif (!root || root.dataset.bound === 'true') {\n  return;\n}\nroot.dataset.bound = 'true';\n\nfunction variable(name) {\n  const token = '$' + name;\n  if (htmlGraphics.props && typeof htmlGraphics.props.replaceVariables === 'function') {\n    return htmlGraphics.props.replaceVariables(token);\n  }\n  if (htmlGraphics.getTemplateSrv) {\n    return htmlGraphics.getTemplateSrv().replace(token);\n  }\n  return token;\n}\nfunction normalizeVariable(value) {\n  const raw = String(value == null ? '' : value).trim();\n  if (!raw || raw === '$__all' || raw === '.*' || raw.toLowerCase() === 'all' || raw.indexOf('$') >= 0) {\n    return '';\n  }\n  return raw;\n}\nfunction esc(value) { return String(value == null ? '-' : value).replace(/[&<>\"']/g, function (ch) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[ch]; }); }\nfunction numberOrNull(value) { return value == null || value === '' || Number.isNaN(Number(value)) ? null : Number(value); }\nfunction compact(value) {\n  const n = numberOrNull(value);\n  if (n == null) return '-';\n  const abs = Math.abs(n);\n  if (abs >= 1000000000) return (n / 1000000000).toFixed(1).replace(/.0$/, '') + 'B';\n  if (abs >= 1000000) return (n / 1000000).toFixed(1).replace(/.0$/, '') + 'M';\n  if (abs >= 1000) return (n / 1000).toFixed(1).replace(/.0$/, '') + 'K';\n  return String(n);\n}\nfunction bytes(value, known) {\n  const n = numberOrNull(value);\n  if (known === false || n == null) return '-';\n  if (n >= 1073741824) return (n / 1073741824).toFixed(1).replace(/.0$/, '') + ' GiB';\n  if (n >= 1048576) return (n / 1048576).toFixed(1).replace(/.0$/, '') + ' MiB';\n  if (n >= 1024) return (n / 1024).toFixed(1).replace(/.0$/, '') + ' KiB';\n  return n + ' B';\n}\nfunction formatPercent(value) { return value == null || !Number.isFinite(value) ? '-' : (Math.round(value * 10) / 10).toFixed(1) + '%'; }\nfunction percentage(part, total) { return total && total > 0 ? (part / total) * 100 : null; }\nfunction shardClass(row) {\n  const lag = numberOrNull(row.lag);\n  if (lag == null) return 'unknown';\n  if (lag === 0) return 'ok';\n  if (lag < 100) return 'warn';\n  return 'bad';\n}\nfunction groupClass(counts) {\n  if (counts.bad > 0) return 'bad';\n  if (counts.warn > 0 || counts.unknown > 0) return 'warn';\n  return 'ok';\n}\nfunction groupKey(row) { return String(row.streamPrefix || '-') + '\\u0000' + String(row.consumerGroup || '-'); }\nfunction streamKey(row) { return row.streamPrefix || '-'; }\nfunction nodeKey(row) { return groupKey(row) + '\\u0000' + (row.redisNodeEndpoint || 'unknown'); }\nfunction emptyCounts() { return { ok: 0, warn: 0, bad: 0, unknown: 0 }; }\nfunction addCounts(target, source) {\n  target.ok += source.ok;\n  target.warn += source.warn;\n  target.bad += source.bad;\n  target.unknown += source.unknown;\n}\nfunction splitOwners(value) {\n  return String(value || '').split(',').map(function (owner) { return owner.trim(); }).filter(Boolean);\n}\nfunction deriveGroupsFromShards(shards) {\n  const derived = new Map();\n  shards.forEach(function (shard) {\n    const key = groupKey(shard);\n    if (!derived.has(key)) {\n      derived.set(key, {\n        streamPrefix: shard.streamPrefix,\n        consumerGroup: shard.consumerGroup,\n        state: 'STABLE',\n        shardCount: Number(shard.shardCount || 0),\n        activeOwners: new Set(),\n        targetOwners: new Set(),\n        currentShards: 0,\n        targetShards: 0,\n        revokingShards: 0,\n        totalStreamLength: 0,\n        totalPendingCount: 0,\n        totalLag: 0,\n        lagKnown: true,\n        totalMemoryUsageBytes: 0,\n        memoryUsageKnown: true\n      });\n    }\n    const group = derived.get(key);\n    group.shardCount = Math.max(group.shardCount, Number(shard.shardCount || 0));\n    group.currentShards += splitOwners(shard.currentOwnerMemberIds).length > 0 ? 1 : 0;\n    group.targetShards += splitOwners(shard.targetOwnerMemberIds).length > 0 ? 1 : 0;\n    if (shard.ownerState && shard.ownerState !== 'CURRENT') group.state = 'REBALANCING';\n    splitOwners(shard.currentOwnerMemberIds).forEach(function (owner) { group.activeOwners.add(owner); });\n    splitOwners(shard.targetOwnerMemberIds).forEach(function (owner) { group.targetOwners.add(owner); });\n    group.totalStreamLength += Number(shard.streamLength || 0);\n    group.totalPendingCount += Number(shard.pendingCount || 0);\n    if (shard.lag == null) group.lagKnown = false;\n    else group.totalLag += Number(shard.lag || 0);\n    const memory = numberOrNull(shard.memoryUsageBytes);\n    if (shard.memoryUsageKnown === false || memory == null) group.memoryUsageKnown = false;\n    else group.totalMemoryUsageBytes += memory;\n  });\n  return Array.from(derived.values()).map(function (group) {\n    const memberIds = new Set(Array.from(group.activeOwners).concat(Array.from(group.targetOwners)));\n    return {\n      streamPrefix: group.streamPrefix,\n      consumerGroup: group.consumerGroup,\n      state: group.state,\n      shardCount: group.shardCount,\n      activeMembers: group.activeOwners.size,\n      totalMembers: memberIds.size,\n      currentShards: group.currentShards,\n      targetShards: group.targetShards || group.shardCount,\n      revokingShards: group.revokingShards,\n      totalStreamLength: group.totalStreamLength,\n      totalPendingCount: group.totalPendingCount,\n      totalLag: group.lagKnown ? group.totalLag : null,\n      totalMemoryUsageBytes: group.totalMemoryUsageBytes,\n      memoryUsageKnown: group.memoryUsageKnown\n    };\n  });\n}\nfunction renderShard(shard, group, totalLength, nodeSizeByGroup) {\n  const cls = shardClass(shard);\n  const lagText = shard.lag == null ? 'null' : compact(shard.lag);\n  const lengthRaw = Number(shard.streamLength || 0);\n  const lengthText = compact(lengthRaw);\n  const shardSize = numberOrNull(shard.memoryUsageBytes) != null ? numberOrNull(shard.memoryUsageBytes) : lengthRaw;\n  const streamPercent = formatPercent(percentage(lengthRaw, totalLength));\n  const nodePercent = formatPercent(percentage(shardSize, nodeSizeByGroup.get(nodeKey(shard)) || 0));\n  const ownerText = shard.currentOwnerMemberIds || shard.targetOwnerMemberIds || '-';\n  const title = ':' + shard.shardIndex + ' / lag ' + lagText + ' / length ' + lengthText + ' / owner ' + ownerText + ' / stream ' + streamPercent + ' / node ' + nodePercent;\n  const shareText = 'stream ' + streamPercent + ' · node ' + nodePercent;\n  return '<div class=\"rsc-shard ' + cls + '\" tabindex=\"0\" aria-label=\"' + esc(title) + '\">' +\n    '<div class=\"rsc-shard-top\"><span class=\"rsc-shard-index\">:' + esc(shard.shardIndex) + '</span><span class=\"rsc-shard-status\"></span></div>' +\n    '<div class=\"rsc-shard-metric\"><span>lag</span><strong>' + esc(lagText) + '</strong></div>' +\n    '<div class=\"rsc-shard-length\">len ' + esc(lengthText) + '</div>' +\n    '<div class=\"rsc-shard-detail\">' +\n      '<div class=\"rsc-detail-title\"><span>Shard :' + esc(shard.shardIndex) + '</span><strong>' + esc(cls.toUpperCase()) + '</strong></div>' +\n      '<div class=\"rsc-detail-row\"><span>Lag</span><strong>' + esc(lagText) + '</strong></div>' +\n      '<div class=\"rsc-detail-row\"><span>Length</span><strong>' + esc(lengthText) + '</strong></div>' +\n      '<div class=\"rsc-detail-row\"><span>Owner</span><strong>' + esc(ownerText) + '</strong></div>' +\n      '<div class=\"rsc-detail-row\"><span>Share</span><strong>' + esc(shareText) + '</strong></div>' +\n    '</div>' +\n    '</div>';\n}\nfunction renderGroup(group, shardsByGroup, nodeSizeByGroup) {\n  const key = groupKey(group);\n  const groupShards = (shardsByGroup.get(key) || []).sort(function (a, b) { return Number(a.shardIndex || 0) - Number(b.shardIndex || 0); });\n  const totalLength = Number(group.totalStreamLength || 0);\n  const counts = groupShards.reduce(function (acc, shard) { acc[shardClass(shard)] += 1; return acc; }, emptyCounts());\n  const health = groupClass(counts);\n  const shardHtml = groupShards.length === 0 ? '<div class=\"rsc-empty\">No shard offset rows returned.</div>' : groupShards.map(function (shard) {\n    return renderShard(shard, group, totalLength, nodeSizeByGroup);\n  }).join('');\n  return '<section class=\"rsc-group-row\">' +\n    '<div class=\"rsc-group-head\">' +\n      '<div class=\"rsc-group-title\">' +\n        '<div class=\"rsc-group-line\"><span class=\"rsc-health-dot ' + health + '\"></span><span class=\"rsc-group-name\">' + esc(group.consumerGroup) + '</span></div>' +\n        '<div class=\"rsc-group-subtitle\">' + esc(group.state || '-') + ' · ' + esc(group.currentShards) + '/' + esc(group.targetShards || group.shardCount) + ' assigned</div>' +\n      '</div>' +\n      '<div class=\"rsc-group-stats\">' +\n        '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Shards</span><span class=\"rsc-stat-value\">' + esc(group.shardCount) + '</span></div>' +\n        '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Members</span><span class=\"rsc-stat-value\">' + esc(group.activeMembers) + '/' + esc(group.totalMembers) + '</span></div>' +\n        '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Lag</span><span class=\"rsc-stat-value\">' + esc(group.totalLag == null ? '-' : compact(group.totalLag)) + '</span></div>' +\n        '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Entries</span><span class=\"rsc-stat-value\">' + esc(compact(group.totalStreamLength)) + '</span></div>' +\n        '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Pending</span><span class=\"rsc-stat-value\">' + esc(compact(group.totalPendingCount)) + '</span></div>' +\n      '</div>' +\n    '</div>' +\n    '<div class=\"rsc-overview-legend\">' +\n      '<span class=\"rsc-legend-item\"><span class=\"rsc-legend-swatch ok\"></span>Healthy ' + counts.ok + '</span>' +\n      '<span class=\"rsc-legend-item\"><span class=\"rsc-legend-swatch warn\"></span>Lagging ' + counts.warn + '</span>' +\n      '<span class=\"rsc-legend-item\"><span class=\"rsc-legend-swatch bad\"></span>High lag ' + counts.bad + '</span>' +\n      '<span class=\"rsc-legend-item\"><span class=\"rsc-legend-swatch unknown\"></span>Unknown ' + counts.unknown + '</span>' +\n    '</div>' +\n    '<div class=\"rsc-shard-grid\">' + shardHtml + '</div>' +\n  '</section>';\n}\nfunction renderOverview(shards) {\n  const filteredShards = Array.isArray(shards) ? shards : [];\n  const groups = deriveGroupsFromShards(filteredShards).sort(function (a, b) {\n    return String(a.streamPrefix || '').localeCompare(String(b.streamPrefix || '')) || String(a.consumerGroup || '').localeCompare(String(b.consumerGroup || ''));\n  });\n  if (!groups.length) { root.innerHTML = '<div class=\"rsc-empty\">No coordinator groups found.</div>'; return; }\n  const shardsByGroup = new Map();\n  const nodeSizeByGroup = new Map();\n  filteredShards.forEach(function (shard) {\n    const key = groupKey(shard);\n    if (!shardsByGroup.has(key)) shardsByGroup.set(key, []);\n    shardsByGroup.get(key).push(shard);\n    const size = numberOrNull(shard.memoryUsageBytes) != null ? numberOrNull(shard.memoryUsageBytes) : Number(shard.streamLength || 0);\n    const node = nodeKey(shard);\n    nodeSizeByGroup.set(node, (nodeSizeByGroup.get(node) || 0) + size);\n  });\n  const streamGroups = new Map();\n  groups.forEach(function (group) {\n    const key = streamKey(group);\n    if (!streamGroups.has(key)) {\n      streamGroups.set(key, {\n        streamPrefix: key,\n        groups: [],\n        counts: emptyCounts(),\n        shardCount: 0,\n        activeMembers: 0,\n        totalMembers: 0,\n        totalLag: 0,\n        lagKnown: true,\n        totalStreamLength: 0,\n        totalMemoryUsageBytes: 0,\n        memoryUsageKnown: true\n      });\n    }\n    const stream = streamGroups.get(key);\n    const groupShards = shardsByGroup.get(groupKey(group)) || [];\n    const counts = groupShards.reduce(function (acc, shard) { acc[shardClass(shard)] += 1; return acc; }, emptyCounts());\n    addCounts(stream.counts, counts);\n    stream.groups.push(group);\n    stream.shardCount = Math.max(stream.shardCount, Number(group.shardCount || 0));\n    stream.activeMembers += Number(group.activeMembers || 0);\n    stream.totalMembers += Number(group.totalMembers || 0);\n    if (group.totalLag == null) stream.lagKnown = false;\n    else stream.totalLag += Number(group.totalLag || 0);\n    stream.totalStreamLength = Math.max(stream.totalStreamLength, Number(group.totalStreamLength || 0));\n    const memory = numberOrNull(group.totalMemoryUsageBytes);\n    if (group.memoryUsageKnown === false || memory == null) stream.memoryUsageKnown = false;\n    else stream.totalMemoryUsageBytes = Math.max(stream.totalMemoryUsageBytes, memory);\n  });\n  root.innerHTML = Array.from(streamGroups.values()).map(function (stream) {\n    const health = groupClass(stream.counts);\n    return '<section class=\"rsc-stream-section\">' +\n      '<div class=\"rsc-stream-section-head\">' +\n        '<div class=\"rsc-stream-title\">' +\n          '<div class=\"rsc-stream-line\"><span class=\"rsc-health-dot ' + health + '\"></span><span class=\"rsc-stream-name\">' + esc(stream.streamPrefix) + '</span></div>' +\n          '<div class=\"rsc-stream-subtitle\">' + stream.groups.length + ' consumer group' + (stream.groups.length === 1 ? '' : 's') + ' grouped under this stream</div>' +\n        '</div>' +\n        '<div class=\"rsc-stream-stats\">' +\n          '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Groups</span><span class=\"rsc-stat-value\">' + esc(stream.groups.length) + '</span></div>' +\n          '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Shards</span><span class=\"rsc-stat-value\">' + esc(stream.shardCount) + '</span></div>' +\n          '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Members</span><span class=\"rsc-stat-value\">' + esc(stream.activeMembers) + '/' + esc(stream.totalMembers) + '</span></div>' +\n          '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Lag</span><span class=\"rsc-stat-value\">' + esc(stream.lagKnown ? compact(stream.totalLag) : '-') + '</span></div>' +\n          '<div class=\"rsc-stat\"><span class=\"rsc-stat-label\">Memory</span><span class=\"rsc-stat-value\">' + esc(bytes(stream.totalMemoryUsageBytes, stream.memoryUsageKnown)) + '</span></div>' +\n        '</div>' +\n      '</div>' +\n      '<div class=\"rsc-stream-groups\">' + stream.groups.map(function (group) { return renderGroup(group, shardsByGroup, nodeSizeByGroup); }).join('') + '</div>' +\n    '</section>';\n  }).join('');\n  bindHoverDetail();\n}\nfunction bindHoverDetail() {\n  let hoverDetail = root.querySelector('.rsc-hover-detail');\n  if (!hoverDetail) {\n    hoverDetail = document.createElement('div');\n    hoverDetail.className = 'rsc-hover-detail';\n    root.appendChild(hoverDetail);\n  }\n  function moveHoverDetail(event) {\n    const margin = 12;\n    const rootRect = root.getBoundingClientRect();\n    const width = hoverDetail.offsetWidth || 208;\n    const height = hoverDetail.offsetHeight || 150;\n    let left = event.clientX - rootRect.left + margin;\n    let top = event.clientY - rootRect.top + margin;\n    if (left + width > rootRect.width) left = event.clientX - rootRect.left - width - margin;\n    if (top + height > rootRect.height) top = event.clientY - rootRect.top - height - margin;\n    const maxLeft = Math.max(8, rootRect.width - width - 8);\n    const maxTop = Math.max(8, rootRect.height - height - 8);\n    hoverDetail.style.left = Math.min(Math.max(8, left), maxLeft) + 'px';\n    hoverDetail.style.top = Math.min(Math.max(8, top), maxTop) + 'px';\n  }\n  function showHoverDetail(event, shardNode) {\n    const detail = shardNode.querySelector('.rsc-shard-detail');\n    hoverDetail.innerHTML = detail ? detail.innerHTML : shardNode.getAttribute('aria-label');\n    moveHoverDetail(event);\n    hoverDetail.classList.add('visible');\n  }\n  function hideHoverDetail() {\n    hoverDetail.classList.remove('visible');\n  }\n  root.querySelectorAll('.rsc-shard').forEach(function (shardNode) {\n    shardNode.addEventListener('mouseenter', function (event) { showHoverDetail(event, shardNode); });\n    shardNode.addEventListener('mouseover', function (event) { showHoverDetail(event, shardNode); });\n    shardNode.addEventListener('mousemove', function (event) { showHoverDetail(event, shardNode); });\n    shardNode.addEventListener('focus', function () {\n      const rect = shardNode.getBoundingClientRect();\n      showHoverDetail({ clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }, shardNode);\n    });\n    shardNode.addEventListener('mouseleave', hideHoverDetail);\n    shardNode.addEventListener('mouseout', hideHoverDetail);\n    shardNode.addEventListener('blur', hideHoverDetail);\n  });\n}\nfunction currentSignature() {\n  return [normalizeVariable(variable('streamPrefix')), normalizeVariable(variable('consumerGroup'))].join('\\u0000');\n}\nfunction buildUrl() {\n  const params = new URLSearchParams();\n  params.set('streamPrefix', normalizeVariable(variable('streamPrefix')));\n  params.set('consumerGroup', normalizeVariable(variable('consumerGroup')));\n  return '/api/datasources/proxy/uid/rsc-coordinator-api/coord/v1/monitoring/grafana/shards?' + params.toString();\n}\nlet loading = false;\nlet lastSignature = '';\nasync function loadOverview(showLoading) {\n  if (loading) return;\n  loading = true;\n  if (showLoading) root.innerHTML = '<div class=\"rsc-empty\">Loading stream sharding overview...</div>';\n  try {\n    const response = await fetch(buildUrl(), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });\n    if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + response.statusText);\n    const parsed = await response.json();\n    renderOverview(parsed);\n  } catch (error) {\n    root.innerHTML = '<div class=\"rsc-empty\">Failed to load stream sharding overview: ' + esc(error.message) + '</div>';\n  } finally {\n    loading = false;\n  }\n}\nlastSignature = currentSignature();\nloadOverview(true);\nconst refreshTimer = window.setInterval(function () {\n  if (!root.isConnected) {\n    window.clearInterval(refreshTimer);\n    return;\n  }\n  const nextSignature = currentSignature();\n  const changed = nextSignature !== lastSignature;\n  lastSignature = nextSignature;\n  loadOverview(changed);\n}, 5000);",
+        "useGrafanaScrollbar": true
+      },
+      "targets": [],
+      "transformations": []
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
+          },
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://coordinator:8080/coord/v1/monitoring/grafana/groups",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "streamPrefix",
+              "text": "Stream",
+              "type": "string"
+            },
+            {
+              "selector": "consumerGroup",
+              "text": "Group",
+              "type": "string"
+            },
+            {
+              "selector": "assignedShardRatio",
+              "text": "Assigned / Shards",
+              "type": "string"
+            },
+            {
+              "selector": "activeMembers",
+              "text": "Members",
+              "type": "number"
+            },
+            {
+              "selector": "totalLag",
+              "text": "Lag",
+              "type": "number"
+            },
+            {
+              "selector": "totalPendingCount",
+              "text": "Pending",
+              "type": "number"
+            },
+            {
+              "selector": "totalStreamLength",
+              "text": "Length",
+              "type": "number"
+            },
+            {
+              "selector": "totalMemoryUsageBytes",
+              "text": "Memory (bytes)",
+              "type": "number"
+            },
+            {
+              "selector": "state",
+              "text": "State",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "title": "Coordinator Groups Table",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Lag"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 100
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pending"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 100
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 12,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
+          },
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://coordinator:8080/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup=",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "streamPrefix",
+              "text": "Stream",
+              "type": "string"
+            },
+            {
+              "selector": "consumerGroup",
+              "text": "Consumer Group",
+              "type": "string"
+            },
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "streamKey",
+              "text": "Stream Key",
+              "type": "string"
+            },
+            {
+              "selector": "redisNodeEndpoint",
+              "text": "Redis Node",
+              "type": "string"
+            },
+            {
+              "selector": "currentOwnerMemberIds",
+              "text": "Current Owners",
+              "type": "string"
+            },
+            {
+              "selector": "targetOwnerMemberIds",
+              "text": "Target Owners",
+              "type": "string"
+            },
+            {
+              "selector": "ownerState",
+              "text": "Owner State",
+              "type": "string"
+            },
+            {
+              "selector": "lag",
+              "text": "Lag",
+              "type": "number"
+            },
+            {
+              "selector": "pendingCount",
+              "text": "Pending",
+              "type": "number"
+            },
+            {
+              "selector": "streamLength",
+              "text": "Length",
+              "type": "number"
+            },
+            {
+              "selector": "memoryUsageBytes",
+              "text": "Memory (bytes)",
+              "type": "number"
+            },
+            {
+              "selector": "groupLastDeliveredId",
+              "text": "Group Offset",
+              "type": "string"
+            },
+            {
+              "selector": "consumerLastAckedId",
+              "text": "Acked Offset",
+              "type": "string"
+            },
+            {
+              "selector": "consumerLastDeliveredId",
+              "text": "Read Offset",
+              "type": "string"
+            },
+            {
+              "selector": "firstRecordId",
+              "text": "First Offset",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "title": "Shard Offsets & Memory",
+      "type": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Stream": 0,
+              "Consumer Group": 1,
+              "Shard": 2,
+              "Stream Key": 3,
+              "Redis Node": 4,
+              "Current Owners": 5,
+              "Target Owners": 6,
+              "Owner State": 7,
+              "Lag": 8,
+              "Pending": 9,
+              "Length": 10,
+              "Memory (bytes)": 11,
+              "Group Offset": 12,
+              "Acked Offset": 13,
+              "Read Offset": 14,
+              "First Offset": 15
+            },
+            "renameByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 44
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "expr": "sum by (stream, group) (last_over_time(redis_stream_coord_shard_lag[$__range]))",
+          "legendFormat": "{{stream_key}} lag",
+          "refId": "A"
+        }
+      ],
+      "title": "Lag by Stream / Group",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 44
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "expr": "sum by (stream, group) (last_over_time(redis_stream_coord_shard_stream_length[$__range]))",
+          "legendFormat": "{{stream_key}} length",
+          "refId": "A"
+        }
+      ],
+      "title": "Stream Length by Stream / Group",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 44
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stream, group) (last_over_time(redis_stream_coord_shard_memory_usage_bytes[$__range]))",
+          "instant": false,
+          "legendFormat": "{{stream}} / {{group}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Memory by Stream / Group (bytes)",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 42,
+  "tags": [
+    "redis-stream-coordinator",
+    "redis-stream",
+    "coordinator"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Redis Stream Coordinator Overview",
+  "uid": "redis-stream-coordinator",
+  "version": 1,
+  "weekStart": ""
+}

@@ -5,23 +5,20 @@ import java.nio.charset.StandardCharsets
 
 data class RedisStreamShardKey(
     val streamPrefix: String,
-    val streamVersion: Int,
     val shardIndex: Int,
 ) {
     init {
         validateStreamPrefix(streamPrefix)
-        require(streamVersion > 0) { "streamVersion must be positive" }
         require(shardIndex >= 0) { "shardIndex must be zero or positive" }
     }
 
-    val value: String = "$streamPrefix:v$streamVersion:shard:$shardIndex"
+    val value: String = "$streamPrefix:$shardIndex"
     val slot: Int = RedisClusterHashSlot.slot(value)
 }
 
 data class RedisStreamShardProvisioningPlan(
     val streamPrefix: String,
     val consumerGroup: String,
-    val streamVersion: Int,
     val shardCount: Int,
     val shardKeys: List<RedisStreamShardKey>,
 ) {
@@ -32,18 +29,16 @@ data class RedisStreamShardProvisioningPlan(
     }
 
     companion object {
-        fun forVersion(
+        fun forShardCount(
             streamPrefix: String,
             consumerGroup: String,
-            streamVersion: Int,
             shardCount: Int,
         ): RedisStreamShardProvisioningPlan =
             RedisStreamShardProvisioningPlan(
                 streamPrefix = streamPrefix,
                 consumerGroup = consumerGroup,
-                streamVersion = streamVersion,
                 shardCount = shardCount,
-                shardKeys = RedisStreamShardKeys.forVersion(streamPrefix, streamVersion, shardCount),
+                shardKeys = RedisStreamShardKeys.forShardCount(streamPrefix, shardCount),
             )
     }
 }
@@ -51,16 +46,16 @@ data class RedisStreamShardProvisioningPlan(
 object RedisStreamShardKeys {
     fun keyPattern(streamPrefix: String): String {
         validateStreamPrefix(streamPrefix)
-        return "$streamPrefix:v{streamVersion}:shard:{shardIndex}"
+        return "$streamPrefix:{shardIndex}"
     }
 
-    fun forShard(streamPrefix: String, streamVersion: Int, shardIndex: Int): RedisStreamShardKey =
-        RedisStreamShardKey(streamPrefix, streamVersion, shardIndex)
+    fun forShard(streamPrefix: String, shardIndex: Int): RedisStreamShardKey =
+        RedisStreamShardKey(streamPrefix, shardIndex)
 
-    fun forVersion(streamPrefix: String, streamVersion: Int, shardCount: Int): List<RedisStreamShardKey> {
+    fun forShardCount(streamPrefix: String, shardCount: Int): List<RedisStreamShardKey> {
         require(shardCount > 0) { "shardCount must be positive" }
         return (0 until shardCount).map { shardIndex ->
-            forShard(streamPrefix, streamVersion, shardIndex)
+            forShard(streamPrefix, shardIndex)
         }
     }
 
@@ -124,16 +119,8 @@ object RedisClusterHashSlot {
     }
 }
 
-fun GroupMetadata.streamShardKeys(streamVersion: Int = activeWriteVersion): List<RedisStreamShardKey> {
-    val shardCount = shardCountsByVersion[streamVersion]
-        ?: throw IllegalArgumentException("Unknown stream version $streamVersion")
-    return RedisStreamShardKeys.forVersion(streamPrefix, streamVersion, shardCount)
-}
+fun GroupMetadata.streamShardKeys(): List<RedisStreamShardKey> =
+    RedisStreamShardKeys.forShardCount(streamPrefix, shardCount)
 
-fun GroupMetadata.streamShardProvisioningPlan(
-    streamVersion: Int = activeWriteVersion,
-): RedisStreamShardProvisioningPlan {
-    val shardCount = shardCountsByVersion[streamVersion]
-        ?: throw IllegalArgumentException("Unknown stream version $streamVersion")
-    return RedisStreamShardProvisioningPlan.forVersion(streamPrefix, consumerGroup, streamVersion, shardCount)
-}
+fun GroupMetadata.streamShardProvisioningPlan(): RedisStreamShardProvisioningPlan =
+    RedisStreamShardProvisioningPlan.forShardCount(streamPrefix, consumerGroup, shardCount)

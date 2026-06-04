@@ -1,6 +1,7 @@
 package com.redisstream.producer
 
 import com.redisstream.consumer.CoordinatorClient
+import com.redisstream.consumer.CoordinatorRoutingMetadataValidator
 import com.redisstream.consumer.ProducerRoutingResponse
 import com.redisstream.consumer.ProducerRoutingShard
 import java.time.Clock
@@ -11,50 +12,60 @@ data class ProducerRoute(
     val streamKey: String,
     val shard: ProducerRoutingShard,
     val metadataVersion: Long,
-    val activeWriteVersion: Int,
 )
 
 class ProducerRoutingCache(
     private val streamPrefix: String,
-    private val consumerGroup: String,
+    private val consumerGroupName: String,
     private val client: CoordinatorClient,
     private val refreshInterval: Duration = Duration.ofSeconds(30),
     private val clock: Clock = Clock.systemUTC(),
-    private val metrics: RedisStreamProducerMetrics = NoopRedisStreamProducerMetrics,
 ) {
     private var cached: CachedRouting? = null
 
+    /**
+     * Routes a UTF-8 partition key to the active Redis Stream shard.
+     */
     @Synchronized
     fun route(partitionKey: String): ProducerRoute =
         route(partitionKey.toByteArray(Charsets.UTF_8))
 
+    /**
+     * Routes a binary partition key using the coordinator-provided active shard metadata.
+     */
     @Synchronized
     fun route(partitionKey: ByteArray): ProducerRoute {
         val routing = currentRouting(forceRefresh = false)
         val shardIndex = RedisStreamPartitionHasher.shardIndex(routing, partitionKey)
-        val shard = routing.shards.firstOrNull {
-            it.streamVersion == routing.activeWriteVersion && it.shardIndex == shardIndex
-        } ?: error(
+        val shard = routing.shards.firstOrNull { it.shardIndex == shardIndex } ?: error(
             "Producer routing metadata version ${routing.metadataVersion} is missing " +
-                "active shard ${routing.activeWriteVersion}/$shardIndex",
+                "shard $shardIndex",
         )
 
         return ProducerRoute(
             streamKey = shard.streamKey,
             shard = shard,
             metadataVersion = routing.metadataVersion,
-            activeWriteVersion = routing.activeWriteVersion,
         )
     }
 
+    /**
+     * Returns the cached routing metadata, refreshing it when the cache has expired.
+     */
     @Synchronized
     fun metadata(): ProducerRoutingResponse =
         currentRouting(forceRefresh = false)
 
+    /**
+     * Forces a metadata fetch from the coordinator and updates the local routing cache.
+     */
     @Synchronized
     fun refresh(): ProducerRoutingResponse =
         currentRouting(forceRefresh = true)
 
+    /**
+     * Clears routing metadata so the next publish sees the latest coordinator assignment.
+     */
     @Synchronized
     fun invalidate() {
         invalidate("manual")
@@ -63,31 +74,38 @@ class ProducerRoutingCache(
     @Synchronized
     internal fun invalidate(reason: String) {
         cached = null
-        metrics.recordRoutingCacheInvalidated(reason)
     }
 
     @Synchronized
     fun cachedMetadataVersion(): Long? =
         cached?.metadata?.metadataVersion
 
+    /**
+     * Loads and validates initial coordinator routing metadata so missing shards fail application startup.
+     */
+    @Synchronized
+    fun validateInitialRouting(): ProducerRoutingResponse =
+        currentRouting(forceRefresh = true)
+
+    /**
+     * Loads routing metadata while preserving the existing cache when the version is unchanged.
+     */
     private fun currentRouting(forceRefresh: Boolean): ProducerRoutingResponse {
-        require(streamPrefix.isNotBlank()) { "redis-stream-coordinator.producer.stream-prefix must be set" }
-        require(consumerGroup.isNotBlank()) { "redis-stream-coordinator.producer.consumer-group must be set" }
+        require(streamPrefix.isNotBlank()) { "ProducerRoutingProperties.streamPrefix must be set" }
+        require(consumerGroupName.isNotBlank()) { "ProducerRoutingProperties.consumerGroupName must be set" }
+        require(!refreshInterval.isNegative && !refreshInterval.isZero) {
+            "ProducerRoutingProperties.routingRefreshInterval must be positive"
+        }
 
         val now = Instant.now(clock)
         val snapshot = cached
         if (!forceRefresh && snapshot != null && now.isBefore(snapshot.expiresAt)) {
-            metrics.recordRoutingCacheHit()
             return snapshot.metadata
         }
 
-        val fetched = try {
-            client.producerRouting(streamPrefix, consumerGroup).also(::validate)
-        } catch (error: RuntimeException) {
-            metrics.recordRoutingRefresh("ERROR", Duration.between(now, Instant.now(clock)))
-            throw error
+        val fetched = client.producerRouting(streamPrefix, consumerGroupName).also {
+            CoordinatorRoutingMetadataValidator.validate(streamPrefix, consumerGroupName, it)
         }
-        metrics.recordRoutingRefresh("SUCCESS", Duration.between(now, Instant.now(clock)))
         cached = when {
             snapshot == null -> CachedRouting(fetched, now.plus(refreshInterval))
             snapshot.metadata.metadataVersion == fetched.metadataVersion ->
@@ -95,24 +113,6 @@ class ProducerRoutingCache(
             else -> CachedRouting(fetched, now.plus(refreshInterval))
         }
         return cached!!.metadata
-    }
-
-    private fun validate(metadata: ProducerRoutingResponse) {
-        require(metadata.streamPrefix == streamPrefix) {
-            "producer routing streamPrefix ${metadata.streamPrefix} does not match configured $streamPrefix"
-        }
-        require(metadata.consumerGroup == consumerGroup) {
-            "producer routing consumerGroup ${metadata.consumerGroup} does not match configured $consumerGroup"
-        }
-        require(metadata.shardCount > 0) { "producer routing shardCount must be positive" }
-        require(metadata.shards.isNotEmpty()) { "producer routing must include active shards" }
-        val activeShardIndexes = metadata.shards
-            .filter { it.streamVersion == metadata.activeWriteVersion }
-            .map { it.shardIndex }
-            .toSortedSet()
-        require(activeShardIndexes == (0 until metadata.shardCount).toSortedSet()) {
-            "producer routing active shard list does not match shardCount"
-        }
     }
 
     private data class CachedRouting(
@@ -124,14 +124,23 @@ class ProducerRoutingCache(
 object RedisStreamPartitionHasher {
     private const val HASH_SPACE_SIZE = 4_294_967_296L
 
+    /**
+     * Maps a UTF-8 partition key to a shard index with the stable v1 routing algorithm.
+     */
     fun shardIndex(metadata: ProducerRoutingResponse, partitionKey: String): Int =
         shardIndex(metadata, partitionKey.toByteArray(Charsets.UTF_8))
 
+    /**
+     * Maps a binary partition key to a shard index without modulo bias.
+     */
     fun shardIndex(metadata: ProducerRoutingResponse, partitionKey: ByteArray): Int {
         require(metadata.shardCount > 0) { "producer routing shardCount must be positive" }
         return unbiasedShardIndex(partitionKey, metadata.shardCount)
     }
 
+    /**
+     * Rehashes only the rare out-of-range values so every shard receives an equal-sized hash range.
+     */
     private fun unbiasedShardIndex(partitionKey: ByteArray, shardCount: Int): Int {
         val limit = HASH_SPACE_SIZE - (HASH_SPACE_SIZE % shardCount.toLong())
         var attempt = 0

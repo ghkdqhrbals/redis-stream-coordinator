@@ -4,11 +4,17 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupKey
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.HeartbeatStatus
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MemberMetadata
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MemberState
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MigrationState
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardId
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardConsumptionProgress
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamShardOffset
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamShardOffsetsResponse
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Tags
+import io.micrometer.core.instrument.Timer
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
 import java.time.Clock
@@ -25,9 +31,20 @@ interface CoordinatorMetrics {
     fun recordRebalance(group: GroupMetadata, reason: String, duration: Duration)
     fun recordScaleRequest(streamPrefix: String, consumerGroup: String, status: String)
     fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String)
+    fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String)
     fun recordTick(result: CoordinatorTickResult, duration: Duration)
     fun recordStateConflict(operation: String, attempt: Int)
     fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int)
+    fun recordStreamShardOffsets(offsets: StreamShardOffsetsResponse)
+    fun recordApiRequest(
+        method: String,
+        route: String,
+        status: Int,
+        outcome: String,
+        streamPrefix: String?,
+        consumerGroup: String?,
+        duration: Duration,
+    )
 }
 
 object NoopCoordinatorMetrics : CoordinatorMetrics {
@@ -37,9 +54,20 @@ object NoopCoordinatorMetrics : CoordinatorMetrics {
     override fun recordRebalance(group: GroupMetadata, reason: String, duration: Duration) = Unit
     override fun recordScaleRequest(streamPrefix: String, consumerGroup: String, status: String) = Unit
     override fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String) = Unit
+    override fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String) = Unit
     override fun recordTick(result: CoordinatorTickResult, duration: Duration) = Unit
     override fun recordStateConflict(operation: String, attempt: Int) = Unit
     override fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int) = Unit
+    override fun recordStreamShardOffsets(offsets: StreamShardOffsetsResponse) = Unit
+    override fun recordApiRequest(
+        method: String,
+        route: String,
+        status: Int,
+        outcome: String,
+        streamPrefix: String?,
+        consumerGroup: String?,
+        duration: Duration,
+    ) = Unit
 }
 
 @Component
@@ -68,6 +96,9 @@ class AutoConfiguredCoordinatorMetrics(
     override fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String) =
         delegate.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, status)
 
+    override fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String) =
+        delegate.recordProducerRouting(streamPrefix, consumerGroup, status)
+
     override fun recordTick(result: CoordinatorTickResult, duration: Duration) =
         delegate.recordTick(result, duration)
 
@@ -76,6 +107,19 @@ class AutoConfiguredCoordinatorMetrics(
 
     override fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int) =
         delegate.recordGroupState(group, invariantViolationCount)
+
+    override fun recordStreamShardOffsets(offsets: StreamShardOffsetsResponse) =
+        delegate.recordStreamShardOffsets(offsets)
+
+    override fun recordApiRequest(
+        method: String,
+        route: String,
+        status: Int,
+        outcome: String,
+        streamPrefix: String?,
+        consumerGroup: String?,
+        duration: Duration,
+    ) = delegate.recordApiRequest(method, route, status, outcome, streamPrefix, consumerGroup, duration)
 }
 
 class MicrometerCoordinatorMetrics(
@@ -86,6 +130,7 @@ class MicrometerCoordinatorMetrics(
     private val coordinatorTags = Tags.of("coordinator", properties.id)
     private val up = AtomicInteger(1)
     private val groups = ConcurrentHashMap<GroupKey, GroupMeters>()
+    private val streamOffsets = ConcurrentHashMap<StreamShardMetricKey, StreamShardOffsetMeters>()
 
     init {
         Gauge.builder("redis_stream_coord_up", up) { it.get().toDouble() }
@@ -131,6 +176,13 @@ class MicrometerCoordinatorMetrics(
         ).increment()
     }
 
+    override fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String) {
+        registry.counter(
+            "redis_stream_coord_producer_routing_request_total",
+            groupTags(streamPrefix, consumerGroup).and("status", status),
+        ).increment()
+    }
+
     override fun recordTick(result: CoordinatorTickResult, duration: Duration) {
         val tags = coordinatorTags.and("changed", (result.changedGroups > 0).toString())
         registry.counter("redis_stream_coord_tick_total", tags).increment()
@@ -144,6 +196,32 @@ class MicrometerCoordinatorMetrics(
         ).increment()
     }
 
+    override fun recordApiRequest(
+        method: String,
+        route: String,
+        status: Int,
+        outcome: String,
+        streamPrefix: String?,
+        consumerGroup: String?,
+        duration: Duration,
+    ) {
+        val tags = coordinatorTags.and(
+            "method", method.uppercase(),
+            "route", route,
+            "status", status.toString(),
+            "outcome", outcome,
+            "stream", streamPrefix.orEmpty().ifBlank { "none" },
+            "group", consumerGroup.orEmpty().ifBlank { "none" },
+        )
+        registry.counter("redis_stream_coord_api_request_total", tags).increment()
+        Timer.builder("redis_stream_coord_api_request_duration")
+            .description("Coordinator HTTP API request latency")
+            .tags(tags)
+            .publishPercentiles(0.5, 0.95, 0.99)
+            .register(registry)
+            .record(duration)
+    }
+
     override fun recordGroupState(group: GroupMetadata, invariantViolationCount: Int) {
         val meters = groups.computeIfAbsent(group.key()) { createGroupMeters(group) }
         meters.groupEpoch.set(group.groupEpoch)
@@ -155,9 +233,31 @@ class MicrometerCoordinatorMetrics(
         meters.activeMigrationAgeSeconds.set(group.activeMigrationAgeSeconds())
         meters.revokePending.set(group.members.values.sumOf { it.revoking.size }.toLong())
         meters.invariantViolations.set(invariantViolationCount.toLong())
+        group.members.values.forEach { member ->
+            meters.members
+                .computeIfAbsent(member.memberId) { createMemberMeters(group, member.memberId) }
+                .update(member, clock)
+            member.shardProgress.forEach { progress ->
+                meters.progress
+                    .computeIfAbsent(MemberShardKey(member.memberId, progress.shard)) {
+                        createShardProgressMeters(group, member.memberId, progress.shard)
+                    }
+                    .update(progress, clock)
+            }
+        }
         if (invariantViolationCount > 0) {
             registry.counter("redis_stream_coord_invariant_violation_total", groupTags(group))
                 .increment(invariantViolationCount.toDouble())
+        }
+    }
+
+    override fun recordStreamShardOffsets(offsets: StreamShardOffsetsResponse) {
+        offsets.shards.forEach { offset ->
+            streamOffsets
+                .computeIfAbsent(StreamShardMetricKey(offset.streamPrefix, offset.consumerGroup, offset.shard)) {
+                    createStreamShardOffsetMeters(offset)
+                }
+                .update(offset)
         }
     }
 
@@ -173,6 +273,63 @@ class MicrometerCoordinatorMetrics(
         registerGauge("redis_stream_coord_migration_active_age_seconds", tags, meters.activeMigrationAgeSeconds)
         registerGauge("redis_stream_coord_revoke_pending", tags, meters.revokePending)
         registerGauge("redis_stream_coord_invariant_violations", tags, meters.invariantViolations)
+        return meters
+    }
+
+    private fun createMemberMeters(group: GroupMetadata, memberId: String): MemberMeters {
+        val tags = groupTags(group).and("member", memberId)
+        val meters = MemberMeters()
+        registerGauge("redis_stream_coord_member_active", tags, meters.active)
+        registerGauge("redis_stream_coord_member_heartbeat_age_seconds", tags, meters.heartbeatAgeSeconds)
+        registerGauge("redis_stream_coord_member_lease_remaining_seconds", tags, meters.leaseRemainingSeconds)
+        registerGauge("redis_stream_coord_member_assigned_max_concurrency", tags, meters.assignedMaxConcurrency)
+        registerGauge("redis_stream_coord_member_runtime_max_concurrency", tags, meters.runtimeMaxConcurrency)
+        registerGauge("redis_stream_coord_member_active_workers", tags, meters.activeWorkers)
+        registerGauge("redis_stream_coord_member_current_shards", tags, meters.currentShards)
+        registerGauge("redis_stream_coord_member_revoking_shards", tags, meters.revokingShards)
+        return meters
+    }
+
+    private fun createShardProgressMeters(
+        group: GroupMetadata,
+        memberId: String,
+        shard: ShardId,
+    ): ShardProgressMeters {
+        val tags = groupTags(group)
+            .and(
+                "member", memberId,
+                "shard", shard.shardIndex.toString(),
+            )
+        val meters = ShardProgressMeters()
+        registerGauge("redis_stream_coord_consumer_shard_last_delivered_ms", tags, meters.lastDeliveredMs)
+        registerGauge("redis_stream_coord_consumer_shard_last_delivered_seq", tags, meters.lastDeliveredSeq)
+        registerGauge("redis_stream_coord_consumer_shard_last_acked_ms", tags, meters.lastAckedMs)
+        registerGauge("redis_stream_coord_consumer_shard_last_acked_seq", tags, meters.lastAckedSeq)
+        registerGauge("redis_stream_coord_consumer_shard_pending", tags, meters.pending)
+        registerGauge("redis_stream_coord_consumer_shard_progress_updated_at_seconds", tags, meters.updatedAtSeconds)
+        registerGauge("redis_stream_coord_consumer_shard_progress_age_seconds", tags, meters.progressAgeSeconds)
+        return meters
+    }
+
+    private fun createStreamShardOffsetMeters(offset: StreamShardOffset): StreamShardOffsetMeters {
+        val tags = groupTags(offset.streamPrefix, offset.consumerGroup)
+            .and(
+                "shard", offset.shard.shardIndex.toString(),
+                "stream_key", offset.streamKey,
+            )
+        val meters = StreamShardOffsetMeters()
+        registerGauge("redis_stream_coord_shard_stream_length", tags, meters.streamLength)
+        registerGauge("redis_stream_coord_shard_pending", tags, meters.pending)
+        registerGauge("redis_stream_coord_shard_lag", tags, meters.lag)
+        registerGauge("redis_stream_coord_shard_memory_usage_bytes", tags, meters.memoryUsageBytes)
+        registerGauge("redis_stream_coord_shard_last_record_ms", tags, meters.lastRecordMs)
+        registerGauge("redis_stream_coord_shard_last_record_seq", tags, meters.lastRecordSeq)
+        registerGauge("redis_stream_coord_shard_last_generated_ms", tags, meters.lastGeneratedMs)
+        registerGauge("redis_stream_coord_shard_last_generated_seq", tags, meters.lastGeneratedSeq)
+        registerGauge("redis_stream_coord_shard_group_last_delivered_ms", tags, meters.groupLastDeliveredMs)
+        registerGauge("redis_stream_coord_shard_group_last_delivered_seq", tags, meters.groupLastDeliveredSeq)
+        registerGauge("redis_stream_coord_shard_consumer_last_acked_ms", tags, meters.consumerLastAckedMs)
+        registerGauge("redis_stream_coord_shard_consumer_last_acked_seq", tags, meters.consumerLastAckedSeq)
         return meters
     }
 
@@ -209,5 +366,119 @@ class MicrometerCoordinatorMetrics(
         val activeMigrationAgeSeconds = AtomicLong(0)
         val revokePending = AtomicLong(0)
         val invariantViolations = AtomicLong(0)
+        val members = ConcurrentHashMap<String, MemberMeters>()
+        val progress = ConcurrentHashMap<MemberShardKey, ShardProgressMeters>()
+    }
+
+    private class MemberMeters {
+        val active = AtomicLong(0)
+        val heartbeatAgeSeconds = AtomicLong(0)
+        val leaseRemainingSeconds = AtomicLong(0)
+        val assignedMaxConcurrency = AtomicLong(0)
+        val runtimeMaxConcurrency = AtomicLong(0)
+        val activeWorkers = AtomicLong(0)
+        val currentShards = AtomicLong(0)
+        val revokingShards = AtomicLong(0)
+
+        fun update(member: MemberMetadata, clock: Clock) {
+            val now = Instant.now(clock)
+            active.set(if (member.state == MemberState.ACTIVE || member.state == MemberState.STARTING) 1 else 0)
+            heartbeatAgeSeconds.set(Duration.between(member.lastHeartbeatAt, now).seconds.coerceAtLeast(0))
+            leaseRemainingSeconds.set(Duration.between(now, member.memberLeaseExpiresAt).seconds.coerceAtLeast(0))
+            assignedMaxConcurrency.set(member.assignedMaxConcurrency.toLong())
+            runtimeMaxConcurrency.set(member.runtimeMaxConcurrency.toLong())
+            activeWorkers.set(member.activeConsumerWorkers.toLong())
+            currentShards.set(member.currentAssignment.size.toLong())
+            revokingShards.set(member.revoking.size.toLong())
+        }
+    }
+
+    private data class MemberShardKey(
+        val memberId: String,
+        val shard: ShardId,
+    )
+
+    private data class StreamShardMetricKey(
+        val streamPrefix: String,
+        val consumerGroup: String,
+        val shard: ShardId,
+    )
+
+    private class ShardProgressMeters {
+        val lastDeliveredMs = AtomicLong(-1)
+        val lastDeliveredSeq = AtomicLong(-1)
+        val lastAckedMs = AtomicLong(-1)
+        val lastAckedSeq = AtomicLong(-1)
+        val pending = AtomicLong(0)
+        val updatedAtSeconds = AtomicLong(0)
+        val progressAgeSeconds = AtomicLong(0)
+
+        fun update(progress: ShardConsumptionProgress, clock: Clock) {
+            val delivered = progress.lastDeliveredId.toRedisStreamIdParts()
+            val acked = progress.lastAckedId.toRedisStreamIdParts()
+            lastDeliveredMs.set(delivered.first)
+            lastDeliveredSeq.set(delivered.second)
+            lastAckedMs.set(acked.first)
+            lastAckedSeq.set(acked.second)
+            pending.set(progress.pendingCount.coerceAtLeast(0))
+            updatedAtSeconds.set(progress.updatedAt?.epochSecond ?: 0)
+            progressAgeSeconds.set(
+                progress.updatedAt
+                    ?.let { Duration.between(it, Instant.now(clock)).seconds.coerceAtLeast(0) }
+                    ?: 0,
+            )
+        }
+
+        private fun String?.toRedisStreamIdParts(): Pair<Long, Long> {
+            if (this == null) {
+                return -1L to -1L
+            }
+            val milliseconds = substringBefore("-").toLongOrNull() ?: -1L
+            val sequence = substringAfter("-", "").toLongOrNull() ?: -1L
+            return milliseconds to sequence
+        }
+    }
+
+    private class StreamShardOffsetMeters {
+        val streamLength = AtomicLong(0)
+        val pending = AtomicLong(0)
+        val lag = AtomicLong(0)
+        val memoryUsageBytes = AtomicLong(0)
+        val lastRecordMs = AtomicLong(-1)
+        val lastRecordSeq = AtomicLong(-1)
+        val lastGeneratedMs = AtomicLong(-1)
+        val lastGeneratedSeq = AtomicLong(-1)
+        val groupLastDeliveredMs = AtomicLong(-1)
+        val groupLastDeliveredSeq = AtomicLong(-1)
+        val consumerLastAckedMs = AtomicLong(-1)
+        val consumerLastAckedSeq = AtomicLong(-1)
+
+        fun update(offset: StreamShardOffset) {
+            val lastRecord = offset.lastRecordId.toRedisStreamIdParts()
+            val lastGenerated = offset.lastGeneratedId.toRedisStreamIdParts()
+            val groupDelivered = offset.groupLastDeliveredId.toRedisStreamIdParts()
+            val consumerAcked = offset.consumerLastAckedId.toRedisStreamIdParts()
+            streamLength.set(offset.streamLength.coerceAtLeast(0))
+            pending.set(offset.pendingCount.coerceAtLeast(0))
+            lag.set((offset.lag ?: 0L).coerceAtLeast(0))
+            memoryUsageBytes.set((offset.memoryUsageBytes ?: 0L).coerceAtLeast(0))
+            lastRecordMs.set(lastRecord.first)
+            lastRecordSeq.set(lastRecord.second)
+            lastGeneratedMs.set(lastGenerated.first)
+            lastGeneratedSeq.set(lastGenerated.second)
+            groupLastDeliveredMs.set(groupDelivered.first)
+            groupLastDeliveredSeq.set(groupDelivered.second)
+            consumerLastAckedMs.set(consumerAcked.first)
+            consumerLastAckedSeq.set(consumerAcked.second)
+        }
+
+        private fun String?.toRedisStreamIdParts(): Pair<Long, Long> {
+            if (this == null) {
+                return -1L to -1L
+            }
+            val milliseconds = substringBefore("-").toLongOrNull() ?: -1L
+            val sequence = substringAfter("-", "").toLongOrNull() ?: -1L
+            return milliseconds to sequence
+        }
     }
 }

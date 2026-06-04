@@ -18,11 +18,12 @@ Redis Stream Coordinator fills this gap by adapting the coordinator-managed reba
 
 * Reduce Redis Stream BigKey risk by splitting traffic into multiple shard stream keys.
 * Support Redis Cluster-friendly key distribution.
-* Provide a dedicated coordinator server as the source of truth for group metadata, stream versions, and shard assignment.
+* Provide a dedicated coordinator server as the source of truth for group metadata, shard count and shard assignment.
 * Provide Spring Boot modules for consumer integration and producer routing/publishing.
 * Preserve sticky shard ownership when possible so rebalances move only the shards that need to move.
 * Enforce revoke-before-assign for live members.
 * Support member join, graceful leave, expiration, and rejoin.
+* Define annotation listener concurrency as logical coordinator member fan-out: `@StreamListener(concurrency = "N")` creates N independent members with separate heartbeat and assignment state.
 * Support shard count changes through versioned stream migration.
 * Provide monitoring APIs and metrics for ownership, epochs, member liveness, consumer progress, producer routing, and resharding.
 * Make open source operation practical with Docker, sample pods, security defaults, tests, and compatibility policy.
@@ -34,7 +35,7 @@ Redis Stream Coordinator fills this gap by adapting the coordinator-managed reba
 * Global message ordering across shards.
 * Exactly-once processing or exactly-once business side effects.
 * Distributed transactions across Redis Stream ACK and arbitrary application databases or APIs.
-* Automatic global event-id deduplication across all stream versions and shards.
+* Automatic global event-id deduplication across all shards.
 * Running the coordinator as embedded application logic inside every consumer.
 * Letting member startup YAML mutate server-side shard count or group metadata.
 
@@ -42,9 +43,10 @@ Redis Stream Coordinator fills this gap by adapting the coordinator-managed reba
 
 * Applications can choose a stable partition key for producer routing.
 * Duplicate delivery is acceptable at the infrastructure layer and must be handled by application idempotency where needed.
-* Operators can run the coordinator server with access to the Redis metadata store.
-* Redis Cluster deployments should use hash-tagged coordinator metadata keys so related metadata lives in one slot.
+* Operators can run the coordinator server with access to a durable metadata database.
+* Redis Cluster is used for the Redis Stream data plane. Redis-backed coordinator metadata is allowed only for development, tests, or non-critical deployments.
 * Redis Stream data-plane reads, handler retries, DLQ policy, and ACK policy remain application-owned unless the optional starter polling adapter is enabled.
+* Bean-based `runtimeMaxConcurrency` is local worker capacity for one member; it is separate from annotation listener concurrency.
 
 ## User-Facing Modules
 

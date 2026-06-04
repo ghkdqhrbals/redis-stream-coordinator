@@ -9,7 +9,7 @@ This document explains which KIP-848 ideas are adapted and how they are reshaped
 | KIP-848 Concept | Redis Stream Coordinator Equivalent |
 | --- | --- |
 | Group Coordinator | Dedicated coordinator server |
-| Member | Consumer runtime member with UUID `memberId` |
+| Member | Consumer runtime member with a pod-IP-context-derived `memberId` |
 | Topic Partition | Redis Stream shard |
 | Target Assignment | Coordinator-owned desired shard ownership |
 | Current Assignment | Member-reported applied ownership |
@@ -46,14 +46,13 @@ Assignment is computed and persisted by the coordinator. Consumers receive assig
 
 ## Redis-Specific Changes
 
-### Stream Versions
+### Redis Sharding
 
-Kafka partitions are broker-managed. Redis Stream shards are application-managed keys. Shard count changes therefore use stream versions:
+Kafka partitions are broker-managed. Redis Stream shards are application-managed keys. Shard count changes are managed by the coordinator metadata:
 
-* old version becomes `DRAINING`,
-* new version becomes `ACTIVE`,
-* consumers read all readable versions,
-* producers write only to the active version.
+* the coordinator records a resharding state,
+* consumers drain shards that are being removed,
+* producers route with the current shard count returned by the coordinator.
 
 ### Producer Routing
 
@@ -79,5 +78,5 @@ Kafka transactions can bind Kafka output records and consumed offsets inside Kaf
 
 * Whether to support pluggable assignment strategies.
 * Whether to add richer assignment diff reporting for clients.
-* Whether member identity should optionally be coordinator-issued.
+* Whether pod-IP-context-derived member identity should optionally be coordinator-issued.
 * Whether monitoring projections should be rebuilt automatically from an append-only audit/event log.

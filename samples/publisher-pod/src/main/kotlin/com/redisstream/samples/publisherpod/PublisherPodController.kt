@@ -34,7 +34,6 @@ data class PublisherPodEvent(
     val payload: String,
     val streamKey: String? = null,
     val recordId: String? = null,
-    val streamVersion: Int? = null,
     val shardIndex: Int? = null,
     val error: String? = null,
     val recordedAt: Instant = Instant.now(),
@@ -49,7 +48,6 @@ data class PublishRequest(
 data class PublishResponse(
     val streamKey: String,
     val recordId: String,
-    val streamVersion: Int,
     val shardIndex: Int,
 )
 
@@ -107,7 +105,6 @@ class ScheduledSamplePublisher(
                     payload = payload,
                     streamKey = message.streamKey,
                     recordId = message.recordId,
-                    streamVersion = message.route.shard.streamVersion,
                     shardIndex = message.route.shard.shardIndex,
                 ),
             )
@@ -144,7 +141,6 @@ class PublisherPodController(
         return PublishResponse(
             streamKey = message.streamKey,
             recordId = message.recordId,
-            streamVersion = message.route.shard.streamVersion,
             shardIndex = message.route.shard.shardIndex,
         )
     }

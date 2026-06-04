@@ -1,14 +1,15 @@
 # Implementation Status
 
-Last updated: 2026-05-29
+Last updated: 2026-06-01
 
 ## Snapshot
 
-The repository currently contains two Gradle modules:
+The repository currently contains three production Gradle modules:
 
 | Module | Status | Purpose |
 | --- | --- | --- |
 | `coordinator-server` | MVP implemented | Spring Boot control plane for group metadata, heartbeat reconciliation, assignment, migration, monitoring, ACL, audit, centralized metrics, and Redis-backed state. |
+| `redisstream-core` | Implemented | Shared coordination version contract and versioned timing defaults for coordinator and support modules. |
 | `com.redisstream:redisstream-spring-boot-starter` | MVP implemented | Spring Boot integration layer for consumer heartbeat lifecycle, shard callbacks, Redis Stream polling, producer routing, publishing, graceful leave, and coordinator progress reporting. |
 
 Overall status:
@@ -18,11 +19,11 @@ Overall status:
 | Project foundation | Done | Gradle Kotlin DSL, Gradle Wrapper `8.14.5`, Spring Boot `4.0.6`, Kotlin `2.2.21`, Java toolchain `24`, Foojay resolver. |
 | Coordinator API | Done | Admin, member heartbeat, producer routing, migration, rollback, and monitoring endpoints are implemented. |
 | Rebalance semantics | Done for MVP | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, stale ownership fencing, rebalance timeout, migration drain, and monitoring refresh conflict retry are implemented. |
-| Redis state store | Done | Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua aggregate/projection updates. |
-| Redis Stream shard provisioning | Done | Optional initial and next-version stream/consumer-group provisioning is implemented and gated by config. Idempotent retry and partial failure behavior are covered. |
+| Redis state store | Done | Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua metadata-hash updates. |
+| Redis Stream shard provisioning | Done | Optional stream/consumer-group provisioning is implemented and gated by config. Idempotent retry and partial failure behavior are covered. |
 | Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
-| Observability | Done for MVP | Coordinator Micrometer metrics and monitoring APIs are implemented, including consumer shard progress. Starter modules do not publish their own Micrometer meters. |
-| Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity/progress reporting, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
+| Observability | Done for MVP | Coordinator Micrometer/Prometheus metrics, monitoring APIs, consumer shard progress, shard offset/lag gauges, the built-in monitoring console, and local Prometheus/Grafana provisioning are implemented. Starter modules do not publish their own Micrometer meters. |
+| Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity/progress reporting, runtime concurrency enforcement, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
 | Producer starter | Done for MVP | Producer routing cache, routing validation, stale-cache invalidation after write failure, opt-in publish retry, Redis Stream publisher, payload helper, and batch publish are implemented. |
 | Processing guarantee | Done for MVP | Public guarantee is at-least-once. Single-processing guarantees are not provided because application business side effects cannot be atomically committed with Redis Stream ACKs. |
 | Local Redis Cluster | Done | `compose.yaml` starts three Redis Cluster masters and supports host access through `localhost:7001..7003`. |
@@ -39,6 +40,7 @@ The current implementation has been verified with:
 ./gradlew :redisstream-spring-boot-starter:test :coordinator-server:test --no-daemon
 ./gradlew test build --no-daemon
 python3 .github/scripts/test_docker_distribution.py
+docker build -t redis-stream-coordinator/coordinator-server:jvm-ci .
 ```
 
 Redis integration tests are gated and require the local Redis Cluster:
@@ -63,6 +65,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Member heartbeat API.
 * [x] Monitoring health, group, member, assignment, and migration APIs.
 * [x] Monitoring consumption progress API.
+* [x] Built-in monitoring console at `/console`.
 * [x] Shared error enum for HTTP status, error code, and default message.
 * [x] Scheduled coordinator event loop for lease expiry, rebalance timeout, and migration drain progress.
 * [x] Redis-backed distributed state mutex so multiple coordinator pods can be deployed without user-managed single-active rollout rules.
@@ -80,8 +83,8 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] `assignedShards` and `pendingShards` split.
 * [x] Revoke-before-assign handoff.
 * [x] Rebalance timeout fencing.
-* [x] Scale migration with next stream version.
-* [x] Old/new readable versions during active migration.
+* [x] Scale migration with updated shard count.
+* [x] Old/new readable shard set during active migration.
 * [x] Automatic migration drain and `DEPRECATED` transition.
 * [x] Active migration rollback.
 * [x] Monitoring/read API operational refresh retry on Redis store CAS conflict.
@@ -94,16 +97,26 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] `CoordinatorStateStore` abstraction.
 * [x] In-memory state store.
 * [x] Redis state store for aggregate group metadata.
-* [x] Redis projection keys for members, target assignment, current assignment, migrations, active migration, and revision.
+* [x] Redis single metadata hash key per group.
 * [x] Redis state mutex key for request-level coordinator critical-section serialization.
 * [x] Redis store revision compare-and-set for stale write detection.
 * [x] Redis metadata `schemaVersion` guard for persisted group aggregate reads and writes.
-* [x] Lua aggregate/projection updates to avoid reader-visible partial writes.
+* [x] Lua metadata hash updates to avoid stale writer overwrites.
 * [x] Redis Cluster hash-slot-safe coordinator keys.
 * [x] Redis Stream shard key helper and hash-slot distribution helper.
 * [x] Optional Redis Stream shard and consumer-group provisioning.
 * [x] Redis Stream provisioning idempotent retry coverage after partial Redis failure.
 * [x] Centralized coordinator Redis command template for state, mutex, audit, health, and stream provisioning commands.
+
+### Redis Metadata Correction
+
+* [x] One canonical Redis metadata key per `{streamPrefix, consumerGroup}`.
+* [x] Coordinator detects heartbeats that report a higher local `metadataVersion` than the Redis metadata key.
+* [x] Coordinator returns `SYNC_METADATA` so consumers discard the higher local view and use the current coordinator metadata.
+* [x] `SYNC_METADATA` is retry-safe and drain-only; new shard reads are blocked until a later `OK`.
+* [x] `REVOKE_PENDING` separates corrected metadata from unfinished revoke-before-assign handoff.
+* [x] Metadata correction remains active until live members heartbeat with the target metadata version.
+* [x] Stale revoke reports from discarded higher metadata views are ignored during correction.
 
 ### Security, Audit, And Observability
 
@@ -113,6 +126,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Optional per-caller/group admin mutation rate limiting with `Retry-After` response.
 * [x] Structured admin audit logs for create, scale, consumer concurrency update, and rollback.
 * [x] Optional Redis-backed group-scoped admin audit log.
+* [x] Built-in monitoring console that signs in with coordinator Basic Auth and reads monitoring APIs.
 * [x] Coordinator Micrometer metrics:
   * `redis_stream_coord_up`
   * `redis_stream_coord_group_epoch`
@@ -149,6 +163,24 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * `redis_stream_coord_consumer_shard_pending`
   * `redis_stream_coord_consumer_shard_progress_updated_at_seconds`
   * `redis_stream_coord_consumer_shard_progress_age_seconds`
+  * `redis_stream_coord_shard_stream_length`
+  * `redis_stream_coord_shard_pending`
+  * `redis_stream_coord_shard_lag`
+  * `redis_stream_coord_shard_last_record_ms`
+  * `redis_stream_coord_shard_last_record_seq`
+  * `redis_stream_coord_shard_last_generated_ms`
+  * `redis_stream_coord_shard_last_generated_seq`
+  * `redis_stream_coord_shard_group_last_delivered_ms`
+  * `redis_stream_coord_shard_group_last_delivered_seq`
+  * `redis_stream_coord_shard_consumer_last_acked_ms`
+  * `redis_stream_coord_shard_consumer_last_acked_seq`
+* [x] Local Prometheus/Grafana Docker provisioning:
+  * Prometheus scrape config for `/actuator/prometheus`.
+  * Grafana datasource provisioning.
+  * Redis Stream Coordinator dashboard.
+  * Coordinator API datasource with Grafana-managed Basic Auth.
+  * Direct Grafana REST panels for group/member/assignment/shard/message monitoring APIs.
+  * Stream message payload table with cursor pagination through dashboard variables.
 
 ### RedisStream Spring Boot Starter
 
@@ -163,7 +195,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Optional `CoordinatorShardProgressProvider` for coordinator-reported shard progress.
 * [x] Built-in Redis Stream polling lifecycle reports in-flight handler capacity.
 * [x] Built-in Redis Stream polling lifecycle reports last delivered and last acked Redis Stream ids.
-* [x] Consumer-side heartbeat protocol validation.
+* [x] Consumer-side coordination version validation.
 * [x] Spring Boot auto-configuration.
 * [x] Opt-in Redis Stream polling adapter.
 * [x] Handler-success-only `XACK` behavior.
@@ -179,7 +211,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 
 ## Documented Constraints
 
-* [x] Same partition key can route to a different Redis Stream shard after shard scale-out/in because routing is scoped to the active stream version and shard count.
+* [x] Same partition key can route to a different Redis Stream shard after shard scale-out/in because routing is scoped to the shard count.
 * [x] Producer retry and shard migration can create duplicate messages or duplicate business-event attempts.
 * [x] Duplicate-sensitive workloads must quiesce producers and drain in-flight publish retries before shard scale-out/in.
 * [x] Processing guarantee is at-least-once. Single delivery, single handler invocation, or single business side-effect application is not guaranteed.
@@ -203,6 +235,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 
 * Group creation and duplicate rejection.
 * Heartbeat validation and unsupported protocol rejection.
+* Heartbeat replay idempotency for initial join, steady ownership reports, and active epoch reset rejection after ownership is acknowledged.
 * Member join, expired rejoin, graceful leave, and unknown member leave.
 * Sticky assignment and weighted balancing.
 * Revoke-before-assign handoff with `pendingShards`.
@@ -210,7 +243,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Rebalance timeout fencing.
 * Stale ownership fencing for premature pending ownership and foreign active-owner shard reports.
 * Scale migration, producer routing refresh, rollback, and migration drain completion.
-* Redis state projection and stale snapshot rejection.
+* Redis single-key metadata store and stale snapshot rejection.
 * Stream shard key validation and Redis Cluster slot distribution.
 * Stream provisioning success, idempotent retry, and failure ordering.
 * ACL enforcement and admin audit events.
@@ -229,6 +262,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Graceful leave heartbeat on shutdown.
 * Redis polling adapter reads, invokes handler, and acknowledges only successful messages.
 * Runtime capacity reports available concurrency while handlers are in flight.
+* Redis polling enforces runtime concurrency across assigned shards before reading new records.
 * Shard progress reports last delivered and last acked Redis Stream ids through heartbeat.
 * Producer routing cache refresh, invalidation, validation, and unsupported hash rejection.
 * Redis Stream publisher routing, stale-cache invalidation, opt-in retry, payload helper, and batch publish.
@@ -261,6 +295,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 Priority order:
 
 1. [ ] Cut the first public Docker image release through the manual GHCR workflow.
+2. [ ] Add a compatibility fixture suite for old metadata JSON and old client coordination versions.
 
 Still intentionally out of coordinator scope:
 

@@ -100,7 +100,19 @@ private fun HttpServletRequest.adminMutationTarget(): AdminMutationTarget? {
     }
 
     val parts = requestURI.removePrefix("/").split("/")
-    if (parts.size < 6 || parts[0] != "coord" || parts[1] != "v1" || parts[2] != "streams" || parts[4] != "groups") {
+    if (parts.size < 4 || parts[0] != "coord" || parts[1] != "v1" || parts[2] != "streams") {
+        return null
+    }
+
+    if (parts.size == 4 && method.equals("POST", ignoreCase = true)) {
+        return AdminMutationTarget(streamPrefix = parts[3], consumerGroup = "*")
+    }
+
+    if (parts.size == 5 && parts[4] == "scale") {
+        return AdminMutationTarget(streamPrefix = parts[3], consumerGroup = "*")
+    }
+
+    if (parts.size < 6 || parts[4] != "groups") {
         return null
     }
 

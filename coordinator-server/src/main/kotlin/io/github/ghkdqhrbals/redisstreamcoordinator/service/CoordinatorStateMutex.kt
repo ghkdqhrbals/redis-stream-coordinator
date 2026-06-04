@@ -2,6 +2,7 @@ package io.github.ghkdqhrbals.redisstreamcoordinator.service
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorException
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
@@ -14,8 +15,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 interface CoordinatorStateMutex : AutoCloseable {
+    /**
+     * Runs a state mutation while holding the single-writer coordinator lease.
+     */
     fun <T> withCriticalSection(operation: String, block: () -> T): T
 
+    /**
+     * Runs a maintenance operation only when the mutex can be acquired immediately.
+     */
     fun <T> tryCriticalSection(operation: String, block: () -> T): T?
 
     override fun close() {
@@ -31,22 +38,35 @@ object LocalCoordinatorStateMutex : CoordinatorStateMutex {
 }
 
 interface CoordinatorMutexStore {
+    /**
+     * Creates the mutex key with a unique token and TTL when it is not already held.
+     */
     fun acquire(key: String, token: String, ttl: Duration): Boolean
+
+    /**
+     * Extends the mutex TTL only when the stored token still belongs to this owner.
+     */
     fun renew(key: String, token: String, ttl: Duration): Boolean
+
+    /**
+     * Deletes the mutex key only when the stored token still belongs to this owner.
+     */
     fun release(key: String, token: String): Boolean
 }
 
 class RedisCoordinatorMutexStore(
-    private val redisTemplate: StringRedisTemplate,
+    private val redisCommands: CoordinatorRedisCommands,
 ) : CoordinatorMutexStore {
+    constructor(redisTemplate: StringRedisTemplate) : this(CoordinatorRedisCommands(redisTemplate = redisTemplate))
+
     override fun acquire(key: String, token: String, ttl: Duration): Boolean =
-        redisTemplate.opsForValue().setIfAbsent(key, token, ttl) == true
+        redisCommands.setIfAbsent(key, token, ttl)
 
     override fun renew(key: String, token: String, ttl: Duration): Boolean =
-        redisTemplate.execute(RENEW_SCRIPT, listOf(key), token, ttl.toMillis().coerceAtLeast(1).toString()) == 1L
+        redisCommands.executeLong(RENEW_SCRIPT, listOf(key), token, ttl.toMillis().coerceAtLeast(1).toString()) == 1L
 
     override fun release(key: String, token: String): Boolean =
-        redisTemplate.execute(RELEASE_SCRIPT, listOf(key), token) == 1L
+        redisCommands.executeLong(RELEASE_SCRIPT, listOf(key), token) == 1L
 
     companion object {
         private val RENEW_SCRIPT = DefaultRedisScript(
@@ -88,6 +108,9 @@ class RedisCoordinatorStateMutex(
         }
     }
 
+    /**
+     * Waits for the Redis mutex, renews it while the block runs, and releases it afterward.
+     */
     override fun <T> withCriticalSection(operation: String, block: () -> T): T {
         val lease = acquire(operation, wait = true)
             ?: throw CoordinatorException(
@@ -97,11 +120,17 @@ class RedisCoordinatorStateMutex(
         return lease.use(block)
     }
 
+    /**
+     * Attempts to enter the critical section without waiting for another coordinator.
+     */
     override fun <T> tryCriticalSection(operation: String, block: () -> T): T? {
         val lease = acquire(operation, wait = false) ?: return null
         return lease.use(block)
     }
 
+    /**
+     * Acquires the Redis mutex with a unique token so renew/release cannot affect another owner.
+     */
     private fun acquire(operation: String, wait: Boolean): HeldMutex? {
         val token = "$ownerId:${UUID.randomUUID()}"
         val deadline = System.nanoTime() + acquireTimeout.toNanos().coerceAtLeast(0)
@@ -122,6 +151,9 @@ class RedisCoordinatorStateMutex(
         return null
     }
 
+    /**
+     * Keeps the lease alive while the critical section is running.
+     */
     private fun scheduleRenewal(operation: String, token: String): ScheduledFuture<*> {
         val renewalIntervalMs = (mutexTtl.toMillis() / 3).coerceAtLeast(1)
         return renewalExecutor.scheduleWithFixedDelay(
