@@ -69,6 +69,7 @@ data class CoordinatorProperties(
 
     data class Health(
         val redisTimeoutMs: Long = 300,
+        val cacheTtlMs: Long = 1_000,
     )
 
     data class StateMutex(

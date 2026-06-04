@@ -63,7 +63,10 @@ class GrafanaDashboardContractTest {
         assertTrue(dashboard.contains("stream.groups.map(function (group)"))
         assertTrue(dashboard.contains("renderGroup(group, shardsByGroup, nodeSizeByGroup)"))
         assertTrue(dashboard.contains("onInit"))
-        assertTrue(dashboard.contains("/api/datasources/proxy/uid/rsc-coordinator-api/coord/v1/monitoring/grafana/shards"))
+        assertTrue(dashboard.contains("function grafanaBasePath()"))
+        assertTrue(dashboard.contains("function coordinatorProxyPath(path)"))
+        assertTrue(dashboard.contains("coordinatorProxyPath('/coord/v1/monitoring/grafana/shards')"))
+        assertTrue(!dashboard.contains("return '/api/datasources/proxy/uid/rsc-coordinator-api"))
         assertTrue(dashboard.contains("function normalizeVariable(value)"))
         assertTrue(dashboard.contains(""""title": "Stream Sharding Overview""""))
         assertTrue(dashboard.contains(""""title": "Produced Rate by Stream""""))
@@ -86,7 +89,6 @@ class GrafanaDashboardContractTest {
         listOf(
             "redis-stream-coordinator.json",
             "redis-stream-coordinator-stream-detail.json",
-            "redis-stream-coordinator-api.json",
         ).forEach { fileName ->
             val dashboard = readDashboard(fileName)
 
@@ -97,6 +99,34 @@ class GrafanaDashboardContractTest {
                 "$fileName should not use the old short gauge lookback window",
             )
             assertTrue(!dashboard.contains("[1m]"), "$fileName should not use the old one-minute rate window")
+        }
+    }
+
+    @Test
+    fun `api dashboard latency panels use recent window instead of sticky full-range maxima`() {
+        val dashboard = readDashboard("redis-stream-coordinator-api.json")
+
+        assertTrue(dashboard.contains("redis_stream_coord_api_request_duration_seconds"))
+        assertTrue(dashboard.contains("[5m]"), "API latency should represent a recent operational window")
+        assertTrue(
+            !Regex("""redis_stream_coord_api_request_duration_seconds[^"\n]+?\[\${'$'}__range]""").containsMatchIn(dashboard),
+            "API latency should not keep old deployment spikes for the whole selected range",
+        )
+    }
+
+    @Test
+    fun `html graphics datasource calls are grafana subpath safe`() {
+        listOf(
+            "redis-stream-coordinator.json",
+            "redis-stream-coordinator-stream-detail.json",
+        ).forEach { fileName ->
+            val dashboard = readDashboard(fileName)
+
+            assertTrue(dashboard.contains("function grafanaBasePath()"), "$fileName should derive Grafana base path")
+            assertTrue(dashboard.contains("function coordinatorProxyPath(path)"), "$fileName should route through datasource proxy helper")
+            assertTrue(!dashboard.contains("fetch('/api/datasources/proxy"), "$fileName should not fetch root-relative proxy URLs")
+            assertTrue(!dashboard.contains("const proxyPath = '/api/datasources/proxy"), "$fileName should not pin root-relative proxy URLs")
+            assertTrue(!dashboard.contains("return '/api/datasources/proxy"), "$fileName should not return root-relative proxy URLs")
         }
     }
 

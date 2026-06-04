@@ -673,11 +673,49 @@ class CoordinatorServiceTest {
             clock = clock,
         )
 
+        val first = service.health()
+        waitUntil {
+            service.health().redis == "DOWN"
+        }
         val health = service.health()
 
+        assertEquals("UP", first.status)
+        assertEquals("UNKNOWN", first.redis)
         assertEquals("DEGRADED", health.status)
         assertEquals("DOWN", health.redis)
-        Mockito.verify(redisConnectionFactory).connection
+        Mockito.verify(redisConnectionFactory, Mockito.atLeastOnce()).connection
+    }
+
+    @Test
+    fun `health refreshes redis status asynchronously and reuses cache within configured ttl`() {
+        val redisConnection = Mockito.mock(org.springframework.data.redis.connection.RedisConnection::class.java)
+        Mockito.`when`(redisConnection.ping()).thenReturn("PONG")
+        val redisConnectionFactory = Mockito.mock(RedisConnectionFactory::class.java)
+        Mockito.`when`(redisConnectionFactory.connection).thenReturn(redisConnection)
+        val service = CoordinatorService(
+            properties = CoordinatorProperties(
+                store = CoordinatorProperties.Store(type = CoordinatorProperties.StoreType.REDIS),
+                health = CoordinatorProperties.Health(redisTimeoutMs = 100, cacheTtlMs = 10_000),
+            ),
+            stateStore = InMemoryCoordinatorStateStore(),
+            redisConnectionFactory = redisProvider(redisConnectionFactory),
+            clock = clock,
+        )
+
+        val first = service.health()
+        waitUntil {
+            service.health().redis == "UP"
+        }
+        val second = service.health()
+        val third = service.health()
+
+        assertEquals("UP", first.status)
+        assertEquals("UNKNOWN", first.redis)
+        assertEquals("UP", second.status)
+        assertEquals("UP", second.redis)
+        assertEquals("UP", third.redis)
+        Mockito.verify(redisConnectionFactory, Mockito.times(1)).connection
+        Mockito.verify(redisConnection, Mockito.times(1)).ping()
     }
 
     @Test
@@ -701,9 +739,12 @@ class CoordinatorServiceTest {
         val health = service.health()
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
 
-        assertEquals("DEGRADED", health.status)
-        assertEquals("DOWN", health.redis)
-        assertTrue(elapsedMs < 200, "health took ${elapsedMs}ms despite a 10ms Redis timeout")
+        assertEquals("UP", health.status)
+        assertEquals("UNKNOWN", health.redis)
+        assertTrue(elapsedMs < 50, "health took ${elapsedMs}ms despite async Redis refresh")
+        waitUntil {
+            service.health().redis == "DOWN"
+        }
     }
 
     @Test
@@ -2641,6 +2682,17 @@ private class CopyingConflictOnceStateStore : CoordinatorStateStore {
                 .toMutableMap(),
             migrations = migrations.mapValues { (_, migration) -> migration.copy() }.toMutableMap(),
         )
+}
+
+private fun waitUntil(timeoutMs: Long = 1_000, condition: () -> Boolean) {
+    val deadline = System.nanoTime() + timeoutMs * 1_000_000
+    while (System.nanoTime() < deadline) {
+        if (condition()) {
+            return
+        }
+        Thread.sleep(10)
+    }
+    assertTrue(condition(), "condition was not met within ${timeoutMs}ms")
 }
 
 private class MutableClock(

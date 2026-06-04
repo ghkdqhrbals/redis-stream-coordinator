@@ -26,6 +26,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class CoordinatorTickResult(
     val scannedGroups: Int,
@@ -79,6 +80,11 @@ private data class MonitoringOffsetCacheEntry(
     val offsets: StreamShardOffsetsResponse,
 )
 
+private data class RedisHealthCacheEntry(
+    val expiresAt: Instant,
+    val status: String,
+)
+
 private fun Double.roundRate(): Double =
     kotlin.math.round(this * 100.0) / 100.0
 
@@ -112,6 +118,9 @@ class CoordinatorService(
     private val shardRateSnapshots = ConcurrentHashMap<ShardRateKey, ShardRateSnapshot>()
     private val monitoringOffsetCache = ConcurrentHashMap<MonitoringOffsetCacheKey, MonitoringOffsetCacheEntry>()
     private val monitoringOffsetLocks = ConcurrentHashMap<MonitoringOffsetCacheKey, Any>()
+    private val redisHealthRefreshInFlight = AtomicBoolean(false)
+    @Volatile
+    private var redisHealthCache: RedisHealthCacheEntry? = null
     private val monitoringExecutor = Executors.newFixedThreadPool(
         properties.monitoring.shardQueryParallelism.coerceAtLeast(1),
     ) { runnable ->
@@ -688,7 +697,7 @@ class CoordinatorService(
      */
     fun health(): HealthResponse {
         val redisStatus = if (requiresRedis()) {
-            pingRedisForHealth()
+            redisHealthStatus()
         } else {
             "NOT_CONFIGURED"
         }
@@ -703,20 +712,76 @@ class CoordinatorService(
         return health
     }
 
+    private fun redisHealthStatus(): String {
+        val now = Instant.now(clock)
+        redisHealthCache
+            ?.takeIf { !now.isAfter(it.expiresAt) }
+            ?.let { return it.status }
+
+        refreshRedisHealthAsync()
+        return redisHealthCache?.status ?: "UNKNOWN"
+    }
+
+    private fun refreshRedisHealthAsync() {
+        if (!redisHealthRefreshInFlight.compareAndSet(false, true)) {
+            return
+        }
+        CompletableFuture.runAsync(
+            {
+                try {
+                    val status = pingRedisForHealth()
+                    val ttlMs = properties.health.cacheTtlMs.coerceAtLeast(0)
+                    redisHealthCache = RedisHealthCacheEntry(
+                        expiresAt = Instant.now(clock).plusMillis(ttlMs),
+                        status = status,
+                    )
+                } finally {
+                    redisHealthRefreshInFlight.set(false)
+                }
+            },
+            healthExecutor,
+        )
+    }
+
+    private fun redisPingTimeoutMs(): Long =
+        properties.health.redisTimeoutMs.coerceAtLeast(1)
+
+    private fun redisHealthCacheTtlMs(): Long {
+        val configured = properties.health.cacheTtlMs
+        return if (configured > 0) configured else redisPingTimeoutMs()
+    }
+
+    private fun cacheRedisHealth(status: String) {
+        redisHealthCache = RedisHealthCacheEntry(
+            expiresAt = Instant.now(clock).plusMillis(redisHealthCacheTtlMs()),
+            status = status,
+        )
+    }
+
+    private fun completeRedisHealth(status: String): String {
+        cacheRedisHealth(status)
+        return status
+    }
+
+    private fun failRedisHealth(): String {
+        cacheRedisHealth("DOWN")
+        return "DOWN"
+    }
+
     private fun pingRedisForHealth(): String {
-        val factory = redisConnectionFactory.ifAvailable ?: return "NOT_CONFIGURED"
-        val timeoutMs = properties.health.redisTimeoutMs.coerceAtLeast(1)
+        redisConnectionFactory.ifAvailable ?: return "NOT_CONFIGURED"
+        val timeoutMs = redisPingTimeoutMs()
         val ping = CompletableFuture.supplyAsync(
-            { CoordinatorRedisCommands(redisConnectionFactory = factory).ping() },
+            { redisCommands.ping() },
             healthExecutor,
         )
         return runCatching {
             ping.get(timeoutMs, TimeUnit.MILLISECONDS)
         }.fold(
-            onSuccess = { "UP" },
+            onSuccess = { completeRedisHealth("UP") },
             onFailure = {
                 ping.cancel(true)
-                "DOWN"
+                failRedisHealth()
             },
         )
     }
