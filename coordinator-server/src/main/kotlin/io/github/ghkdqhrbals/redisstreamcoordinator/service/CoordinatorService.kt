@@ -25,6 +25,7 @@ import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -122,20 +123,14 @@ class CoordinatorService(
     private val redisHealthRefreshInFlight = AtomicBoolean(false)
     @Volatile
     private var redisHealthCache: RedisHealthCacheEntry? = null
-    private val monitoringGroupExecutor = Executors.newFixedThreadPool(
-        properties.monitoring.groupQueryParallelism.coerceAtLeast(1),
-    ) { runnable ->
-        Thread(runnable, "redis-stream-coordinator-monitoring-group").apply {
-            isDaemon = true
-        }
-    }
-    private val monitoringExecutor = Executors.newFixedThreadPool(
-        properties.monitoring.shardQueryParallelism.coerceAtLeast(1),
-    ) { runnable ->
-        Thread(runnable, "redis-stream-coordinator-monitoring").apply {
-            isDaemon = true
-        }
-    }
+    private val monitoringGroupPermits = Semaphore(properties.monitoring.groupQueryParallelism.coerceAtLeast(1))
+    private val monitoringShardPermits = Semaphore(properties.monitoring.shardQueryParallelism.coerceAtLeast(1))
+    private val monitoringGroupExecutor = Executors.newThreadPerTaskExecutor(
+        Thread.ofVirtual().name("redis-stream-coordinator-monitoring-group-", 0).factory(),
+    )
+    private val monitoringExecutor = Executors.newThreadPerTaskExecutor(
+        Thread.ofVirtual().name("redis-stream-coordinator-monitoring-", 0).factory(),
+    )
 
     /**
      * Creates a coordinator group and provisions the initial stream shards.
@@ -821,11 +816,9 @@ class CoordinatorService(
         private const val MESSAGE_LAST_PAGE_CURSOR = "__rsc_last__"
         private const val MESSAGE_TAIL_PAGE_CURSOR_PREFIX = "__rsc_tail__:"
 
-        private val healthExecutor = Executors.newCachedThreadPool { runnable ->
-            Thread(runnable, "redis-stream-coordinator-health").apply {
-                isDaemon = true
-            }
-        }
+        private val healthExecutor = Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("redis-stream-coordinator-health-", 0).factory(),
+        )
     }
 
     /**
@@ -1036,7 +1029,11 @@ class CoordinatorService(
             return groups.flatMap { it.toGrafanaShardRows() }
         }
         return groups.map { group ->
-            CompletableFuture.supplyAsync({ group.toGrafanaShardRows() }, monitoringGroupExecutor)
+            CompletableFuture.supplyAsync({
+                monitoringGroupPermits.withPermit {
+                    group.toGrafanaShardRows()
+                }
+            }, monitoringGroupExecutor)
         }.flatMap { future ->
             future.get()
         }
@@ -2490,34 +2487,36 @@ class CoordinatorService(
         val slotOwners = redisCommands.clusterSlotOwners(shardKeys.values.map { it.slot })
         val shards = shardKeys.map { (shard, shardKey) ->
             CompletableFuture.supplyAsync({
-                val streamKey = shardKey.value
-                val streamInfo = redisCommands.xInfoStream(streamKey)
-                val groupInfo = redisCommands.xInfoGroups(streamKey).firstOrNull { it.name == consumerGroup }
-                val memoryUsageBytes = redisCommands.memoryUsage(streamKey)
-                val progress = consumerProgress[shard]
-                val slotOwner = slotOwners[shardKey.slot]
-                StreamShardOffset(
-                    streamPrefix = streamPrefix,
-                    consumerGroup = consumerGroup,
-                    shard = shard,
-                    streamKey = streamKey,
-                    redisSlot = shardKey.slot,
-                    redisNodeEndpoint = slotOwner?.endpoint,
-                    redisNodeId = slotOwner?.nodeId,
-                    redisSlotRangeStart = slotOwner?.slotRangeStart,
-                    redisSlotRangeEnd = slotOwner?.slotRangeEnd,
-                    streamLength = streamInfo.length,
-                    firstRecordId = streamInfo.firstEntryId,
-                    lastRecordId = streamInfo.lastEntryId,
-                    lastGeneratedId = streamInfo.lastGeneratedId,
-                    groupLastDeliveredId = groupInfo?.lastDeliveredId,
-                    consumerLastDeliveredId = progress?.lastDeliveredId,
-                    consumerLastAckedId = progress?.lastAckedId,
-                    pendingCount = groupInfo?.pending ?: progress?.pendingCount ?: 0L,
-                    lag = groupInfo?.lag,
-                    memoryUsageBytes = memoryUsageBytes,
-                    ownerMemberIds = currentOwners[shard].orEmpty().sorted(),
-                )
+                monitoringShardPermits.withPermit {
+                    val streamKey = shardKey.value
+                    val streamInfo = redisCommands.xInfoStream(streamKey)
+                    val groupInfo = redisCommands.xInfoGroups(streamKey).firstOrNull { it.name == consumerGroup }
+                    val memoryUsageBytes = redisCommands.memoryUsage(streamKey)
+                    val progress = consumerProgress[shard]
+                    val slotOwner = slotOwners[shardKey.slot]
+                    StreamShardOffset(
+                        streamPrefix = streamPrefix,
+                        consumerGroup = consumerGroup,
+                        shard = shard,
+                        streamKey = streamKey,
+                        redisSlot = shardKey.slot,
+                        redisNodeEndpoint = slotOwner?.endpoint,
+                        redisNodeId = slotOwner?.nodeId,
+                        redisSlotRangeStart = slotOwner?.slotRangeStart,
+                        redisSlotRangeEnd = slotOwner?.slotRangeEnd,
+                        streamLength = streamInfo.length,
+                        firstRecordId = streamInfo.firstEntryId,
+                        lastRecordId = streamInfo.lastEntryId,
+                        lastGeneratedId = streamInfo.lastGeneratedId,
+                        groupLastDeliveredId = groupInfo?.lastDeliveredId,
+                        consumerLastDeliveredId = progress?.lastDeliveredId,
+                        consumerLastAckedId = progress?.lastAckedId,
+                        pendingCount = groupInfo?.pending ?: progress?.pendingCount ?: 0L,
+                        lag = groupInfo?.lag,
+                        memoryUsageBytes = memoryUsageBytes,
+                        ownerMemberIds = currentOwners[shard].orEmpty().sorted(),
+                    )
+                }
             }, monitoringExecutor)
         }.map { it.get() }
         val totalMemoryUsageBytes = shards.mapNotNull { it.memoryUsageBytes }.sum()
@@ -2591,6 +2590,15 @@ class CoordinatorService(
                 refreshFlag.set(false)
             }
         }, monitoringGroupExecutor)
+    }
+
+    private fun <T> Semaphore.withPermit(block: () -> T): T {
+        acquire()
+        try {
+            return block()
+        } finally {
+            release()
+        }
     }
 
     private fun MemberMetadata.isLiveOwner(): Boolean =

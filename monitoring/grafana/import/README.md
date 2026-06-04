@@ -4,10 +4,16 @@ This directory contains Grafana dashboards that can be imported into an existing
 
 ## Requirements
 
-Install these Grafana plugins before importing the dashboards:
+Install these Grafana plugins before importing the full operator dashboards:
 
 * `yesoreyeram-infinity-datasource`
 * `gapit-htmlgraphics-panel`
+
+The public overview dashboard only requires:
+
+* `yesoreyeram-infinity-datasource`
+
+It intentionally avoids custom HTML/JavaScript panels so Grafana external/public dashboards can extract and run every panel query on the backend.
 
 ## Datasources
 
@@ -42,6 +48,7 @@ Import these dashboard JSON files:
 1. `redis-stream-coordinator.json`
 2. `redis-stream-coordinator-stream-detail.json`
 3. `redis-stream-coordinator-api.json`
+4. `redis-stream-coordinator-public.json`
 
 During import, select:
 
@@ -50,3 +57,28 @@ During import, select:
 * the Coordinator API URL.
 
 The imported dashboards do not pin the repository-local datasource UIDs.
+
+## Public Dashboard
+
+Use `redis-stream-coordinator-public.json` when sharing a dashboard externally.
+It contains only Prometheus and Infinity backend-parser panels. It does not include the custom Stream Sharding Overview or Stream Messages panels because those panels fetch data from browser-side JavaScript and Grafana external/public dashboards cannot extract backend queries from them.
+
+For a MacBook Air deployment where Grafana runs in Docker and the coordinator is exposed on the host at port `8080`, configure the Coordinator API datasource as:
+
+```yaml
+url: http://host.docker.internal:8080
+jsonData:
+  auth_method: basicAuth
+  allowedHosts:
+    - http://host.docker.internal:8080
+```
+
+For a public URL deployment, use the public coordinator origin instead:
+
+```yaml
+url: https://api.lowfidev.cloud
+jsonData:
+  auth_method: basicAuth
+  allowedHosts:
+    - https://api.lowfidev.cloud
+```

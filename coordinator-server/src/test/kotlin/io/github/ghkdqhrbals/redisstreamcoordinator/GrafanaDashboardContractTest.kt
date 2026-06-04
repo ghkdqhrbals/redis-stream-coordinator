@@ -136,6 +136,7 @@ class GrafanaDashboardContractTest {
             "redis-stream-coordinator.json",
             "redis-stream-coordinator-stream-detail.json",
             "redis-stream-coordinator-api.json",
+            "redis-stream-coordinator-public.json",
         ).forEach { fileName ->
             val dashboard = readImportDashboard(fileName)
 
@@ -150,6 +151,28 @@ class GrafanaDashboardContractTest {
             assertTrue(!dashboard.contains(""""uid": "rsc-coordinator-api""""), "$fileName should not pin the local Coordinator API datasource")
             assertTrue(!dashboard.contains(""""uid": "rsc-prometheus""""), "$fileName should not pin the local Prometheus datasource")
         }
+    }
+
+    @Test
+    fun `public dashboard is compatible with external sharing`() {
+        val dashboard = readDashboard("redis-stream-coordinator-public.json")
+        val importDashboard = readImportDashboard("redis-stream-coordinator-public.json")
+
+        assertTrue(dashboard.contains(""""uid": "redis-stream-coordinator-public""""))
+        assertTrue(dashboard.contains(""""title": "Redis Stream Coordinator Public Overview""""))
+        assertTrue(dashboard.contains(""""title": "Stream Groups""""))
+        assertTrue(dashboard.contains(""""title": "Shard Inventory""""))
+        assertTrue(!dashboard.contains("gapit-htmlgraphics-panel"))
+        assertTrue(!dashboard.contains("htmlGraphics"))
+        assertTrue(!dashboard.contains("onInit"))
+        assertTrue(!dashboard.contains("fetch("))
+        assertTrue(!importDashboard.contains("gapit-htmlgraphics-panel"))
+        assertTrue(!importDashboard.contains(""""id": "gapit-htmlgraphics-panel""""))
+        assertTrue(importDashboard.contains(""""parser": "backend""""))
+        assertTrue(importDashboard.contains("""${'$'}{DS_RSC_PROMETHEUS}"""))
+        assertTrue(importDashboard.contains("""${'$'}{DS_RSC_COORDINATOR_API}"""))
+        assertTrue(importDashboard.contains("""${'$'}{COORDINATOR_API_URL}/coord/v1/monitoring/grafana/groups"""))
+        assertTrue(importDashboard.contains("""${'$'}{COORDINATOR_API_URL}/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup="""))
     }
 
     private fun readDashboard(fileName: String): String {

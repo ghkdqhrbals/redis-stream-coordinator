@@ -101,7 +101,13 @@ class RedisStreamConsumerLifecycle(
     private val runtimeMaxConcurrency = properties.runtimeMaxConcurrency.coerceAtLeast(1)
     private val runtimePermits = Semaphore(runtimeMaxConcurrency)
     private val ownedExecutor: ExecutorService? =
-        if (executor == null) Executors.newFixedThreadPool(runtimeMaxConcurrency, ::consumerThread) else null
+        if (executor == null) {
+            Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("redis-stream-consumer-${properties.memberId}-", 0).factory(),
+            )
+        } else {
+            null
+        }
     private val executor: Executor = executor ?: ownedExecutor!!
     private val pollingStarted = AtomicBoolean(false)
     private val nextShardCursor = AtomicInteger(0)
@@ -249,11 +255,6 @@ class RedisStreamConsumerLifecycle(
         pollingStarted.set(false)
         ownedExecutor?.shutdownNow()
     }
-
-    private fun consumerThread(runnable: Runnable): Thread =
-        Thread(runnable, "redis-stream-consumer-${properties.memberId}").apply {
-            isDaemon = true
-        }
 
     private fun startPollingWorkers() {
         if (!pollingStarted.compareAndSet(false, true)) {
