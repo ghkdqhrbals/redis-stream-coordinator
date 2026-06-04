@@ -264,7 +264,7 @@ async function refreshAll() {
         renderHealth(health);
         renderConsoleOverview(health, prometheusText);
         renderGroups();
-        await refreshSelectedGroup();
+        renderLastUpdated();
     } catch (error) {
         handleApiError(error);
     }
@@ -702,26 +702,58 @@ function renderGrafanaLinks() {
 
 function renderGroups() {
     if (state.groups.length === 0) {
-        elements.groupList.innerHTML = `<p class="empty-line">No coordinator groups.</p>`;
+        elements.groupList.innerHTML = `<p class="empty-line">No streams.</p>`;
         return;
     }
 
-    elements.groupList.innerHTML = state.groups.map((group) => {
-        const key = groupKey(group);
-        const selected = key === state.selectedKey ? " selected" : "";
-        return `
-            <button class="group-row${selected}" type="button" data-key="${escapeAttr(key)}">
-                <strong>${escapeHtml(group.consumerGroup)}</strong>
-                <span>${escapeHtml(group.streamPrefix)} / ${escapeHtml(group.state)} / ${group.shardCount || 0} shards</span>
-            </button>
-        `;
-    }).join("");
+    const streams = new Map();
+    state.groups.forEach((group) => {
+        const list = streams.get(group.streamPrefix) || [];
+        list.push(group);
+        streams.set(group.streamPrefix, list);
+    });
+
+    elements.groupList.innerHTML = Array.from(streams.entries())
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([streamPrefix, groups]) => {
+            const shardCount = Math.max(...groups.map((group) => Number(group.shardCount || 0)), 0);
+            const totalLag = groups.reduce((sum, group) => sum + Number(group.totalLag || 0), 0);
+            return `
+                <section class="stream-nav-section">
+                    <div class="stream-nav-head">
+                        <strong>${escapeHtml(streamPrefix)}</strong>
+                        <span>${groups.length} group${groups.length === 1 ? "" : "s"} · ${shardCount} shards · lag ${compactNumber(totalLag)}</span>
+                    </div>
+                    <div class="stream-nav-groups">
+                        ${groups.sort((a, b) => a.consumerGroup.localeCompare(b.consumerGroup)).map((group) => {
+                            const key = groupKey(group);
+                            const selected = key === state.selectedKey ? " selected" : "";
+                            return `
+                                <button class="group-row${selected}" type="button" data-key="${escapeAttr(key)}">
+                                    <strong>${escapeHtml(group.consumerGroup)}</strong>
+                                    <span>${escapeHtml(group.state)} · ${escapeHtml(group.assignedShardRatio || `${group.currentShards || 0}/${group.shardCount || 0}`)} assigned</span>
+                                </button>
+                            `;
+                        }).join("")}
+                    </div>
+                </section>
+            `;
+        }).join("");
 
     elements.groupList.querySelectorAll(".group-row").forEach((button) => {
-        button.addEventListener("click", async () => {
+        button.addEventListener("click", () => {
             state.selectedKey = button.dataset.key;
+            const group = selectedGroup();
+            if (group) {
+                state.globalMessages.streamPrefix = group.streamPrefix;
+                state.globalMessages.consumerGroup = group.consumerGroup;
+                state.globalMessages.shardIndex = "all";
+                resetGlobalMessages();
+                renderGlobalMessageSelectors();
+                loadGlobalMessages();
+                renderGrafanaLinks();
+            }
             renderGroups();
-            await refreshSelectedGroup();
         });
     });
 }

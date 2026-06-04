@@ -559,9 +559,49 @@ button {
 .group-list {
     display: grid;
     max-height: calc(100vh - 290px);
-    gap: 8px;
+    gap: 12px;
     overflow: auto;
     padding-right: 3px;
+}
+
+.stream-nav-section {
+    display: grid;
+    gap: 7px;
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+}
+
+.stream-nav-section:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.stream-nav-head {
+    display: grid;
+    gap: 3px;
+    padding: 0 2px;
+}
+
+.stream-nav-head strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 820;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stream-nav-head span {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stream-nav-groups {
+    display: grid;
+    gap: 6px;
 }
 
 .group-row {
@@ -569,7 +609,7 @@ button {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: #111922;
-    padding: 11px;
+    padding: 9px 10px;
     text-align: left;
 }
 
@@ -792,7 +832,7 @@ button {
 .console-overview {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(360px, 0.45fr);
-    gap: 14px;
+    gap: 12px;
     margin-bottom: 14px;
 }
 
@@ -803,6 +843,10 @@ button {
 
 .console-kpi-strip {
     grid-template-columns: repeat(6, minmax(130px, 1fr));
+}
+
+.compact-panel {
+    min-height: 220px;
 }
 
 .panel-subtitle {
@@ -821,7 +865,7 @@ button {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: #121922;
-    padding: 12px;
+    padding: 13px;
 }
 
 .stream-card-head,
@@ -874,7 +918,7 @@ button {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: rgba(255, 255, 255, 0.015);
-    padding: 10px;
+    padding: 11px;
 }
 
 .health-dot {
@@ -915,15 +959,15 @@ button {
 
 .mini-shard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
     gap: 7px;
     margin-top: 10px;
 }
 
 .mini-shard {
     display: inline-grid;
-    min-width: 42px;
-    min-height: 34px;
+    min-width: 38px;
+    min-height: 32px;
     place-items: center;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -1149,6 +1193,33 @@ td {
 
 .message-browser table {
     min-width: 980px;
+}
+
+.message-table {
+    min-width: 860px;
+}
+
+.message-table th:first-child,
+.message-table td:first-child {
+    width: 190px;
+}
+
+.message-table th:nth-child(2),
+.message-table td:nth-child(2) {
+    width: 90px;
+}
+
+.message-table th:nth-child(3),
+.message-table td:nth-child(3) {
+    width: 190px;
+}
+
+.message-table .field-pill {
+    display: block;
+    max-width: none;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .message-payload {

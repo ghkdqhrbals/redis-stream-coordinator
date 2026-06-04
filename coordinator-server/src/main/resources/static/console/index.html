@@ -41,9 +41,7 @@
                     <p id="coordinatorId">Not connected</p>
                 </div>
             </div>
-            <a class="ghost-link" href="/console/access.html">Access</a>
             <a class="ghost-link" href="/console/admin.html">Admin</a>
-            <a class="ghost-link" href="/console/messages.html">Messages</a>
             <button id="logoutButton" class="ghost-button" type="button">Sign out</button>
         </header>
 
@@ -66,7 +64,7 @@
 
         <section class="side-panel group-panel">
             <div class="panel-heading">
-                <h2>Groups</h2>
+                <h2>Streams</h2>
                 <button id="refreshButton" class="ghost-button small" type="button">Refresh</button>
             </div>
             <div id="groupList" class="group-list" aria-live="polite"></div>
@@ -77,8 +75,8 @@
         <header class="topbar">
             <div>
                 <p class="eyebrow">Monitoring</p>
-                <h2 id="pageTitle">Select a group</h2>
-                <p id="pageSubtitle" class="page-subtitle">No active stream group selected.</p>
+                <h2 id="pageTitle">Redis Stream Coordinator</h2>
+                <p id="pageSubtitle" class="page-subtitle">Stream-first monitoring for sharded Redis Streams.</p>
             </div>
             <div class="toolbar">
                 <span id="lastUpdated" class="last-updated">Not refreshed</span>
@@ -94,7 +92,7 @@
             </div>
         </header>
 
-        <section id="emptyState" class="empty-state">
+        <section id="emptyState" class="empty-state hidden">
             <h3>No group selected</h3>
             <p>Choose a coordinator group from the left rail.</p>
         </section>
@@ -136,8 +134,8 @@
             <section class="content-panel wide">
                 <div class="panel-heading">
                     <div>
-                        <h3>Stream Sharding Overview</h3>
-                        <p class="panel-subtitle">Streams are grouped by stream name and consumer group. Hover a shard for detail.</p>
+                        <h3>Streams</h3>
+                        <p class="panel-subtitle">Each stream shows its consumer groups and shard health.</p>
                     </div>
                     <span id="overviewShardCount" class="count-label">0 shards</span>
                 </div>
@@ -147,8 +145,8 @@
             <section class="content-panel wide">
                 <div class="panel-heading">
                     <div>
-                        <h3>Coordinator Groups Table</h3>
-                        <p class="panel-subtitle">Stream, group, assignment, members, lag, pending, rate, and memory.</p>
+                        <h3>Group Summary</h3>
+                        <p class="panel-subtitle">One row per consumer group, grouped by stream in the left rail.</p>
                     </div>
                     <span id="grafanaGroupCount" class="count-label">0 groups</span>
                 </div>
@@ -176,7 +174,7 @@
                 <div class="panel-heading">
                     <div>
                         <h3>Stream Messages</h3>
-                        <p class="panel-subtitle">Reads coordinator message API directly. All shards are merge-sorted by Redis Stream ID.</p>
+                        <p class="panel-subtitle">Inspect recent records for the selected stream group.</p>
                     </div>
                     <div class="browser-controls">
                         <select id="globalMessageStream" aria-label="Message stream"></select>
@@ -212,7 +210,7 @@
                 </div>
             </section>
 
-            <section class="content-panel">
+            <section class="content-panel compact-panel">
                 <div class="panel-heading">
                     <h3>API Performance</h3>
                     <span id="apiMetricStatus" class="status-badge muted">Prometheus scrape</span>
@@ -220,10 +218,10 @@
                 <div id="apiMetricList" class="api-metric-list"></div>
             </section>
 
-            <section class="content-panel">
+            <section class="content-panel compact-panel">
                 <div class="panel-heading">
-                    <h3>Grafana Export</h3>
-                    <span class="count-label">share / import</span>
+                    <h3>Grafana</h3>
+                    <span class="count-label">external</span>
                 </div>
                 <div class="export-list">
                     <a id="grafanaOverviewLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open Overview</a>
