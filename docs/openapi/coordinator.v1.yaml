@@ -1,0 +1,1368 @@
+openapi: 3.1.0
+info:
+  title: Redis Stream Coordinator API
+  version: v1
+  summary: Control-plane API for Redis Stream shard coordination.
+  description: |
+    Redis Stream Coordinator provides a coordinator-managed control plane for sharded Redis Stream workloads.
+    The API creates stream groups, returns producer routing metadata, accepts consumer heartbeats, manages
+    resharding, and exposes monitoring data for dashboards and operators.
+
+    The project exists because Redis Stream by itself does not provide a broker-side group coordinator,
+    cluster-aware stream sharding, or a built-in way to prevent one stream key from becoming a BigKey.
+    Redis Cluster distributes keys by hash slot, so a single stream key can still concentrate memory and write
+    traffic on one node. This API treats a logical stream as multiple physical shard stream keys and lets a
+    dedicated coordinator own the assignment protocol.
+servers:
+  - url: http://localhost:8080
+    description: Local coordinator server.
+  - url: https://api.ghkdqhrbals.org
+    description: Example public HTTPS endpoint.
+tags:
+  - name: Groups
+    description: Group metadata lifecycle and read-only group state.
+  - name: Producer Routing
+    description: Metadata used by producers to route partition keys to Redis Stream shard keys.
+  - name: Resharding
+    description: Shard count changes and rollback operations.
+  - name: Members
+    description: Consumer runtime heartbeat and assignment reconciliation.
+  - name: Monitoring
+    description: Operator-facing group, member, assignment, offset, message, and health APIs.
+  - name: Grafana
+    description: JSON endpoints shaped for Grafana dashboard variables and table panels.
+security:
+  - basicAuth: []
+paths:
+  /coord/v1/streams/{streamPrefix}:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+    post:
+      tags: [Groups]
+      operationId: createStreamGroup
+      summary: Create a stream group.
+      description: |
+        Creates the initial shard layout for a sharded Redis Stream prefix. The official create path only
+        requires `streamPrefix`; consumer groups reconcile through their own runtime configuration and heartbeat flow.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStreamRequest"
+            examples:
+              create:
+                value:
+                  initialShardCount: 20
+                  requestedBy: operator@example.com
+                  reason: bootstrap create-order stream
+      responses:
+        "201":
+          description: Stream shard layout was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamCreateResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    post:
+      tags: [Groups]
+      operationId: createCoordinatorGroup
+      summary: Compatibility: create one consumer group metadata.
+      description: Compatibility endpoint for older clients that created metadata with `consumerGroup` in the path. Operators should prefer POST /coord/v1/streams/{streamPrefix}.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupRequest"
+            examples:
+              create:
+                value:
+                  initialShardCount: 20
+                  consumerConcurrencyPolicy:
+                    defaultMaxConcurrency: 4
+                  requestedBy: operator@example.com
+                  reason: bootstrap create-order stream group
+      responses:
+        "201":
+          description: Group was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    get:
+      tags: [Groups]
+      operationId: getCoordinatorGroup
+      summary: Read coordinator group metadata.
+      description: Returns the coordinator source-of-truth view for one group.
+      responses:
+        "200":
+          description: Group metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Groups]
+      operationId: deleteCoordinatorGroup
+      summary: Delete an inactive coordinator group.
+      description: Deletes coordinator metadata. Use force only for recovery when members cannot gracefully leave.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteGroupRequest"
+      responses:
+        "200":
+          description: Deleted group metadata snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    get:
+      tags: [Producer Routing]
+      operationId: getProducerRoutingMetadata
+      summary: Read producer routing metadata.
+      description: |
+        Returns the shard count, stream key pattern, concrete shard keys, and Redis Cluster slots that producers
+        must use for partition-key routing. The same partition key can route to a different shard after shard count
+        changes, so duplicate-sensitive workloads should quiesce producers before resharding.
+      responses:
+        "200":
+          description: Producer routing metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProducerRoutingResponse"
+
+  /coord/v1/streams/{streamPrefix}/scale:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+    post:
+      tags: [Resharding]
+      operationId: scaleStreamShards
+      summary: Start shard scale-out or scale-in.
+      description: |
+        Changes the physical shard count for every coordinator group registered under the stream prefix.
+        Consumer groups are intentionally not part of this path. Each affected group receives the new
+        assignment plan on the next consumer heartbeat and reconciles ownership independently.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScaleStreamRequest"
+            examples:
+              scaleOut:
+                value:
+                  targetShardCount: 20
+                  requestedBy: operator@example.com
+                  reason: distribute create-order stream load
+      responses:
+        "202":
+          description: Stream-level resharding was accepted for affected consumer groups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamScaleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    post:
+      tags: [Resharding]
+      operationId: startGroupResharding
+      summary: Compatibility: scale one consumer group.
+      description: Compatibility endpoint for a single consumer group. Operators should prefer POST /coord/v1/streams/{streamPrefix}/scale so the stream shard count changes consistently across registered groups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScaleGroupRequest"
+            examples:
+              scaleOut:
+                value:
+                  targetShardCount: 20
+                  requestedBy: operator@example.com
+                  reason: distribute create-order stream load
+      responses:
+        "202":
+          description: Resharding was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Migration"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    patch:
+      tags: [Groups]
+      operationId: updateConsumerConcurrencyPolicy
+      summary: Update server-side consumer worker limits.
+      description: Updates the coordinator-owned concurrency policy without changing shard count.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConsumerConcurrencyRequest"
+      responses:
+        "200":
+          description: Updated concurrency policy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsumerConcurrencyResponse"
+
+  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+      - $ref: "#/components/parameters/reshardingId"
+    get:
+      tags: [Resharding]
+      operationId: getReshardingMigration
+      summary: Read one resharding operation.
+      responses:
+        "200":
+          description: Resharding metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Migration"
+
+  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+      - $ref: "#/components/parameters/reshardingId"
+    post:
+      tags: [Resharding]
+      operationId: rollbackReshardingMigration
+      summary: Request rollback for an active resharding operation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollbackMigrationRequest"
+      responses:
+        "202":
+          description: Rollback was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Migration"
+
+  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+      - $ref: "#/components/parameters/memberId"
+    post:
+      tags: [Members]
+      operationId: sendConsumerHeartbeat
+      summary: Send consumer liveness and ownership report.
+      description: |
+        Consumer runtimes periodically report their member epoch, local metadata version, current shard ownership,
+        revoking shards, runtime worker capacity, and consumption progress. The coordinator returns the authoritative
+        assignment state. Heartbeat handling is idempotent for the same member state and may return SYNC_METADATA,
+        REVOKE_PENDING, OK, RETRY, or fencing responses.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeartbeatRequest"
+      responses:
+        "200":
+          description: Heartbeat decision and target assignment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeartbeatResponse"
+
+  /coord/v1/monitoring/session:
+    get:
+      tags: [Monitoring]
+      operationId: getMonitoringSession
+      summary: Read authenticated monitoring session.
+      responses:
+        "200":
+          description: Current session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonitoringSessionResponse"
+
+  /coord/v1/monitoring/health:
+    get:
+      tags: [Monitoring]
+      operationId: getCoordinatorHealth
+      summary: Read current coordinator health.
+      responses:
+        "200":
+          description: Coordinator, Redis, and event-loop health.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /coord/v1/monitoring/compatibility:
+    get:
+      tags: [Monitoring]
+      operationId: getCoordinatorCompatibility
+      summary: Read coordinator compatibility metadata.
+      description: Returns the supported coordinator/client module version range.
+      responses:
+        "200":
+          description: Compatibility metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /coord/v1/monitoring/groups:
+    get:
+      tags: [Monitoring]
+      operationId: listCoordinatorGroups
+      summary: List all coordinator groups.
+      responses:
+        "200":
+          description: Group list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GroupResponse"
+
+  /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    get:
+      tags: [Monitoring]
+      operationId: getMonitoringGroup
+      summary: Read one group monitoring summary.
+      responses:
+        "200":
+          description: Group monitoring summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+
+  /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/members:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    get:
+      tags: [Monitoring]
+      operationId: listGroupMembers
+      summary: List member runtime state.
+      responses:
+        "200":
+          description: Member states.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  members:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MemberMetadata"
+
+  /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/assignments:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    get:
+      tags: [Monitoring]
+      operationId: getGroupAssignments
+      summary: Read target, current, and revoking assignments.
+      responses:
+        "200":
+          description: Assignment reconciliation state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignmentsResponse"
+
+  /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/consumption:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    get:
+      tags: [Monitoring]
+      operationId: getConsumptionProgress
+      summary: Read consumer progress by shard.
+      responses:
+        "200":
+          description: Last delivered, last acknowledged, pending count, and update time per shard owner.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsumptionProgressResponse"
+
+  /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migrations:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    get:
+      tags: [Monitoring]
+      operationId: listReshardingMigrations
+      summary: List resharding operations for a group.
+      responses:
+        "200":
+          description: Resharding list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationsResponse"
+
+  /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/offsets:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+    get:
+      tags: [Monitoring]
+      operationId: getStreamShardOffsets
+      summary: Read Redis Stream offset, lag, and memory data by shard.
+      description: Lag can be null when Redis cannot calculate it, for example when entries-read tracking is unavailable or invalid for the consumer group.
+      responses:
+        "200":
+          description: Shard offset summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamShardOffsetsResponse"
+
+  /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/shards/{shardIndex}/messages:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+      - $ref: "#/components/parameters/consumerGroup"
+      - $ref: "#/components/parameters/shardIndex"
+      - $ref: "#/components/parameters/messageDirection"
+      - $ref: "#/components/parameters/messageCursor"
+      - $ref: "#/components/parameters/messageLimit"
+    get:
+      tags: [Monitoring]
+      operationId: getStreamShardMessages
+      summary: Page Redis Stream messages for one shard.
+      description: Reads message payloads from Redis for debugging and dashboard drill-down.
+      responses:
+        "200":
+          description: Cursor-based page of messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamMessagesPageResponse"
+
+  /coord/v1/monitoring/grafana/groups:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaGroups
+      summary: Grafana-ready group rows.
+      responses:
+        "200":
+          description: Group table rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrafanaGroupRow"
+
+  /coord/v1/monitoring/grafana/options/streams:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaStreamOptions
+      summary: Grafana variable options for stream prefixes.
+      responses:
+        "200":
+          $ref: "#/components/responses/GrafanaOptions"
+
+  /coord/v1/monitoring/grafana/options/consumer-groups:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaConsumerGroupOptions
+      summary: Grafana variable options for consumer groups.
+      parameters:
+        - name: streamPrefix
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/GrafanaOptions"
+
+  /coord/v1/monitoring/grafana/options/shards:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaShardOptions
+      summary: Grafana variable options for shard selectors.
+      parameters:
+        - $ref: "#/components/parameters/queryStreamPrefix"
+        - $ref: "#/components/parameters/queryConsumerGroup"
+      responses:
+        "200":
+          $ref: "#/components/responses/GrafanaOptions"
+
+  /coord/v1/monitoring/grafana/members:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaMemberRows
+      summary: Grafana-ready member rows.
+      parameters:
+        - $ref: "#/components/parameters/queryStreamPrefix"
+        - $ref: "#/components/parameters/queryConsumerGroup"
+      responses:
+        "200":
+          description: Member rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrafanaMemberRow"
+
+  /coord/v1/monitoring/grafana/shards:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaShardRows
+      summary: Grafana-ready shard offset rows.
+      parameters:
+        - $ref: "#/components/parameters/queryStreamPrefix"
+        - $ref: "#/components/parameters/queryConsumerGroup"
+      responses:
+        "200":
+          description: Shard rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrafanaShardRow"
+
+  /coord/v1/monitoring/grafana/assignments:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaAssignmentRows
+      summary: Grafana-ready assignment rows.
+      parameters:
+        - $ref: "#/components/parameters/queryStreamPrefix"
+        - $ref: "#/components/parameters/queryConsumerGroup"
+      responses:
+        "200":
+          description: Assignment rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrafanaAssignmentRow"
+
+  /coord/v1/monitoring/grafana/messages:
+    get:
+      tags: [Grafana]
+      operationId: listGrafanaMessageRows
+      summary: Grafana-ready message rows.
+      parameters:
+        - $ref: "#/components/parameters/queryStreamPrefix"
+        - $ref: "#/components/parameters/queryConsumerGroup"
+        - name: shardIndex
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "0"
+          description: A numeric shard index or ALL.
+        - $ref: "#/components/parameters/messageDirection"
+        - $ref: "#/components/parameters/messageCursor"
+        - $ref: "#/components/parameters/messageLimit"
+      responses:
+        "200":
+          description: Message rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrafanaMessageRow"
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+  parameters:
+    streamPrefix:
+      name: streamPrefix
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Sharded Redis Stream prefix managed by the coordinator. Physical stream keys are built as `{streamPrefix}:{shardIndex}`.
+    consumerGroup:
+      name: consumerGroup
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Redis Stream consumer group name.
+    memberId:
+      name: memberId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Runtime-generated member id. The Spring Boot starter derives it from pod IP context by default.
+    reshardingId:
+      name: reshardingId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Coordinator-generated resharding id.
+    shardIndex:
+      name: shardIndex
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: Zero-based shard index.
+    queryStreamPrefix:
+      name: streamPrefix
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Sharded Redis Stream prefix used to build physical stream keys such as create-order:4.
+    queryConsumerGroup:
+      name: consumerGroup
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Logical consumer group.
+    messageDirection:
+      name: direction
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/StreamMessagePageDirection"
+        default: BACKWARD
+      description: Page direction. BACKWARD reads newest records first.
+    messageCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Cursor returned by the previous page.
+    messageLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 25
+      description: Maximum records to return.
+  responses:
+    Conflict:
+      description: The request conflicts with current coordinator metadata.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Requested group, member, or migration was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unprocessable:
+      description: Request is syntactically valid but not allowed in the current group state.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    GrafanaOptions:
+      description: Grafana variable options.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/GrafanaOptionRow"
+  schemas:
+    CreateGroupRequest:
+      type: object
+      required: [requestedBy]
+      properties:
+        initialShardCount:
+          type: integer
+          minimum: 1
+        consumerConcurrencyPolicy:
+          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
+        requestedBy:
+          type: string
+        reason:
+          type: string
+          nullable: true
+    CreateStreamRequest:
+      type: object
+      required: [requestedBy]
+      properties:
+        initialShardCount:
+          type: integer
+          minimum: 1
+        requestedBy:
+          type: string
+        reason:
+          type: string
+          nullable: true
+    StreamCreateResponse:
+      type: object
+      required: [streamPrefix, shardCount, metadataVersion]
+      properties:
+        streamPrefix:
+          type: string
+        shardCount:
+          type: integer
+          minimum: 1
+        metadataVersion:
+          type: integer
+          format: int64
+    DeleteGroupRequest:
+      type: object
+      required: [requestedBy, reason]
+      properties:
+        requestedBy:
+          type: string
+        reason:
+          type: string
+        force:
+          type: boolean
+          default: false
+    ScaleGroupRequest:
+      type: object
+      required: [targetShardCount, requestedBy, reason]
+      properties:
+        targetShardCount:
+          type: integer
+          minimum: 1
+        consumerConcurrencyPolicy:
+          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
+        requestedBy:
+          type: string
+        reason:
+          type: string
+        deprecatedAfter:
+          type: string
+          nullable: true
+    ScaleStreamRequest:
+      type: object
+      required: [targetShardCount, requestedBy, reason]
+      properties:
+        targetShardCount:
+          type: integer
+          minimum: 1
+        requestedBy:
+          type: string
+        reason:
+          type: string
+        deprecatedAfter:
+          type: string
+          nullable: true
+    StreamScaleResponse:
+      type: object
+      required: [streamPrefix, targetShardCount, affectedConsumerGroups, migrations]
+      properties:
+        streamPrefix:
+          type: string
+        targetShardCount:
+          type: integer
+        affectedConsumerGroups:
+          type: array
+          items:
+            type: string
+        migrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Migration"
+    UpdateConsumerConcurrencyRequest:
+      type: object
+      required: [defaultMaxConcurrency, requestedBy, reason]
+      properties:
+        defaultMaxConcurrency:
+          type: integer
+          minimum: 1
+        memberOverrides:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 1
+        requestedBy:
+          type: string
+        reason:
+          type: string
+    RollbackMigrationRequest:
+      type: object
+      required: [requestedBy, reason]
+      properties:
+        requestedBy:
+          type: string
+        reason:
+          type: string
+    ConsumerConcurrencyPolicy:
+      type: object
+      required: [defaultMaxConcurrency]
+      properties:
+        defaultMaxConcurrency:
+          type: integer
+          minimum: 1
+        memberOverrides:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 1
+    GroupResponse:
+      type: object
+      required:
+        - streamPrefix
+        - consumerGroup
+        - state
+        - groupEpoch
+        - assignmentEpoch
+        - metadataVersion
+        - shardCount
+      properties:
+        streamPrefix:
+          type: string
+        consumerGroup:
+          type: string
+        state:
+          $ref: "#/components/schemas/GroupState"
+        groupEpoch:
+          type: integer
+          format: int64
+        assignmentEpoch:
+          type: integer
+          format: int64
+        metadataVersion:
+          type: integer
+          format: int64
+        shardCount:
+          type: integer
+        consumerConcurrencyPolicy:
+          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
+        activeMigration:
+          oneOf:
+            - $ref: "#/components/schemas/Migration"
+            - type: "null"
+        targetAssignmentSummary:
+          type: object
+          additionalProperties:
+            type: integer
+        currentAssignmentSummary:
+          type: object
+          additionalProperties:
+            type: integer
+    ConsumerConcurrencyResponse:
+      type: object
+      properties:
+        streamPrefix:
+          type: string
+        consumerGroup:
+          type: string
+        metadataVersion:
+          type: integer
+          format: int64
+        groupEpoch:
+          type: integer
+          format: int64
+        consumerConcurrencyPolicy:
+          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
+        affectedMembers:
+          type: array
+          items:
+            type: string
+    ProducerRoutingResponse:
+      type: object
+      properties:
+        streamPrefix:
+          type: string
+        consumerGroup:
+          type: string
+        metadataVersion:
+          type: integer
+          format: int64
+        shardCount:
+          type: integer
+        streamKeyPattern:
+          type: string
+          example: create-order:{shardIndex}
+        shards:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProducerRoutingShard"
+    ProducerRoutingShard:
+      type: object
+      properties:
+        shardIndex:
+          type: integer
+        streamKey:
+          type: string
+        redisSlot:
+          type: integer
+    HeartbeatRequest:
+      type: object
+      required: [protocolVersion, requestId, memberId, memberEpoch, metadataVersion, runtimeConsumerCapacity]
+      properties:
+        protocolVersion:
+          type: integer
+          minimum: 1
+        requestId:
+          type: string
+        memberId:
+          type: string
+        memberName:
+          type: string
+          nullable: true
+        memberEpoch:
+          type: integer
+          format: int64
+        metadataVersion:
+          type: integer
+          format: int64
+        runtimeConsumerCapacity:
+          $ref: "#/components/schemas/RuntimeConsumerCapacity"
+        ownedShards:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ShardId"
+        revokingShards:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevokingShardReport"
+        shardProgress:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShardConsumptionProgress"
+    HeartbeatResponse:
+      type: object
+      properties:
+        responseTo:
+          type: string
+        status:
+          $ref: "#/components/schemas/HeartbeatStatus"
+        memberId:
+          type: string
+        memberEpoch:
+          type: integer
+          format: int64
+        heartbeatIntervalMs:
+          type: integer
+          format: int64
+        rebalanceTimeoutMs:
+          type: integer
+          format: int64
+        groupEpoch:
+          type: integer
+          format: int64
+        assignmentEpoch:
+          type: integer
+          format: int64
+        metadataVersion:
+          type: integer
+          format: int64
+        assignedMaxConcurrency:
+          type: integer
+        assignment:
+          $ref: "#/components/schemas/AssignmentView"
+    AssignmentView:
+      type: object
+      properties:
+        assignedShards:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ShardId"
+        pendingShards:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ShardId"
+        metadataVersion:
+          type: integer
+          format: int64
+    RuntimeConsumerCapacity:
+      type: object
+      properties:
+        runtimeMaxConcurrency:
+          type: integer
+          minimum: 1
+        availableConcurrency:
+          type: integer
+          minimum: 0
+    ShardId:
+      type: object
+      properties:
+        shardIndex:
+          type: integer
+          minimum: 0
+    RevokingShardReport:
+      type: object
+      properties:
+        shard:
+          $ref: "#/components/schemas/ShardId"
+        state:
+          $ref: "#/components/schemas/RevokingShardState"
+        inFlight:
+          type: integer
+          minimum: 0
+        ackedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ShardConsumptionProgress:
+      type: object
+      properties:
+        shard:
+          $ref: "#/components/schemas/ShardId"
+        streamKey:
+          type: string
+        lastDeliveredId:
+          type: string
+          nullable: true
+        lastAckedId:
+          type: string
+          nullable: true
+        pendingCount:
+          type: integer
+          format: int64
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    MemberMetadata:
+      type: object
+      additionalProperties: true
+      properties:
+        memberId:
+          type: string
+        memberName:
+          type: string
+        state:
+          $ref: "#/components/schemas/MemberState"
+        memberEpoch:
+          type: integer
+          format: int64
+        currentAssignment:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShardId"
+        revoking:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShardId"
+    AssignmentsResponse:
+      type: object
+      properties:
+        targetAssignment:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/ShardId"
+        currentAssignments:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/ShardId"
+        revokeProgress:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/ShardId"
+        invariantViolations:
+          type: array
+          items:
+            type: string
+    MigrationsResponse:
+      type: object
+      properties:
+        migrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Migration"
+        activeReshardingId:
+          type: string
+          nullable: true
+    Migration:
+      type: object
+      properties:
+        reshardingId:
+          type: string
+        fromShardCount:
+          type: integer
+        toShardCount:
+          type: integer
+        state:
+          $ref: "#/components/schemas/MigrationState"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ConsumptionProgressResponse:
+      type: object
+      properties:
+        progress:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsumerShardProgress"
+    ConsumerShardProgress:
+      type: object
+      properties:
+        streamPrefix:
+          type: string
+        consumerGroup:
+          type: string
+        memberId:
+          type: string
+        memberName:
+          type: string
+        memberState:
+          $ref: "#/components/schemas/MemberState"
+        shard:
+          $ref: "#/components/schemas/ShardId"
+        streamKey:
+          type: string
+        lastDeliveredId:
+          type: string
+          nullable: true
+        lastAckedId:
+          type: string
+          nullable: true
+        pendingCount:
+          type: integer
+          format: int64
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    StreamShardOffsetsResponse:
+      type: object
+      properties:
+        streamPrefix:
+          type: string
+        consumerGroup:
+          type: string
+        shards:
+          type: array
+          items:
+            $ref: "#/components/schemas/StreamShardOffset"
+        totalStreamLength:
+          type: integer
+          format: int64
+        totalPendingCount:
+          type: integer
+          format: int64
+        totalLag:
+          type: integer
+          format: int64
+          nullable: true
+        totalMemoryUsageBytes:
+          type: integer
+          format: int64
+        memoryUsageKnown:
+          type: boolean
+    StreamShardOffset:
+      type: object
+      properties:
+        shard:
+          $ref: "#/components/schemas/ShardId"
+        streamKey:
+          type: string
+        redisSlot:
+          type: integer
+        redisNodeEndpoint:
+          type: string
+          nullable: true
+        streamLength:
+          type: integer
+          format: int64
+        firstRecordId:
+          type: string
+          nullable: true
+        lastRecordId:
+          type: string
+          nullable: true
+        groupLastDeliveredId:
+          type: string
+          nullable: true
+        pendingCount:
+          type: integer
+          format: int64
+        lag:
+          type: integer
+          format: int64
+          nullable: true
+        memoryUsageBytes:
+          type: integer
+          format: int64
+          nullable: true
+        ownerMemberIds:
+          type: array
+          items:
+            type: string
+    StreamMessagesPageResponse:
+      type: object
+      properties:
+        streamPrefix:
+          type: string
+        consumerGroup:
+          type: string
+        shard:
+          $ref: "#/components/schemas/ShardId"
+        streamKey:
+          type: string
+        direction:
+          $ref: "#/components/schemas/StreamMessagePageDirection"
+        limit:
+          type: integer
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/StreamMessageRecord"
+        nextCursor:
+          type: string
+          nullable: true
+    StreamMessageRecord:
+      type: object
+      properties:
+        shard:
+          $ref: "#/components/schemas/ShardId"
+        streamKey:
+          type: string
+        recordId:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+        payload:
+          type: string
+          nullable: true
+    MonitoringSessionResponse:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        username:
+          type: string
+          nullable: true
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        coordinatorId:
+          type: string
+        redis:
+          type: string
+        loop:
+          type: string
+    GrafanaGroupRow:
+      type: object
+      additionalProperties: true
+    GrafanaMemberRow:
+      type: object
+      additionalProperties: true
+    GrafanaShardRow:
+      type: object
+      additionalProperties: true
+    GrafanaAssignmentRow:
+      type: object
+      additionalProperties: true
+    GrafanaMessageRow:
+      type: object
+      additionalProperties: true
+    GrafanaOptionRow:
+      type: object
+      properties:
+        __text:
+          type: string
+        __value:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        errorCode:
+          type: string
+        message:
+          type: string
+    GroupState:
+      type: string
+      enum: [EMPTY, ASSIGNING, RECONCILING, STABLE]
+    MemberState:
+      type: string
+      enum: [STARTING, ACTIVE, LEAVING, EXPIRED, FENCED]
+    MigrationState:
+      type: string
+      enum: [PREPARING, ACTIVE, DRAINING, DEPRECATED, ROLLING_BACK, ROLLED_BACK]
+    HeartbeatStatus:
+      type: string
+      enum: [OK, RETRY, SYNC_METADATA, REVOKE_PENDING, UNKNOWN_MEMBER_ID, FENCED_MEMBER_EPOCH, UNSUPPORTED_PROTOCOL, INVALID_REQUEST]
+    RevokingShardState:
+      type: string
+      enum: [REVOKING, DRAINING, REVOKED]
+    StreamMessagePageDirection:
+      type: string
+      enum: [FORWARD, BACKWARD]

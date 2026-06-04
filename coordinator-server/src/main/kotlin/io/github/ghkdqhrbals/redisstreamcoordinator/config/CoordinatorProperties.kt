@@ -1,22 +1,26 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.config
 
+import com.redisstream.protocol.CoordinatorProtocol
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration
 
 @ConfigurationProperties("coordinator")
 data class CoordinatorProperties(
     val id: String = "local-coordinator",
-    val heartbeatInterval: Duration = Duration.ofSeconds(5),
-    val memberLeaseTtl: Duration = Duration.ofSeconds(15),
+    val heartbeatInterval: Duration = CoordinatorProtocol.DEFAULT_TIMING.heartbeatInterval,
+    val memberLeaseTtl: Duration = CoordinatorProtocol.DEFAULT_TIMING.memberLeaseTtl,
+    val staleMemberRetention: Duration = Duration.ofMinutes(10),
+    val rebalanceTimeout: Duration = CoordinatorProtocol.DEFAULT_TIMING.rebalanceTimeout,
     val loop: Loop = Loop(),
     val api: Api = Api(),
-    val protocol: Protocol = Protocol(),
     val redisCluster: RedisCluster = RedisCluster(),
     val store: Store = Store(),
     val coordination: Coordination = Coordination(),
+    val health: Health = Health(),
     val streams: Streams = Streams(),
     val audit: Audit = Audit(),
     val defaults: Defaults = Defaults(),
+    val monitoring: Monitoring = Monitoring(),
 ) {
     data class Loop(
         val enabled: Boolean = true,
@@ -43,17 +47,11 @@ data class CoordinatorProperties(
     )
 
     enum class ApiRole {
+        READ,
+        WRITE,
         ADMIN,
         MONITOR,
         MEMBER,
-    }
-
-    data class Protocol(
-        val minHeartbeatVersion: Int = 1,
-        val maxHeartbeatVersion: Int = 1,
-    ) {
-        fun supportsHeartbeat(version: Int): Boolean =
-            version in minHeartbeatVersion..maxHeartbeatVersion
     }
 
     data class RedisCluster(
@@ -69,12 +67,35 @@ data class CoordinatorProperties(
         val stateMutex: StateMutex = StateMutex(),
     )
 
+    data class Health(
+        val redisTimeoutMs: Long = 300,
+        val cacheTtlMs: Long = 1_000,
+    )
+
     data class StateMutex(
         val enabled: Boolean = true,
-        val ttl: Duration = Duration.ofSeconds(30),
-        val acquireTimeout: Duration = Duration.ofSeconds(5),
-        val retryInterval: Duration = Duration.ofMillis(100),
-    )
+        val ttlMs: Long = 30_000,
+        val acquireTimeoutMs: Long = 5_000,
+        val retryIntervalMs: Long = 100,
+        @Deprecated("Use ttl-ms instead.")
+        val ttl: Duration? = null,
+        @Deprecated("Use acquire-timeout-ms instead.")
+        val acquireTimeout: Duration? = null,
+        @Deprecated("Use retry-interval-ms instead.")
+        val retryInterval: Duration? = null,
+    ) {
+        @Suppress("DEPRECATION")
+        val resolvedTtl: Duration
+            get() = ttl ?: Duration.ofMillis(ttlMs)
+
+        @Suppress("DEPRECATION")
+        val resolvedAcquireTimeout: Duration
+            get() = acquireTimeout ?: Duration.ofMillis(acquireTimeoutMs)
+
+        @Suppress("DEPRECATION")
+        val resolvedRetryInterval: Duration
+            get() = retryInterval ?: Duration.ofMillis(retryIntervalMs)
+    }
 
     data class Streams(
         val provisioningEnabled: Boolean = false,
@@ -88,6 +109,7 @@ data class CoordinatorProperties(
     enum class StoreType {
         MEMORY,
         REDIS,
+        JDBC,
     }
 
     enum class AuditSink {
@@ -106,4 +128,12 @@ data class CoordinatorProperties(
         val initialShardCount: Int = 12,
         val consumerMaxConcurrency: Int = 12,
     )
+
+    data class Monitoring(
+        val offsetCacheTtlMs: Long = 5_000,
+        val shardQueryParallelism: Int = 8,
+    ) {
+        val offsetCacheTtl: Duration
+            get() = Duration.ofMillis(offsetCacheTtlMs.coerceAtLeast(0))
+    }
 }

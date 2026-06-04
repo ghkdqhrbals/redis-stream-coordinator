@@ -1,0 +1,28 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: rsc-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 5s
+
+  - name: Coordinator API
+    uid: rsc-coordinator-api
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://coordinator:8080
+    basicAuth: true
+    basicAuthUser: ${COORDINATOR_API_USERNAME}
+    editable: true
+    jsonData:
+      auth_method: basicAuth
+      allowedHosts:
+        - http://coordinator:8080
+      timeoutInSeconds: 10
+    secureJsonData:
+      basicAuthPassword: ${COORDINATOR_API_PASSWORD}

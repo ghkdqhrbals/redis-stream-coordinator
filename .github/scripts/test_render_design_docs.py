@@ -51,11 +51,14 @@ class RenderDesignDocsTest(unittest.TestCase):
             self._run_renderer(source, output)
 
             html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn('<div class="table-scroll"><table class="responsive-table">', html)
             self.assertIn('<table class="responsive-table">', html)
             self.assertIn('data-label="Scenario"', html)
             self.assertIn('data-label="Expected behavior"', html)
             self.assertIn("@media (max-width: 720px)", html)
             self.assertIn("grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr)", html)
+            self.assertIn("overflow-x: auto;", html)
+            self.assertIn("white-space: nowrap;", html)
             self.assertNotIn("overflow-x: hidden", html)
 
     def test_uses_compact_kip_like_document_spacing(self) -> None:
@@ -69,9 +72,9 @@ class RenderDesignDocsTest(unittest.TestCase):
             html = (output / "index.html").read_text(encoding="utf-8")
             self.assertIn("font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);", html)
             self.assertIn("line-height: 1.5;", html)
-            self.assertIn("width: min(100%, 1180px);", html)
+            self.assertIn("width: min(100%, 1360px);", html)
             self.assertIn("padding: clamp(14px, 2.6vw, 24px);", html)
-            self.assertIn("grid-template-columns: 260px minmax(0, 1fr);", html)
+            self.assertIn("grid-template-columns: 280px minmax(0, 1fr);", html)
             self.assertIn("font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);", html)
             self.assertIn("font-size: 0.93em;", html)
 
@@ -170,6 +173,52 @@ class RenderDesignDocsTest(unittest.TestCase):
             self.assertIn('href="docs/prd/02-coordinator-architecture.html"', korean_index)
             self.assertIn('href="prd/02-coordinator-architecture.html"', korean_prd_html)
             self.assertIn("한글 본문", (output / "ko" / "docs" / "prd" / "02-coordinator-architecture.html").read_text(encoding="utf-8"))
+
+    def test_design_docs_exclude_implementation_status_from_site_navigation(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            docs = source / "docs"
+            docs.mkdir(parents=True)
+            (docs / "PRD.md").write_text("# Redis Stream Coordinator Design\n", encoding="utf-8")
+            (docs / "implementation-status.md").write_text("# Implementation Status\n", encoding="utf-8")
+
+            self._run_renderer(source, output)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertNotIn("Implementation Status", html)
+            self.assertFalse((output / "docs" / "implementation-status.html").exists())
+
+    def test_design_docs_publish_scalar_api_reference_when_openapi_spec_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:
+            source = Path(source_dir)
+            output = Path(output_dir)
+            docs = source / "docs"
+            korean_docs = docs / "ko"
+            openapi = docs / "openapi"
+            docs.mkdir(parents=True)
+            korean_docs.mkdir(parents=True)
+            openapi.mkdir(parents=True)
+            (docs / "PRD.md").write_text("# Redis Stream Coordinator Design\n\n[Scalar API Reference](../api.html)\n", encoding="utf-8")
+            (korean_docs / "PRD.md").write_text("# Redis Stream Coordinator Design\n\n[Scalar API Reference](../api.html)\n", encoding="utf-8")
+            (openapi / "coordinator.v1.yaml").write_text("openapi: 3.1.0\ninfo:\n  title: API\n  version: v1\npaths: {}\n", encoding="utf-8")
+
+            self._run_renderer(source, output)
+
+            index_html = (output / "index.html").read_text(encoding="utf-8")
+            prd_html = (output / "docs" / "PRD.html").read_text(encoding="utf-8")
+            korean_index_html = (output / "ko" / "index.html").read_text(encoding="utf-8")
+            api_html = (output / "api.html").read_text(encoding="utf-8")
+            korean_api_html = (output / "ko" / "api.html").read_text(encoding="utf-8")
+            self.assertIn('href="api.html">API Reference</a>', index_html)
+            self.assertIn('href="api.html">Scalar API Reference</a>', index_html)
+            self.assertIn('href="../api.html">Scalar API Reference</a>', prd_html)
+            self.assertIn('href="api.html">Scalar API Reference</a>', korean_index_html)
+            self.assertIn("https://cdn.jsdelivr.net/npm/@scalar/api-reference", api_html)
+            self.assertIn('url: "openapi/coordinator.v1.yaml"', api_html)
+            self.assertIn('targetLanguage === "ko"', api_html)
+            self.assertIn('url: "../openapi/coordinator.v1.yaml"', korean_api_html)
+            self.assertTrue((output / "openapi" / "coordinator.v1.yaml").exists())
 
     def test_heading_levels_do_not_render_underline_rules(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as output_dir:

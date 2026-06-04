@@ -5,74 +5,48 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      access: unrestricted
 
 springdoc:
   api-docs:
     enabled: true
+  paths-to-exclude:
+    - /scalar
+    - /scalar/**
   swagger-ui:
     path: /swagger-ui.html
     try-it-out-enabled: true
     operations-sorter: method
     tags-sorter: alpha
 
+scalar:
+  enabled: true
+  path: /scalar
+  url: /v3/api-docs
+  page-title: Redis Stream Coordinator API
+  layout: modern
+  theme: default
+  document-download-type: both
+  operation-title-source: summary
+  tag-sorter: alpha
+  operation-sorter: method
+  show-operation-id: true
+  hide-test-request-button: false
+
 spring:
   config:
     import: ${SPRING_CONFIG_IMPORT:optional:configtree:/run/secrets/}
-  data:
-    redis:
-      cluster:
-        nodes:
-          - localhost:7001
-          - localhost:7002
-          - localhost:7003
 
 coordinator:
-  id: local-coordinator
-  heartbeat-interval: 5s
-  member-lease-ttl: 15s
-  loop:
-    enabled: true
-    tick-interval: 1s
   api:
-    admin-username: admin
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
-    authenticate-member-api: false
-    users: []
-    rate-limit:
-      enabled: false
-      admin-mutations-per-minute: 60
-  protocol:
-    min-heartbeat-version: 1
-    max-heartbeat-version: 1
-  redis-cluster:
-    node-mappings:
-      - advertised-host: redis-node-1
-        advertised-port: 7001
-        connect-host: 127.0.0.1
-        connect-port: 7001
-      - advertised-host: redis-node-2
-        advertised-port: 7002
-        connect-host: 127.0.0.1
-        connect-port: 7002
-      - advertised-host: redis-node-3
-        advertised-port: 7003
-        connect-host: 127.0.0.1
-        connect-port: 7003
-  store:
-    type: memory
-    key-prefix: redis-stream:coord
   coordination:
     state-mutex:
-      enabled: true
-      ttl: 30s
-      acquire-timeout: 5s
-      retry-interval: 100ms
-  streams:
-    provisioning-enabled: false
-  audit:
-    sink: log
-    redis-max-entries: 1000
-  defaults:
-    initial-shard-count: 12
-    consumer-max-concurrency: 12
+      ttl-ms: 30000
+      acquire-timeout-ms: 5000
+      retry-interval-ms: 100
+  health:
+    redis-timeout-ms: 300

@@ -110,7 +110,6 @@ class CoordinatorRateLimitHttpIntegrationTest {
             memberId = memberId,
             memberName = memberId,
             memberEpoch = 0,
-            rebalanceTimeoutMs = 60_000,
             metadataVersion = 0,
             runtimeConsumerCapacity = RuntimeConsumerCapacity(
                 runtimeMaxConcurrency = 4,

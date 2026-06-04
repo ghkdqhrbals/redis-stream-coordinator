@@ -36,29 +36,33 @@ Backward-compatible additions are allowed in the same API version:
 * new enum values only when old clients ignore unknown values safely,
 * new monitoring endpoints.
 
-## Heartbeat Protocol Version
+## Coordination Version
 
-Heartbeat requests include `protocolVersion`.
+Heartbeat requests include `protocolVersion`, but the value represents the coordinator-module coordination version. It is not a heartbeat-only version.
 
-The coordinator configuration defines an accepted range, for example:
+The supported coordination version range is provided by the coordinator and starter modules, not by user YAML. Operators must not widen the accepted range manually because that can allow a version that the running code cannot actually parse or enforce.
 
-```yaml
-coordinator:
-  protocol:
-    min-supported-version: "1.0"
-    max-supported-version: "1.1"
-```
+Each coordination version entry must declare release lifecycle metadata with semantic release fields:
+
+| Field | Meaning |
+| --- | --- |
+| `introducedIn.major/minor/patch` | First artifact release that introduced the version. |
+| `deprecatedIn.major/minor/patch` | First release that deprecates the version, or `null` while active. |
+| `minimumSupportedUntil.major/minor/patch` | Earliest release before which the version must not be removed. |
+| `removedIn.major/minor/patch` | Release that removes the version, or `null` until removal is scheduled. |
+
+Current coordinator and starter modules declare coordination version `1` as introduced in `0.1.0` and supported at least until `1.0.0`.
 
 Policy:
 
-* A coordinator must reject unsupported protocol versions with a clear error.
+* A coordinator must reject unsupported coordination versions with a clear error.
 * Minor protocol additions must be optional.
 * Required field changes require a major version.
-* Rolling upgrades should support N/N-1 client and server coexistence.
+* Rolling upgrades should support N/N-1 client and server coexistence through module-defined compatibility constants and release notes.
 
-## Redis Metadata Schema Version
+## Metadata Schema Version
 
-Redis aggregate state includes `schemaVersion`.
+The persisted DB aggregate JSON includes `schemaVersion`. Redis-backed metadata mode uses the same aggregate schema for development and tests.
 
 Policy:
 
@@ -92,12 +96,12 @@ Documentation must state:
 
 Recommended rolling upgrade order:
 
-1. Upgrade coordinator server to a version that supports both old and new heartbeat protocols.
+1. Upgrade coordinator server to a version that supports both old and new coordination versions.
 2. Upgrade consumer applications.
 3. Upgrade producer applications.
 4. Remove old protocol support only in a later major release.
 
-Rollback should be possible while Redis metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.
+Rollback should be possible while metadata schema remains compatible. If schema migration is irreversible, release notes must state that clearly.
 
 ## Compatibility Test Matrix
 
@@ -119,3 +123,21 @@ Deprecations must include:
 * earliest removal version,
 * migration notes,
 * warning logs or metrics where practical.
+
+## Shared Protocol Artifact
+
+Coordination version metadata and default timing values are owned by `redisstream-core`.
+The coordinator server and support modules must depend on this module instead of defining
+their own heartbeat interval, member lease TTL, rebalance timeout, or supported coordination
+version tables.
+
+For coordination version `1`, the default timing contract is:
+
+* heartbeat interval: `3s`
+* member lease TTL: `15s`
+* rebalance timeout: `60s`
+
+The coordinator still sends `heartbeatIntervalMs` and `rebalanceTimeoutMs` in heartbeat responses,
+and consumers should follow the server response after joining. The shared defaults exist so both artifacts behave
+consistently before the first successful heartbeat and so future protocol versions can evolve
+timing defaults in one place.

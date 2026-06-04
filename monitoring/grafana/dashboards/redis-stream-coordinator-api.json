@@ -1,0 +1,536 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": false,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/redis-stream-coordinator/redis-stream-coordinator"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Stream Detail",
+      "type": "link",
+      "url": "/d/redis-stream-coordinator-stream-detail/redis-stream-coordinator-stream-detail"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "expr": "max(last_over_time(redis_stream_coord_api_request_duration_seconds{quantile=\"0.95\", stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "legendFormat": "API p95 Latency",
+          "refId": "A"
+        }
+      ],
+      "title": "API p95 Latency",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "spanNulls": true,
+            "insertNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "expr": "max(last_over_time(redis_stream_coord_api_request_duration_seconds_max{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "legendFormat": "API Max Latency",
+          "refId": "A"
+        }
+      ],
+      "title": "API Max Latency",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "expr": "max by (route) (last_over_time(redis_stream_coord_api_request_duration_seconds{quantile=\"0.95\", stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "legendFormat": "{{route}} p95",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "expr": "max by (route) (last_over_time(redis_stream_coord_api_request_duration_seconds_max{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "legendFormat": "{{route}} max",
+          "refId": "B"
+        }
+      ],
+      "title": "API Latency by Route",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "rsc-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "rsc-prometheus"
+          },
+          "expr": "sum by (route, status) (rate(redis_stream_coord_api_request_duration_seconds_count{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[2m]))",
+          "legendFormat": "{{route}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "API Request Rate",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "1m",
+  "schemaVersion": 42,
+  "tags": [
+    "redis-stream-coordinator",
+    "redis-stream",
+    "coordinator"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "create-order",
+          "value": "create-order"
+        },
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "rsc-coordinator-api"
+        },
+        "definition": "http://coordinator:8080/coord/v1/monitoring/grafana/options/streams",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Stream",
+        "multi": false,
+        "name": "streamPrefix",
+        "options": [],
+        "query": {
+          "queryType": "infinity",
+          "infinityQuery": {
+            "type": "json",
+            "source": "url",
+            "format": "table",
+            "parser": "backend",
+            "url": "http://coordinator:8080/coord/v1/monitoring/grafana/options/streams",
+            "url_options": {
+              "method": "GET"
+            },
+            "root_selector": "",
+            "columns": [
+              {
+                "selector": "__text",
+                "text": "__text",
+                "type": "string"
+              },
+              {
+                "selector": "__value",
+                "text": "__value",
+                "type": "string"
+              }
+            ]
+          },
+          "textField": "__text",
+          "valueField": "__value"
+        },
+        "refresh": 1,
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "demo-workers",
+          "value": "demo-workers"
+        },
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "rsc-coordinator-api"
+        },
+        "definition": "http://coordinator:8080/coord/v1/monitoring/grafana/options/consumer-groups?streamPrefix=$streamPrefix",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Consumer Group",
+        "multi": false,
+        "name": "consumerGroup",
+        "options": [],
+        "query": {
+          "queryType": "infinity",
+          "infinityQuery": {
+            "type": "json",
+            "source": "url",
+            "format": "table",
+            "parser": "backend",
+            "url": "http://coordinator:8080/coord/v1/monitoring/grafana/options/consumer-groups?streamPrefix=$streamPrefix",
+            "url_options": {
+              "method": "GET"
+            },
+            "root_selector": "",
+            "columns": [
+              {
+                "selector": "__text",
+                "text": "__text",
+                "type": "string"
+              },
+              {
+                "selector": "__value",
+                "text": "__value",
+                "type": "string"
+              }
+            ]
+          },
+          "textField": "__text",
+          "valueField": "__value"
+        },
+        "refresh": 1,
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": ".*"
+        },
+        "definition": "label_values(redis_stream_coord_api_request_duration_seconds_count, route)",
+        "includeAll": true,
+        "label": "API Route",
+        "multi": false,
+        "name": "apiRoute",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(redis_stream_coord_api_request_duration_seconds_count, route)",
+          "refId": "PrometheusVariableQueryEditor-ApiRoute"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Redis Stream Coordinator API Performance",
+  "uid": "redis-stream-coordinator-api",
+  "version": 1,
+  "weekStart": ""
+}

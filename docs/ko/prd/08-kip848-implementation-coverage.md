@@ -10,8 +10,8 @@
 | --- | --- |
 | Group Coordinator | Coordinator API server |
 | Consumer Group | `{streamPrefix, consumerGroup}` |
-| Member | member runtime이 생성한 UUID `memberId` |
-| Topic Partition | `{streamVersion, shardIndex}` |
+| Member | member runtime이 pod IP context에서 생성한 `memberId` |
+| Topic Partition | `shardIndex` |
 | Target Assignment | coordinator가 저장한 desired shard ownership |
 | Current Assignment | member가 heartbeat로 보고한 실제 적용 상태 |
 | ConsumerGroupHeartbeat | member heartbeat request/response assignment channel |
@@ -37,11 +37,11 @@
 
 * Kafka broker coordinator 대신 Coordinator API server가 group metadata와 assignment를 관리한다.
 * Kafka broker wire protocol 대신 custom HTTP Admin/Heartbeat/Monitoring API를 사용한다.
-* Kafka topic partition 대신 Redis Stream shard key `{streamVersion, shardIndex}`를 assignment 단위로 사용한다.
+* Kafka topic partition 대신 Redis Stream shard index를 assignment 단위로 사용한다.
 * Kafka offset commit fencing은 구현하지 않는다. Redis Stream read/ack fencing은 member data-plane이 coordinator의 assignment/member epoch을 기준으로 적용한다.
-* Kafka partition expansion 대신 stream version migration으로 shard scale-out/in을 처리한다.
+* Kafka partition expansion 대신 resharding으로 shard scale-out/in을 처리한다.
 * Kafka `ConsumerGroupHeartbeat` RPC는 internal coordinator API 또는 Redis mailbox request/response로 구현한다.
-* member id는 member runtime이 생성하고 coordinator가 epoch/fencing 상태를 관리한다.
+* member id는 member runtime이 pod IP context에서 생성하고 coordinator가 epoch/fencing 상태를 관리한다.
 * Kafka의 `group.consumer.heartbeat.interval.ms`와 `group.consumer.session.timeout.ms`는 coordinator `heartbeat-interval`과 `member-lease-ttl`로 단순화한다.
 * KIP-848의 server-side assignor 선택은 제공하지 않는다. sticky partition assignment는 설계 전제이다.
 * Basic Auth, Monitoring API, Redis 접속 YAML, Admin API default 값은 Redis coordinator 운영을 위한 추가 계층이며 KIP-848 protocol 개념이 아니다.
@@ -50,16 +50,16 @@
 
 | Area | KIP-848 | Redis Stream Coordinator |
 | --- | --- | --- |
-| Coordinator placement | Kafka broker group coordinator가 `__consumer_offsets` 기반 state machine으로 관리한다. | 별도 lightweight Coordinator API server가 Redis metadata store를 사용한다. |
+| Coordinator placement | Kafka broker group coordinator가 `__consumer_offsets` 기반 state machine으로 관리한다. | 별도 lightweight Coordinator API server가 Redis metadata store를 사용한다. Redis Stream은 data plane이다. |
 | Wire protocol | Kafka RPC와 error code를 확장한다. | HTTP Admin/Heartbeat/Monitoring API를 사용하고 Kafka protocol 호환을 목표로 하지 않는다. |
-| Member ID | KIP-848 원문은 server-generated member id를 설명하고, 이후 KIP-1082로 client-generated id가 반영됐다. | member runtime이 UUID `memberId`를 만들고 coordinator가 등록/epoch/fencing을 관리한다. `memberId` 자체가 runtime incarnation id이다. |
+| Member ID | KIP-848 원문은 server-generated member id를 설명하고, 이후 KIP-1082로 client-generated id가 반영됐다. | member runtime이 pod IP context에서 `memberId`를 만들고 coordinator가 등록/epoch/fencing을 관리한다. |
 | Heartbeat payload | 첫 heartbeat나 error 이후에는 전체 필드를 보내고, 이후에는 변경된 subscription/assignor/owned partition field만 보낼 수 있다. | MVP heartbeat는 owned shards, revoking shards, runtime consumer capacity를 명시적으로 보고하는 custom schema를 사용한다. |
 | Heartbeat/session | server-side heartbeat interval과 session timeout을 member에게 전달한다. | `heartbeatIntervalMs`로 다음 heartbeat 주기를 전달하고, `member-lease-ttl` 초과 member를 `EXPIRED/FENCED` 처리한다. |
-| Rebalance timeout | revoke 완료를 기다리는 rebalance timeout이 있고, 초과하면 member를 group에서 제거할 수 있다. | `rebalanceTimeoutMs`를 heartbeat field로 받는다. coordinator global config가 아니라 member revoke deadline으로만 사용한다. |
+| Rebalance timeout | revoke 완료를 기다리는 rebalance timeout이 있고, 초과하면 member를 group에서 제거할 수 있다. | Coordinator가 timeout 정책을 소유하고 heartbeat response의 `rebalanceTimeoutMs`로 member에게 전달한다. |
 | Assignor model | server-side assignor 선택, assignor negotiation, client-side assignor delegation을 모델링한다. | sticky partition assignment만 전제로 하며 선택/협상/위임을 제공하지 않는다. |
 | Subscription model | topic name, topic id, regex subscription, partition metadata 변경을 group metadata로 다룬다. | `{streamPrefix, consumerGroup}` Admin API 대상과 Redis Stream version metadata를 사용한다. regex subscription은 없다. |
 | Member metadata | instance id, rack id, client id, client host, subscribed topics, assignor metadata를 group assignment input으로 다룬다. | member lifecycle, heartbeat time, assignment epoch, runtime/assigned concurrency만 coordinator state로 둔다. |
-| Partition scaling | Kafka topic partition metadata 변경이 group epoch 증가 trigger가 된다. | shard count 변경은 Coordinator Admin API만 가능하고 next stream version migration으로 처리한다. |
+| Partition scaling | Kafka topic partition metadata 변경이 group epoch 증가 trigger가 된다. | shard count 변경은 Coordinator Admin API만 가능하고 next resharding으로 처리한다. |
 | Static membership | instance id 기반 static membership과 temporary leave를 지원한다. | MVP에서는 static membership을 구현하지 않는다. restart는 새 runtime incarnation으로 본다. |
 | Offset APIs | offset commit/fetch가 member epoch으로 fencing된다. | Redis Stream `XREADGROUP`/`XACK`는 at-least-once이다. Coordinator는 stale owner fencing과 assignment visibility를 제공하지만 단일 처리 보장은 제공하지 않는다. |
 | Error model | Kafka protocol error code(`UNKNOWN_MEMBER_ID`, `FENCED_MEMBER_EPOCH`, `UNSUPPORTED_ASSIGNOR` 등)를 사용한다. | Redis coordinator는 sticky assignment 전제라 assignor error를 제외하고 `HeartbeatStatus` enum을 custom API contract로 정의한다. |
@@ -79,9 +79,9 @@
 
 ## Residual Gaps To Decide
 
-* member-generated UUID만으로 충분한지, 첫 heartbeat에서 coordinator registration ack를 별도 contract로 강제할지.
+* pod-IP-derived member id만으로 충분한지, 첫 heartbeat에서 coordinator registration ack를 별도 contract로 강제할지.
 * Monitoring API response를 Kafka `ConsumerGroupDescribe`와 유사한 형태로 맞출지, Redis 운영에 필요한 custom summary로 고정할지.
 
 ## Coverage Notes
 
-KIP-848 says the new protocol moves complexity from clients to the group coordinator, removes a global synchronization barrier, stores target/current assignment, and uses heartbeat to carry member state and assignment. This design implements those parts directly, then replaces Kafka-specific broker, partition, offset, and protocol concerns with Redis metadata keys, stream version migration, and member data-plane boundaries.
+KIP-848 says the new protocol moves complexity from clients to the group coordinator, removes a global synchronization barrier, stores target/current assignment, and uses heartbeat to carry member state and assignment. This design implements those parts directly, then replaces Kafka-specific broker, partition, offset, and protocol concerns with Redis-backed coordinator metadata, Redis Stream version migration, and member data-plane boundaries.

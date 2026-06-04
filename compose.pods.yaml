@@ -1,150 +1,4 @@
 services:
-  pod-redis-node-1:
-    image: redis:7.4-alpine
-    command:
-      - redis-server
-      - --port
-      - "6379"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-config-file
-      - nodes.conf
-      - --cluster-node-timeout
-      - "5000"
-      - --appendonly
-      - "no"
-      - --save
-      - ""
-      - --protected-mode
-      - "no"
-      - --bind
-      - 0.0.0.0
-      - --cluster-announce-port
-      - "6379"
-      - --cluster-announce-bus-port
-      - "16379"
-      - --cluster-announce-hostname
-      - pod-redis-node-1
-      - --cluster-preferred-endpoint-type
-      - hostname
-    ports:
-      - "7201:6379"
-    tmpfs:
-      - /data:size=32m
-    healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
-      interval: 2s
-      timeout: 1s
-      retries: 30
-    networks:
-      - redis-stream-pods
-
-  pod-redis-node-2:
-    image: redis:7.4-alpine
-    command:
-      - redis-server
-      - --port
-      - "6379"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-config-file
-      - nodes.conf
-      - --cluster-node-timeout
-      - "5000"
-      - --appendonly
-      - "no"
-      - --save
-      - ""
-      - --protected-mode
-      - "no"
-      - --bind
-      - 0.0.0.0
-      - --cluster-announce-port
-      - "6379"
-      - --cluster-announce-bus-port
-      - "16379"
-      - --cluster-announce-hostname
-      - pod-redis-node-2
-      - --cluster-preferred-endpoint-type
-      - hostname
-    ports:
-      - "7202:6379"
-    tmpfs:
-      - /data:size=32m
-    healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
-      interval: 2s
-      timeout: 1s
-      retries: 30
-    networks:
-      - redis-stream-pods
-
-  pod-redis-node-3:
-    image: redis:7.4-alpine
-    command:
-      - redis-server
-      - --port
-      - "6379"
-      - --cluster-enabled
-      - "yes"
-      - --cluster-config-file
-      - nodes.conf
-      - --cluster-node-timeout
-      - "5000"
-      - --appendonly
-      - "no"
-      - --save
-      - ""
-      - --protected-mode
-      - "no"
-      - --bind
-      - 0.0.0.0
-      - --cluster-announce-port
-      - "6379"
-      - --cluster-announce-bus-port
-      - "16379"
-      - --cluster-announce-hostname
-      - pod-redis-node-3
-      - --cluster-preferred-endpoint-type
-      - hostname
-    ports:
-      - "7203:6379"
-    tmpfs:
-      - /data:size=32m
-    healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
-      interval: 2s
-      timeout: 1s
-      retries: 30
-    networks:
-      - redis-stream-pods
-
-  pod-redis-cluster-init:
-    image: redis:7.4-alpine
-    depends_on:
-      pod-redis-node-1:
-        condition: service_healthy
-      pod-redis-node-2:
-        condition: service_healthy
-      pod-redis-node-3:
-        condition: service_healthy
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        set -e
-        if redis-cli -h pod-redis-node-1 -p 6379 cluster info | grep -q 'cluster_state:ok'; then
-          echo "Redis cluster already initialized"
-          exit 0
-        fi
-        yes yes | redis-cli --cluster create \
-          pod-redis-node-1:6379 \
-          pod-redis-node-2:6379 \
-          pod-redis-node-3:6379 \
-          --cluster-replicas 0
-    networks:
-      - redis-stream-pods
-
   coordinator:
     image: redis-stream-coordinator/coordinator:local
     build:
@@ -152,51 +6,124 @@ services:
       args:
         APP_TASK: :coordinator-server:bootJar
         APP_LIB_DIR: coordinator-server/build/libs
-    depends_on:
-      pod-redis-cluster-init:
-        condition: service_completed_successfully
     environment:
-      SPRING_DATA_REDIS_CLUSTER_NODES: pod-redis-node-1:6379,pod-redis-node-2:6379,pod-redis-node-3:6379
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       COORDINATOR_ID: docker-coordinator
       COORDINATOR_STORE_TYPE: redis
       COORDINATOR_STREAMS_PROVISIONING_ENABLED: "true"
-      COORDINATOR_DEFAULTS_INITIAL_SHARD_COUNT: "6"
-      COORDINATOR_DEFAULTS_CONSUMER_MAX_CONCURRENCY: "6"
-      REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD: password
+      COORDINATOR_DEFAULTS_INITIAL_SHARD_COUNT: "20"
+      COORDINATOR_DEFAULTS_CONSUMER_MAX_CONCURRENCY: "8"
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}
+      SPRING_DATA_REDIS_PASSWORD: ${AWS_REDIS_PASSWORD:-}
+      REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
       MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
     ports:
       - "8080:8080"
     tmpfs:
       - /tmp:size=128m
+    secrets:
+      - source: redis_cluster_nodes
+        target: spring.data.redis.cluster.nodes
+        mode: 0444
+      - source: redis_password
+        target: spring.data.redis.password
+        mode: 0444
     networks:
       - redis-stream-pods
 
   coordinator-group-init:
-    image: redis:7.4-alpine
+    image: alpine:3.20
     depends_on:
       coordinator:
         condition: service_started
+    environment:
+      REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
     entrypoint:
       - /bin/sh
       - -c
       - |
         set -e
+        AUTH_TOKEN="$$(printf 'admin:%s' "$$REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD" | base64 | tr -d '\n')"
         until wget -qO- http://coordinator:8080/actuator/info >/dev/null 2>&1; do
           sleep 1
         done
         if wget -qO- \
-          --header='Authorization: Basic YWRtaW46cGFzc3dvcmQ=' \
-          http://coordinator:8080/coord/v1/streams/demo.orders/groups/demo-workers >/dev/null 2>&1; then
+          --header="Authorization: Basic $${AUTH_TOKEN}" \
+          http://coordinator:8080/coord/v1/streams/create-order/groups/demo-workers >/dev/null 2>&1; then
           echo "Coordinator group already exists"
           exit 0
         fi
         wget -qO- \
           --header='Content-Type: application/json' \
-          --header='Authorization: Basic YWRtaW46cGFzc3dvcmQ=' \
-          --post-data='{"initialShardCount":6,"hashAlgorithm":"MURMUR3_32","consumerConcurrencyPolicy":{"defaultMaxConcurrency":6},"requestedBy":"compose.pods","reason":"local pod smoke"}' \
-          http://coordinator:8080/coord/v1/streams/demo.orders/groups/demo-workers
+          --header="Authorization: Basic $${AUTH_TOKEN}" \
+          --post-data='{"initialShardCount":6,"consumerConcurrencyPolicy":{"defaultMaxConcurrency":6},"requestedBy":"compose.pods","reason":"external redis pod smoke"}' \
+          http://coordinator:8080/coord/v1/streams/create-order/groups/demo-workers
         echo
         echo "Coordinator group initialized"
+    networks:
+      - redis-stream-pods
+
+  coordinator-payment-group-init:
+    image: alpine:3.20
+    depends_on:
+      coordinator:
+        condition: service_started
+    environment:
+      REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        AUTH_TOKEN="$$(printf 'admin:%s' "$$REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD" | base64 | tr -d '\n')"
+        until wget -qO- http://coordinator:8080/actuator/info >/dev/null 2>&1; do
+          sleep 1
+        done
+        if wget -qO- \
+          --header="Authorization: Basic $${AUTH_TOKEN}" \
+          http://coordinator:8080/coord/v1/streams/create-payment/groups/payment-workers >/dev/null 2>&1; then
+          echo "Payment coordinator group already exists"
+          exit 0
+        fi
+        wget -qO- \
+          --header='Content-Type: application/json' \
+          --header="Authorization: Basic $${AUTH_TOKEN}" \
+          --post-data='{"initialShardCount":20,"consumerConcurrencyPolicy":{"defaultMaxConcurrency":8},"requestedBy":"compose.pods","reason":"second stream monitoring smoke"}' \
+          http://coordinator:8080/coord/v1/streams/create-payment/groups/payment-workers
+        echo
+        echo "Payment coordinator group initialized"
+    networks:
+      - redis-stream-pods
+
+  coordinator-payment-low-group-init:
+    image: alpine:3.20
+    depends_on:
+      coordinator:
+        condition: service_started
+    environment:
+      REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        AUTH_TOKEN="$$(printf 'admin:%s' "$$REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD" | base64 | tr -d '\n')"
+        until wget -qO- http://coordinator:8080/actuator/info >/dev/null 2>&1; do
+          sleep 1
+        done
+        if wget -qO- \
+          --header="Authorization: Basic $${AUTH_TOKEN}" \
+          http://coordinator:8080/coord/v1/streams/create-payment/groups/payment-low-workers >/dev/null 2>&1; then
+          echo "Low-volume payment coordinator group already exists"
+          exit 0
+        fi
+        wget -qO- \
+          --header='Content-Type: application/json' \
+          --header="Authorization: Basic $${AUTH_TOKEN}" \
+          --post-data='{"initialShardCount":20,"consumerConcurrencyPolicy":{"defaultMaxConcurrency":2},"requestedBy":"compose.pods","reason":"low-member payment stream monitoring smoke"}' \
+          http://coordinator:8080/coord/v1/streams/create-payment/groups/payment-low-workers
+        echo
+        echo "Low-volume payment coordinator group initialized"
     networks:
       - redis-stream-pods
 
@@ -210,24 +137,43 @@ services:
     depends_on:
       coordinator-group-init:
         condition: service_completed_successfully
+      coordinator-payment-group-init:
+        condition: service_completed_successfully
+      coordinator-payment-low-group-init:
+        condition: service_completed_successfully
     environment:
       SERVER_PORT: "18081"
-      REDIS_CLUSTER_NODE_1: pod-redis-node-1:6379
-      REDIS_CLUSTER_NODE_2: pod-redis-node-2:6379
-      REDIS_CLUSTER_NODE_3: pod-redis-node-3:6379
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       COORDINATOR_BASE_URL: http://coordinator:8080
-      STREAM_PREFIX: demo.orders
-      CONSUMER_GROUP: demo-workers
-      CONSUMER_MEMBER_ID: consumer-pod-1
-      CONSUMER_MEMBER_NAME: consumer-pod-1
-      CONSUMER_RUNTIME_MAX_CONCURRENCY: "4"
+      STREAM_PREFIX: create-order
+      CONSUMER_GROUP_NAME: demo-workers
+      CONSUMER_MEMBER_CONCURRENCY: "4"
+      SECONDARY_STREAM_ENABLED: "true"
+      SECONDARY_STREAM_PREFIX: create-payment
+      SECONDARY_CONSUMER_GROUP_NAME: payment-workers
+      SECONDARY_CONSUMER_MEMBER_CONCURRENCY: "4"
+      PAYMENT_LOW_STREAM_ENABLED: "true"
+      PAYMENT_LOW_STREAM_PREFIX: create-payment
+      PAYMENT_LOW_CONSUMER_GROUP_NAME: payment-low-workers
+      PAYMENT_LOW_CONSUMER_MEMBER_CONCURRENCY: "1"
+      CONSUMER_REDIS_POLL_TIMEOUT_MS: "250"
+      CONSUMER_PROCESSING_DELAY: 300ms
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}
+      SPRING_DATA_REDIS_PASSWORD: ${AWS_REDIS_PASSWORD:-}
       COORDINATOR_USERNAME: admin
-      COORDINATOR_PASSWORD: password
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
       MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
     ports:
       - "18081:18081"
     tmpfs:
       - /tmp:size=128m
+    secrets:
+      - source: redis_cluster_nodes
+        target: spring.data.redis.cluster.nodes
+        mode: 0444
+      - source: redis_password
+        target: spring.data.redis.password
+        mode: 0444
     networks:
       - redis-stream-pods
 
@@ -241,24 +187,43 @@ services:
     depends_on:
       coordinator-group-init:
         condition: service_completed_successfully
+      coordinator-payment-group-init:
+        condition: service_completed_successfully
+      coordinator-payment-low-group-init:
+        condition: service_completed_successfully
     environment:
       SERVER_PORT: "18082"
-      REDIS_CLUSTER_NODE_1: pod-redis-node-1:6379
-      REDIS_CLUSTER_NODE_2: pod-redis-node-2:6379
-      REDIS_CLUSTER_NODE_3: pod-redis-node-3:6379
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       COORDINATOR_BASE_URL: http://coordinator:8080
-      STREAM_PREFIX: demo.orders
-      CONSUMER_GROUP: demo-workers
-      CONSUMER_MEMBER_ID: consumer-pod-2
-      CONSUMER_MEMBER_NAME: consumer-pod-2
-      CONSUMER_RUNTIME_MAX_CONCURRENCY: "4"
+      STREAM_PREFIX: create-order
+      CONSUMER_GROUP_NAME: demo-workers
+      CONSUMER_MEMBER_CONCURRENCY: "4"
+      SECONDARY_STREAM_ENABLED: "true"
+      SECONDARY_STREAM_PREFIX: create-payment
+      SECONDARY_CONSUMER_GROUP_NAME: payment-workers
+      SECONDARY_CONSUMER_MEMBER_CONCURRENCY: "4"
+      PAYMENT_LOW_STREAM_ENABLED: "true"
+      PAYMENT_LOW_STREAM_PREFIX: create-payment
+      PAYMENT_LOW_CONSUMER_GROUP_NAME: payment-low-workers
+      PAYMENT_LOW_CONSUMER_MEMBER_CONCURRENCY: "1"
+      CONSUMER_REDIS_POLL_TIMEOUT_MS: "250"
+      CONSUMER_PROCESSING_DELAY: 300ms
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}
+      SPRING_DATA_REDIS_PASSWORD: ${AWS_REDIS_PASSWORD:-}
       COORDINATOR_USERNAME: admin
-      COORDINATOR_PASSWORD: password
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
       MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
     ports:
       - "18082:18082"
     tmpfs:
       - /tmp:size=128m
+    secrets:
+      - source: redis_cluster_nodes
+        target: spring.data.redis.cluster.nodes
+        mode: 0444
+      - source: redis_password
+        target: spring.data.redis.password
+        mode: 0444
     networks:
       - redis-stream-pods
 
@@ -274,24 +239,124 @@ services:
         condition: service_completed_successfully
     environment:
       SERVER_PORT: "18090"
-      REDIS_CLUSTER_NODE_1: pod-redis-node-1:6379
-      REDIS_CLUSTER_NODE_2: pod-redis-node-2:6379
-      REDIS_CLUSTER_NODE_3: pod-redis-node-3:6379
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
       COORDINATOR_BASE_URL: http://coordinator:8080
-      STREAM_PREFIX: demo.orders
+      STREAM_PREFIX: create-order
       CONSUMER_GROUP: demo-workers
       COORDINATOR_USERNAME: admin
-      COORDINATOR_PASSWORD: password
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}
+      SPRING_DATA_REDIS_PASSWORD: ${AWS_REDIS_PASSWORD:-}
       PUBLISHER_AUTO_PUBLISH_ENABLED: "true"
       PUBLISHER_PUBLISH_INTERVAL_MS: "1000"
+      PUBLISHER_XADD_MAX_LEN: "10000000"
+      PUBLISHER_XADD_APPROXIMATE_TRIMMING: "true"
       MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
     ports:
       - "18090:18090"
     tmpfs:
       - /tmp:size=128m
+    secrets:
+      - source: redis_cluster_nodes
+        target: spring.data.redis.cluster.nodes
+        mode: 0444
+      - source: redis_password
+        target: spring.data.redis.password
+        mode: 0444
+    networks:
+      - redis-stream-pods
+
+  publisher-payment-pod:
+    image: redis-stream-coordinator/publisher-pod:local
+    build:
+      context: .
+      args:
+        APP_TASK: :samples:publisher-pod:bootJar
+        APP_LIB_DIR: samples/publisher-pod/build/libs
+    depends_on:
+      coordinator-payment-group-init:
+        condition: service_completed_successfully
+    environment:
+      SERVER_PORT: "18091"
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      COORDINATOR_BASE_URL: http://coordinator:8080
+      STREAM_PREFIX: create-payment
+      CONSUMER_GROUP: payment-workers
+      COORDINATOR_USERNAME: admin
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}
+      SPRING_DATA_REDIS_PASSWORD: ${AWS_REDIS_PASSWORD:-}
+      SAMPLE_PUBLISHER_AUTO_PUBLISH_ENABLED: "true"
+      SAMPLE_PUBLISHER_PUBLISH_INTERVAL_MS: "1000"
+      SAMPLE_PUBLISHER_PARTITION_KEY_PREFIX: payment
+      SAMPLE_PUBLISHER_PAYLOAD_PREFIX: payment-event
+      PUBLISHER_XADD_MAX_LEN: "10000000"
+      PUBLISHER_XADD_APPROXIMATE_TRIMMING: "true"
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+    ports:
+      - "18091:18091"
+    tmpfs:
+      - /tmp:size=128m
+    secrets:
+      - source: redis_cluster_nodes
+        target: spring.data.redis.cluster.nodes
+        mode: 0444
+      - source: redis_password
+        target: spring.data.redis.password
+        mode: 0444
+    networks:
+      - redis-stream-pods
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    depends_on:
+      coordinator:
+        condition: service_started
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - redis-stream-pods
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    depends_on:
+      prometheus:
+        condition: service_started
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PANELS_DISABLE_SANITIZE_HTML: "true"
+      GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource,gapit-htmlgraphics-panel
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/redis-stream-coordinator.json
+      COORDINATOR_API_USERNAME: ${COORDINATOR_API_USERNAME:-admin}
+      COORDINATOR_API_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - redis-stream-pods
 
 networks:
   redis-stream-pods:
     name: redis-stream-coordinator-pods
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+secrets:
+  redis_cluster_nodes:
+    environment: AWS_REDIS_CLUSTER_NODES
+  redis_password:
+    environment: AWS_REDIS_PASSWORD

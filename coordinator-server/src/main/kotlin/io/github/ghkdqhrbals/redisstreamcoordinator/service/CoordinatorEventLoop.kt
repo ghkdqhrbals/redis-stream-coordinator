@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class CoordinatorEventLoop(
     private val properties: CoordinatorProperties,
     private val coordinator: CoordinatorService,
+    private val shutdownGate: CoordinatorShutdownGate,
 ) : SmartLifecycle {
     private val logger = LoggerFactory.getLogger(CoordinatorEventLoop::class.java)
     private val running = AtomicBoolean(false)
@@ -31,7 +32,12 @@ class CoordinatorEventLoop(
             }
         }
         task = executor!!.scheduleWithFixedDelay(
-            { runCatching { coordinator.tick() }.onFailure { logger.warn("Coordinator event loop tick failed", it) } },
+            {
+                if (!shutdownGate.isTerminating) {
+                    runCatching { coordinator.tick() }
+                        .onFailure { logger.warn("Coordinator event loop tick failed", it) }
+                }
+            },
             intervalMs,
             intervalMs,
             TimeUnit.MILLISECONDS,

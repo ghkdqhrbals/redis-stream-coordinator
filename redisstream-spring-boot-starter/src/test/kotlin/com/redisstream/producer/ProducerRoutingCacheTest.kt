@@ -6,7 +6,6 @@ import com.redisstream.consumer.HeartbeatRequest
 import com.redisstream.consumer.HeartbeatResponse
 import com.redisstream.consumer.ProducerRoutingResponse
 import com.redisstream.consumer.ProducerRoutingShard
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -19,11 +18,11 @@ import kotlin.test.assertTrue
 class ProducerRoutingCacheTest {
     @Test
     fun `route reuses cached producer routing metadata before refresh interval expires`() {
-        val client = ScriptedRoutingClient(routing(version = 1, activeWriteVersion = 1, shardCount = 2))
+        val client = ScriptedRoutingClient(routing(version = 1, shardCount = 2))
         val clock = MutableClock(Instant.parse("2026-05-23T00:00:00Z"))
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofSeconds(30),
             clock = clock,
@@ -34,21 +33,21 @@ class ProducerRoutingCacheTest {
         val second = cache.route("order-2")
 
         assertEquals(1, client.calls)
-        assertEquals(1, first.activeWriteVersion)
-        assertEquals(1, second.activeWriteVersion)
+        assertEquals(1, first.metadataVersion)
+        assertEquals(1, second.metadataVersion)
         assertEquals(1, cache.cachedMetadataVersion())
     }
 
     @Test
     fun `route refreshes expired cache and replaces metadata when metadata version changes`() {
         val client = ScriptedRoutingClient(
-            routing(version = 1, activeWriteVersion = 1, shardCount = 2),
-            routing(version = 2, activeWriteVersion = 2, shardCount = 4),
+            routing(version = 1, shardCount = 2),
+            routing(version = 2, shardCount = 4),
         )
         val clock = MutableClock(Instant.parse("2026-05-23T00:00:00Z"))
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofSeconds(10),
             clock = clock,
@@ -59,8 +58,8 @@ class ProducerRoutingCacheTest {
         val after = cache.route("order-1")
 
         assertEquals(2, client.calls)
-        assertEquals(1, before.activeWriteVersion)
-        assertEquals(2, after.activeWriteVersion)
+        assertEquals(1, before.metadataVersion)
+        assertEquals(2, after.metadataVersion)
         assertEquals(2, after.metadataVersion)
         assertEquals(2, cache.cachedMetadataVersion())
     }
@@ -68,12 +67,12 @@ class ProducerRoutingCacheTest {
     @Test
     fun `forced refresh checks coordinator even before refresh interval expires`() {
         val client = ScriptedRoutingClient(
-            routing(version = 1, activeWriteVersion = 1, shardCount = 2),
-            routing(version = 2, activeWriteVersion = 2, shardCount = 3),
+            routing(version = 1, shardCount = 2),
+            routing(version = 2, shardCount = 3),
         )
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofMinutes(5),
         )
@@ -83,28 +82,7 @@ class ProducerRoutingCacheTest {
 
         assertEquals(2, client.calls)
         assertEquals(2, refreshed.metadataVersion)
-        assertEquals(2, cache.route("order-1").activeWriteVersion)
-    }
-
-    @Test
-    fun `routing cache records refresh and cache hit metrics`() {
-        val registry = SimpleMeterRegistry()
-        val cache = ProducerRoutingCache(
-            streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
-            client = ScriptedRoutingClient(routing(version = 1, activeWriteVersion = 1, shardCount = 2)),
-            refreshInterval = Duration.ofMinutes(5),
-            metrics = MicrometerRedisStreamProducerMetrics(registry, "orders", "orders-consumer"),
-        )
-
-        cache.route("order-1")
-        cache.route("order-2")
-
-        assertEquals(
-            1.0,
-            registry.get("redis_stream_producer_routing_refresh_total").tag("status", "SUCCESS").counter().count(),
-        )
-        assertEquals(1.0, registry.get("redis_stream_producer_routing_cache_hit_total").counter().count())
+        assertEquals(2, cache.route("order-1").metadataVersion)
     }
 
     @Test
@@ -123,9 +101,9 @@ class ProducerRoutingCacheTest {
     fun `routing metadata for a different group is rejected`() {
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = ScriptedRoutingClient(
-                routing(version = 1, activeWriteVersion = 1, shardCount = 2, consumerGroup = "other-consumer"),
+                routing(version = 1, shardCount = 2, consumerGroup = "other-consumer"),
             ),
         )
 
@@ -136,15 +114,15 @@ class ProducerRoutingCacheTest {
 
     @Test
     fun `routing metadata must include each active shard index exactly once`() {
-        val metadata = routing(version = 1, activeWriteVersion = 1, shardCount = 2)
+        val metadata = routing(version = 1, shardCount = 2)
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
+            consumerGroupName = "orders-consumer",
             client = ScriptedRoutingClient(
                 metadata.copy(
                     shards = listOf(
-                        ProducerRoutingShard(1, 0, "orders:v1:shard:0", 0),
-                        ProducerRoutingShard(1, 0, "orders:v1:shard:0", 0),
+                        ProducerRoutingShard(0, "orders:0", 0),
+                        ProducerRoutingShard(0, "orders:0", 0),
                     ),
                 ),
             ),
@@ -155,9 +133,24 @@ class ProducerRoutingCacheTest {
         }
     }
 
+    @Test
+    fun `initial routing validation fails when coordinator has no active shards`() {
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            consumerGroupName = "orders-consumer",
+            client = ScriptedRoutingClient(
+                routing(version = 1, shardCount = 0),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            cache.validateInitialRouting()
+        }
+        assertTrue(error.message!!.contains("has no active shards"))
+    }
+
     private fun routing(
         version: Long,
-        activeWriteVersion: Int,
         shardCount: Int,
         streamPrefix: String = "orders",
         consumerGroup: String = "orders-consumer",
@@ -166,14 +159,12 @@ class ProducerRoutingCacheTest {
             streamPrefix = streamPrefix,
             consumerGroup = consumerGroup,
             metadataVersion = version,
-            activeWriteVersion = activeWriteVersion,
             shardCount = shardCount,
-            streamKeyPattern = "$streamPrefix:v{streamVersion}:shard:{shardIndex}",
+            streamKeyPattern = "$streamPrefix:{shardIndex}",
             shards = (0 until shardCount).map { shardIndex ->
                 ProducerRoutingShard(
-                    streamVersion = activeWriteVersion,
                     shardIndex = shardIndex,
-                    streamKey = "$streamPrefix:v$activeWriteVersion:shard:$shardIndex",
+                    streamKey = "$streamPrefix:$shardIndex",
                     redisSlot = shardIndex,
                 )
             },
@@ -184,9 +175,8 @@ class ProducerRoutingCacheTest {
             streamPrefix = "orders",
             consumerGroup = "orders-consumer",
             metadataVersion = 1,
-            activeWriteVersion = 1,
             shardCount = shardCount,
-            streamKeyPattern = "orders:v{streamVersion}:shard:{shardIndex}",
+            streamKeyPattern = "orders:{shardIndex}",
             shards = emptyList(),
         )
 }

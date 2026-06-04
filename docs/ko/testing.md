@@ -65,10 +65,10 @@ SPRING_DATA_REDIS_CLUSTER_NODES=localhost:7101,localhost:7102,localhost:7103 \
 Sample consumer pod 두 개 실행:
 
 ```bash
-SERVER_PORT=18081 CONSUMER_MEMBER_ID=consumer-pod-1 STREAM_PREFIX=demo.orders \
+SERVER_PORT=18081 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
   ./gradlew :samples:consumer-pod:bootRun
 
-SERVER_PORT=18082 CONSUMER_MEMBER_ID=consumer-pod-2 STREAM_PREFIX=demo.orders \
+SERVER_PORT=18082 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
   ./gradlew :samples:consumer-pod:bootRun
 ```
 
@@ -80,15 +80,16 @@ Sample endpoints:
 
 ## Docker Pod Smoke
 
-전체 pod topology를 Docker로 실행:
+외부 Redis Cluster를 바라보는 pod topology를 Docker로 실행:
 
 ```bash
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 ```
 
 Stack:
 
-* Redis Cluster 3 nodes: `7201`, `7202`, `7203`
 * Coordinator: `8080`
 * Consumer pod 1: `18081`
 * Consumer pod 2: `18082`
@@ -98,7 +99,7 @@ Stack:
 
 ```bash
 curl -u admin:password \
-  http://localhost:8080/coord/v1/monitoring/streams/demo.orders/groups/demo-workers/assignments
+  http://localhost:8080/coord/v1/monitoring/streams/create-order/groups/demo-workers/assignments
 
 curl http://localhost:18090/sample/status
 curl http://localhost:18081/sample/events

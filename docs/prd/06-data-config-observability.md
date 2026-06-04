@@ -6,21 +6,23 @@ Redis Stream Coordinator is a rebalance control plane. It manages group metadata
 
 It does not own data-plane processing state such as handler retry counters, business idempotency records, local caches, or application DLQ state.
 
-## Redis Key Layout
+## Redis Metadata Store
 
-Coordinator-owned metadata uses Redis Cluster-safe hash tags so the aggregate keys for one group can live in the same hash slot.
+The Redis metadata store keeps one Redis hash key per `{streamPrefix, consumerGroup}`:
 
-Example key pattern:
+```text
+redis-stream:coord:{streamPrefix:consumerGroup}:metadata
+```
 
-| Key | Purpose |
+Hash fields:
+
+| Field | Purpose |
 | --- | --- |
-| `redis-stream:coord:{group}:state` | group aggregate metadata |
-| `redis-stream:coord:{group}:projection` | monitoring projection |
-| `redis-stream:coord:{group}:audit` | admin mutation audit events |
-| `redis-stream:coord:{group}:mutex` | state mutex |
-| `redis-stream:coord:groups` | global group index |
-
-`redis-stream:coord:groups` is an index used to discover configured groups. Group-scoped metadata remains under hash-tagged group keys.
+| `aggregate` | Canonical `GroupMetadata` JSON aggregate |
+| `revision` | `storeRevision` compare-and-set guard |
+| `schemaVersion` | JSON aggregate schema version |
+| `layoutVersion` | Redis metadata layout version |
+| `updatedAt` | Last metadata write timestamp |
 
 ## Configuration Boundary
 
@@ -53,10 +55,21 @@ coordinator:
     admin-username: admin
     admin-password: ${COORDINATOR_ADMIN_PASSWORD:password}
     authenticate-member-api: false
+    users:
+      - username: admin
+        password: ${COORDINATOR_WRITE_PASSWORD}
+        roles: [WRITE]
+      - username: grafana
+        password: ${COORDINATOR_READ_PASSWORD}
+        roles: [READ]
     rate-limit:
       enabled: true
       window: 1m
       max-requests: 60
+  store:
+    # memory for local development, redis for Redis-backed metadata, or jdbc for database-backed metadata.
+    type: redis
+    key-prefix: redis-stream:coord
   audit:
     sink: redis
   redis:
@@ -69,14 +82,15 @@ coordinator:
   coordination:
     heartbeat-interval: 1s
     member-lease-ttl: 10s
+    rebalance-timeout: 60s
     event-loop:
       enabled: true
       interval: 1s
     state-mutex:
       enabled: true
-      lease-ttl: 5s
-      wait-timeout: 2s
-      retry-interval: 100ms
+      ttl-ms: 30000
+      acquire-timeout-ms: 5000
+      retry-interval-ms: 100
   defaults:
     initial-shard-count: 4
     max-concurrency: 4
@@ -101,21 +115,33 @@ Critical section order:
 
 ```text
 acquire mutex
-  -> read latest Redis state
+  -> read latest Redis metadata hash
   -> validate/process/reconcile
   -> save with storeRevision compare-and-set
   -> release mutex
 ```
 
-The mutex is not intended to implement active-active concurrent write semantics. It is intended to make open source deployments safer when multiple coordinator pods accidentally or intentionally run against the same Redis metadata store.
+The mutex serializes short coordinator critical sections. Store revision checks remain as the final stale-write guard.
 
 ## Store Revision
 
-Every Redis aggregate update carries an expected `storeRevision`.
+Every metadata aggregate update carries an expected `storeRevision`.
 
 If the expected revision does not match the current revision, the write fails and the coordinator reloads and retries or returns a conflict depending on the operation.
 
 This prevents stale snapshots from overwriting fresh heartbeat, assignment, or resharding updates.
+
+## Metadata Store Options
+
+The coordinator supports three metadata stores:
+
+| Store | Use case | Consistency boundary |
+| --- | --- | --- |
+| `memory` | Local development and unit tests only | Process-local map |
+| `redis` | Redis-only deployments | Single group metadata hash plus Redis mutex and `storeRevision` compare-and-set |
+| `jdbc` | Deployments that want metadata in a database | One row per `{streamPrefix, consumerGroup}` with JSON metadata and `storeRevision` compare-and-set |
+
+The JDBC table stores the same aggregate metadata JSON used by the Redis store. The primary key is `{streamPrefix, consumerGroup}` and every update is guarded by the previous `storeRevision`.
 
 ## ACL
 
@@ -125,9 +151,11 @@ Roles:
 
 | Role | Permission |
 | --- | --- |
-| `ADMIN` | Create, scale, rollback, update consumer concurrency |
-| `MONITOR` | Read monitoring, routing, group, and resharding APIs |
+| `READ` | Read monitoring, Grafana datasource, health, compatibility, and message inspection APIs |
+| `WRITE` | All `READ` APIs plus coordinator control-plane APIs such as create, delete, scale, rollback, and producer routing metadata |
 | `MEMBER` | Send heartbeat when member API authentication is enabled |
+
+Legacy `ADMIN` and `MONITOR` role names are accepted as aliases for compatibility. `ADMIN` grants the legacy full coordinator permission set; `MONITOR` grants `READ`.
 
 Authentication failures return `401 Unauthorized`. Authorization failures return `403 Forbidden`.
 
@@ -140,12 +168,22 @@ Admin mutations record:
 * consumer group,
 * requested values,
 * authenticated principal,
+* granted roles,
 * reason,
+* request id,
+* client address,
+* user agent,
+* route and query string,
+* request duration,
+* request summary,
+* SHA-256 request body fingerprint,
 * coordinator ID,
 * timestamp,
 * result.
 
 Audit events can be written to logs or Redis.
+
+Audit logging is runtime evidence. It complements, but does not replace, Terraform or GitOps change management. Terraform can show the intended desired state and approval history; coordinator audit logs show what the coordinator actually received and how it responded, including failed, forbidden, and retried requests.
 
 ## Rate Limiting
 
@@ -162,14 +200,13 @@ Monitoring APIs are read-only. State changes must happen through Admin APIs or t
 Monitoring responses should include:
 
 * group summary,
-* stream versions,
-* active write version,
-* readable versions,
-* target assignment,
+* shard count,
+* * target assignment,
 * current assignment,
 * member liveness,
 * member capacity,
 * member-owned shard progress,
+* observed produced/consumed messages per second,
 * revoke progress,
 * active resharding,
 * audit metadata for recent mutations.
@@ -191,9 +228,15 @@ Coordinator metrics should cover:
 * consumer shard progress and lag where available,
 * producer routing requests by group,
 * stale producer routing refreshes,
+* stream shard length, produced rate, estimated consumed rate, end offset, group offset, consumer offset, pending count, and lag,
 * store revision conflicts,
-* mutex acquire latency and timeout count,
+* Redis metadata write latency,
+* mutex acquire latency and timeout count for Redis-backed development mode,
 * admin mutation count and failure count.
+
+The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at `/actuator/prometheus` when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.
+
+Grafana shard and group rows also expose observation-based `producedPerSecond` and `consumedPerSecond` values. `producedPerSecond` is calculated from Redis Stream length growth between two monitoring observations. `consumedPerSecond` is estimated as `streamLengthDelta - lagDelta`, so it requires Redis lag to be known. The first observation returns `null` because there is no prior sample.
 
 ## Alerts
 
@@ -204,8 +247,8 @@ Recommended alerts:
 * group epoch changed but assignment epoch does not progress,
 * duplicate owner invariant violation,
 * active resharding remains in progress too long,
-* Redis state mutex acquire failures,
-* Redis state store revision conflict spike,
+* Redis metadata write failures,
+* store revision conflict spike,
 * monitoring projection refresh failures,
 * producer stale routing refresh spike.
 
