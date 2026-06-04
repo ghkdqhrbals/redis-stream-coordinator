@@ -428,6 +428,35 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `grafana overview scans multiple groups in parallel`() {
+        val redis = FakeOffsetRedisCommands(delayMs = 25)
+        redis.setShard(streamKey = "parallel-orders:0", length = 100, lag = 0)
+        redis.setShard(streamKey = "parallel-payments:0", length = 100, lag = 0)
+        redis.setShard(streamKey = "parallel-refunds:0", length = 100, lag = 0)
+        val service = service(
+            clock = clock,
+            redisCommands = redis,
+            properties = CoordinatorProperties(
+                heartbeatInterval = Duration.ofSeconds(3),
+                memberLeaseTtl = Duration.ofSeconds(15),
+                defaults = CoordinatorProperties.Defaults(initialShardCount = 1, consumerMaxConcurrency = 1),
+                monitoring = CoordinatorProperties.Monitoring(
+                    groupQueryParallelism = 3,
+                    shardQueryParallelism = 3,
+                ),
+            ),
+        )
+        service.createGroup("parallel-orders", "orders-consumer", createGroupRequest(initialShardCount = 1))
+        service.createGroup("parallel-payments", "orders-consumer", createGroupRequest(initialShardCount = 1))
+        service.createGroup("parallel-refunds", "orders-consumer", createGroupRequest(initialShardCount = 1))
+
+        val rows = service.grafanaShards("", "")
+
+        assertEquals(3, rows.size)
+        assertTrue(redis.maxConcurrentReads.get() > 1)
+    }
+
+    @Test
     fun `heartbeat accepts previously granted ownership after target changes before ack`() {
         service.createGroup("granted-before-ack", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(

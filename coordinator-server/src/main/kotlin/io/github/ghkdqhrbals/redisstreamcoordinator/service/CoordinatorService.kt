@@ -121,6 +121,13 @@ class CoordinatorService(
     private val redisHealthRefreshInFlight = AtomicBoolean(false)
     @Volatile
     private var redisHealthCache: RedisHealthCacheEntry? = null
+    private val monitoringGroupExecutor = Executors.newFixedThreadPool(
+        properties.monitoring.groupQueryParallelism.coerceAtLeast(1),
+    ) { runnable ->
+        Thread(runnable, "redis-stream-coordinator-monitoring-group").apply {
+            isDaemon = true
+        }
+    }
     private val monitoringExecutor = Executors.newFixedThreadPool(
         properties.monitoring.shardQueryParallelism.coerceAtLeast(1),
     ) { runnable ->
@@ -1022,10 +1029,17 @@ class CoordinatorService(
     /**
      * Returns flat shard offset rows for Grafana REST data-source panels.
      */
-    fun grafanaShards(streamPrefix: String, consumerGroup: String): List<GrafanaShardRow> =
-        monitoringGroups(streamPrefix, consumerGroup).flatMap { group ->
-            group.toGrafanaShardRows()
+    fun grafanaShards(streamPrefix: String, consumerGroup: String): List<GrafanaShardRow> {
+        val groups = monitoringGroups(streamPrefix, consumerGroup)
+        if (groups.size <= 1) {
+            return groups.flatMap { it.toGrafanaShardRows() }
         }
+        return groups.map { group ->
+            CompletableFuture.supplyAsync({ group.toGrafanaShardRows() }, monitoringGroupExecutor)
+        }.flatMap { future ->
+            future.get()
+        }
+    }
 
     /**
      * Returns flat target/current/revoking assignment rows for Grafana REST data-source panels.

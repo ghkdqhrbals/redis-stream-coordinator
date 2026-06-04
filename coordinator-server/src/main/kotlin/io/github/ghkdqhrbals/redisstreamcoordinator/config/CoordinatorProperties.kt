@@ -131,6 +131,7 @@ data class CoordinatorProperties(
 
     data class Monitoring(
         val offsetCacheTtlMs: Long = 5_000,
+        val groupQueryParallelism: Int = 4,
         val shardQueryParallelism: Int = 8,
     ) {
         val offsetCacheTtl: Duration
