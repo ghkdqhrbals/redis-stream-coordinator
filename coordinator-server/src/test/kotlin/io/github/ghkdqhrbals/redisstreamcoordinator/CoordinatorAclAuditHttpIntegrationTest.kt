@@ -121,6 +121,30 @@ class CoordinatorAclAuditHttpIntegrationTest {
     }
 
     @Test
+    fun `acl allows read role on read only stream endpoints`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/acl-read-stream/groups/orders-consumer")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth("writer", "write-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createGroupRequest(initialShardCount = 2))),
+        )
+            .andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/coord/v1/streams/acl-read-stream/groups/orders-consumer/producer-routing")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth("reader", "read-password")),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.streamPrefix").value("acl-read-stream"))
+            .andExpect(jsonPath("$.consumerGroup").value("orders-consumer"))
+
+        assertEquals(
+            listOf(CoordinatorAuditAction.CREATE_GROUP to "SUCCESS"),
+            auditLogSink.events.map { it.action to it.outcome },
+        )
+    }
+
+    @Test
     fun `acl keeps legacy admin and monitor roles as aliases`() {
         mockMvc.perform(
             get("/coord/v1/monitoring/groups")

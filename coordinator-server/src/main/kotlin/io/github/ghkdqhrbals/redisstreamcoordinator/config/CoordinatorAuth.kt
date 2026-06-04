@@ -139,7 +139,11 @@ class BasicAuthInterceptor(
             return CoordinatorProperties.ApiRole.READ
         }
         if (path.startsWith("/coord/v1/streams")) {
-            return CoordinatorProperties.ApiRole.WRITE
+            return if (method.isMutationMethod()) {
+                CoordinatorProperties.ApiRole.WRITE
+            } else {
+                CoordinatorProperties.ApiRole.READ
+            }
         }
         return when (method.uppercase()) {
             "POST", "PATCH", "PUT", "DELETE" -> CoordinatorProperties.ApiRole.WRITE
