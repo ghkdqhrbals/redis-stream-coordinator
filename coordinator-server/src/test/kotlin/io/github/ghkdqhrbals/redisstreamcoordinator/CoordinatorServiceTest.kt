@@ -405,6 +405,28 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `grafana offset cache is not invalidated by heartbeat metadata changes`() {
+        val redis = FakeOffsetRedisCommands()
+        repeat(2) { shard ->
+            redis.setShard(streamKey = "heartbeat-cache-orders:$shard", length = 100 + shard.toLong(), lag = 0)
+        }
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("heartbeat-cache-orders", "orders-consumer", createGroupRequest(initialShardCount = 2))
+
+        service.grafanaShards("heartbeat-cache-orders", "orders-consumer")
+        val readsAfterInitialSnapshot = redis.xInfoStreamCalls.get()
+        service.heartbeat(
+            "heartbeat-cache-orders",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        service.grafanaShards("heartbeat-cache-orders", "orders-consumer")
+
+        assertEquals(readsAfterInitialSnapshot, redis.xInfoStreamCalls.get())
+    }
+
+    @Test
     fun `grafana shard offset reads can run in parallel`() {
         val redis = FakeOffsetRedisCommands(delayMs = 25)
         repeat(8) { shard ->

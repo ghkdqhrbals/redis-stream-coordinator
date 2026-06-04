@@ -75,7 +75,7 @@ private data class MonitoringOffsetCacheKey(
 )
 
 private data class MonitoringOffsetCacheEntry(
-    val metadataVersion: Long,
+    val shardCount: Int,
     val expiresAt: Instant,
     val offsets: StreamShardOffsetsResponse,
 )
@@ -2540,7 +2540,7 @@ class CoordinatorService(
         val now = Instant.now(clock)
         val key = MonitoringOffsetCacheKey(streamPrefix, consumerGroup)
         val cached = monitoringOffsetCache[key]
-        if (cached != null && cached.metadataVersion == metadataVersion && now.isBefore(cached.expiresAt)) {
+        if (cached != null && cached.shardCount == shardCount && now.isBefore(cached.expiresAt)) {
             return cached.offsets
         }
         val lock = monitoringOffsetLocks.computeIfAbsent(key) { Any() }
@@ -2548,14 +2548,14 @@ class CoordinatorService(
             val refreshedNow = Instant.now(clock)
             val refreshedCached = monitoringOffsetCache[key]
             if (refreshedCached != null &&
-                refreshedCached.metadataVersion == metadataVersion &&
+                refreshedCached.shardCount == shardCount &&
                 refreshedNow.isBefore(refreshedCached.expiresAt)
             ) {
                 refreshedCached.offsets
             } else {
                 toStreamShardOffsets().also { offsets ->
                     monitoringOffsetCache[key] = MonitoringOffsetCacheEntry(
-                        metadataVersion = metadataVersion,
+                        shardCount = shardCount,
                         expiresAt = refreshedNow.plus(cacheTtl),
                         offsets = offsets,
                     )
