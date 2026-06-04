@@ -68,6 +68,17 @@ private data class ShardRate(
     val consumedPerSecond: Double?,
 )
 
+private data class MonitoringOffsetCacheKey(
+    val streamPrefix: String,
+    val consumerGroup: String,
+)
+
+private data class MonitoringOffsetCacheEntry(
+    val metadataVersion: Long,
+    val expiresAt: Instant,
+    val offsets: StreamShardOffsetsResponse,
+)
+
 private fun Double.roundRate(): Double =
     kotlin.math.round(this * 100.0) / 100.0
 
@@ -99,6 +110,15 @@ class CoordinatorService(
     private val objectMapper: ObjectMapper = ObjectMapper(),
 ) {
     private val shardRateSnapshots = ConcurrentHashMap<ShardRateKey, ShardRateSnapshot>()
+    private val monitoringOffsetCache = ConcurrentHashMap<MonitoringOffsetCacheKey, MonitoringOffsetCacheEntry>()
+    private val monitoringOffsetLocks = ConcurrentHashMap<MonitoringOffsetCacheKey, Any>()
+    private val monitoringExecutor = Executors.newFixedThreadPool(
+        properties.monitoring.shardQueryParallelism.coerceAtLeast(1),
+    ) { runnable ->
+        Thread(runnable, "redis-stream-coordinator-monitoring").apply {
+            isDaemon = true
+        }
+    }
 
     /**
      * Creates a coordinator group and provisions the initial stream shards.
@@ -836,7 +856,7 @@ class CoordinatorService(
     fun grafanaGroups(): List<GrafanaGroupRow> =
         stateStore.list().map { group ->
             metrics.recordGroupState(group, invariantViolations(group).size)
-            val offsets = group.toStreamShardOffsets().also(metrics::recordStreamShardOffsets)
+            val offsets = group.toCachedStreamShardOffsets().also(metrics::recordStreamShardOffsets)
             val rates = observeShardRates(offsets).values
             val currentShards = group.members.values.filter { it.isLiveOwner() }.sumOf { it.currentAssignment.size }
             GrafanaGroupRow(
@@ -990,7 +1010,7 @@ class CoordinatorService(
 
     private fun GroupMetadata.toGrafanaShardRows(): List<GrafanaShardRow> {
         metrics.recordGroupState(this, invariantViolations(this).size)
-        val offsets = toStreamShardOffsets().also(metrics::recordStreamShardOffsets)
+        val offsets = toCachedStreamShardOffsets().also(metrics::recordStreamShardOffsets)
         val rates = observeShardRates(offsets)
         val targetOwners = targetOwnersByShard()
         return offsets.shards.map { offset ->
@@ -2389,35 +2409,37 @@ class CoordinatorService(
         }
         val slotOwners = redisCommands.clusterSlotOwners(shardKeys.values.map { it.slot })
         val shards = shardKeys.map { (shard, shardKey) ->
-            val streamKey = shardKey.value
-            val streamInfo = redisCommands.xInfoStream(streamKey)
-            val groupInfo = redisCommands.xInfoGroups(streamKey).firstOrNull { it.name == consumerGroup }
-            val memoryUsageBytes = redisCommands.memoryUsage(streamKey)
-            val progress = consumerProgress[shard]
-            val slotOwner = slotOwners[shardKey.slot]
-            StreamShardOffset(
-                streamPrefix = streamPrefix,
-                consumerGroup = consumerGroup,
-                shard = shard,
-                streamKey = streamKey,
-                redisSlot = shardKey.slot,
-                redisNodeEndpoint = slotOwner?.endpoint,
-                redisNodeId = slotOwner?.nodeId,
-                redisSlotRangeStart = slotOwner?.slotRangeStart,
-                redisSlotRangeEnd = slotOwner?.slotRangeEnd,
-                streamLength = streamInfo.length,
-                firstRecordId = streamInfo.firstEntryId,
-                lastRecordId = streamInfo.lastEntryId,
-                lastGeneratedId = streamInfo.lastGeneratedId,
-                groupLastDeliveredId = groupInfo?.lastDeliveredId,
-                consumerLastDeliveredId = progress?.lastDeliveredId,
-                consumerLastAckedId = progress?.lastAckedId,
-                pendingCount = groupInfo?.pending ?: progress?.pendingCount ?: 0L,
-                lag = groupInfo?.lag,
-                memoryUsageBytes = memoryUsageBytes,
-                ownerMemberIds = currentOwners[shard].orEmpty().sorted(),
-            )
-        }
+            CompletableFuture.supplyAsync({
+                val streamKey = shardKey.value
+                val streamInfo = redisCommands.xInfoStream(streamKey)
+                val groupInfo = redisCommands.xInfoGroups(streamKey).firstOrNull { it.name == consumerGroup }
+                val memoryUsageBytes = redisCommands.memoryUsage(streamKey)
+                val progress = consumerProgress[shard]
+                val slotOwner = slotOwners[shardKey.slot]
+                StreamShardOffset(
+                    streamPrefix = streamPrefix,
+                    consumerGroup = consumerGroup,
+                    shard = shard,
+                    streamKey = streamKey,
+                    redisSlot = shardKey.slot,
+                    redisNodeEndpoint = slotOwner?.endpoint,
+                    redisNodeId = slotOwner?.nodeId,
+                    redisSlotRangeStart = slotOwner?.slotRangeStart,
+                    redisSlotRangeEnd = slotOwner?.slotRangeEnd,
+                    streamLength = streamInfo.length,
+                    firstRecordId = streamInfo.firstEntryId,
+                    lastRecordId = streamInfo.lastEntryId,
+                    lastGeneratedId = streamInfo.lastGeneratedId,
+                    groupLastDeliveredId = groupInfo?.lastDeliveredId,
+                    consumerLastDeliveredId = progress?.lastDeliveredId,
+                    consumerLastAckedId = progress?.lastAckedId,
+                    pendingCount = groupInfo?.pending ?: progress?.pendingCount ?: 0L,
+                    lag = groupInfo?.lag,
+                    memoryUsageBytes = memoryUsageBytes,
+                    ownerMemberIds = currentOwners[shard].orEmpty().sorted(),
+                )
+            }, monitoringExecutor)
+        }.map { it.get() }
         val totalMemoryUsageBytes = shards.mapNotNull { it.memoryUsageBytes }.sum()
         return StreamShardOffsetsResponse(
             streamPrefix = streamPrefix,
@@ -2429,6 +2451,38 @@ class CoordinatorService(
             totalMemoryUsageBytes = totalMemoryUsageBytes,
             memoryUsageKnown = shards.all { it.memoryUsageBytes != null },
         )
+    }
+
+    private fun GroupMetadata.toCachedStreamShardOffsets(): StreamShardOffsetsResponse {
+        val cacheTtl = properties.monitoring.offsetCacheTtl
+        if (cacheTtl.isZero || cacheTtl.isNegative) {
+            return toStreamShardOffsets()
+        }
+        val now = Instant.now(clock)
+        val key = MonitoringOffsetCacheKey(streamPrefix, consumerGroup)
+        val cached = monitoringOffsetCache[key]
+        if (cached != null && cached.metadataVersion == metadataVersion && now.isBefore(cached.expiresAt)) {
+            return cached.offsets
+        }
+        val lock = monitoringOffsetLocks.computeIfAbsent(key) { Any() }
+        return synchronized(lock) {
+            val refreshedNow = Instant.now(clock)
+            val refreshedCached = monitoringOffsetCache[key]
+            if (refreshedCached != null &&
+                refreshedCached.metadataVersion == metadataVersion &&
+                refreshedNow.isBefore(refreshedCached.expiresAt)
+            ) {
+                refreshedCached.offsets
+            } else {
+                toStreamShardOffsets().also { offsets ->
+                    monitoringOffsetCache[key] = MonitoringOffsetCacheEntry(
+                        metadataVersion = metadataVersion,
+                        expiresAt = refreshedNow.plus(cacheTtl),
+                        offsets = offsets,
+                    )
+                }
+            }
+        }
     }
 
     private fun MemberMetadata.isLiveOwner(): Boolean =

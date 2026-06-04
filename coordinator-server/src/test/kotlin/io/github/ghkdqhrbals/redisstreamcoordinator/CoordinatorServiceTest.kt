@@ -24,6 +24,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicInteger
 
 class CoordinatorServiceTest {
     private val clock = MutableClock(Instant.parse("2026-05-21T00:00:00Z"), ZoneOffset.UTC)
@@ -384,6 +385,46 @@ class CoordinatorServiceTest {
 
         assertEquals(22.0, row.producedPerSecond)
         assertEquals(22.0, row.consumedPerSecond)
+    }
+
+    @Test
+    fun `grafana offset cache reuses shard reads across overview panels`() {
+        val redis = FakeOffsetRedisCommands()
+        repeat(4) { shard ->
+            redis.setShard(streamKey = "cache-orders:$shard", length = 100 + shard.toLong(), lag = shard.toLong())
+        }
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("cache-orders", "orders-consumer", createGroupRequest(initialShardCount = 4))
+
+        service.grafanaGroups().single { it.streamPrefix == "cache-orders" }
+        val readsAfterGroups = redis.xInfoStreamCalls.get()
+        service.grafanaShards("cache-orders", "orders-consumer")
+
+        assertEquals(4, readsAfterGroups)
+        assertEquals(readsAfterGroups, redis.xInfoStreamCalls.get())
+    }
+
+    @Test
+    fun `grafana shard offset reads can run in parallel`() {
+        val redis = FakeOffsetRedisCommands(delayMs = 25)
+        repeat(8) { shard ->
+            redis.setShard(streamKey = "parallel-orders:$shard", length = 100 + shard.toLong(), lag = 0)
+        }
+        val service = service(
+            clock = clock,
+            redisCommands = redis,
+            properties = CoordinatorProperties(
+                heartbeatInterval = Duration.ofSeconds(3),
+                memberLeaseTtl = Duration.ofSeconds(15),
+                defaults = CoordinatorProperties.Defaults(initialShardCount = 8, consumerMaxConcurrency = 8),
+                monitoring = CoordinatorProperties.Monitoring(shardQueryParallelism = 4),
+            ),
+        )
+        service.createGroup("parallel-orders", "orders-consumer", createGroupRequest(initialShardCount = 8))
+
+        service.grafanaShards("parallel-orders", "orders-consumer")
+
+        assertTrue(redis.maxConcurrentReads.get() > 1)
     }
 
     @Test
@@ -2474,22 +2515,30 @@ private class FakeMessageRedisCommands(
     }
 }
 
-private class FakeOffsetRedisCommands : CoordinatorRedisCommands() {
+private class FakeOffsetRedisCommands(
+    private val delayMs: Long = 0,
+) : CoordinatorRedisCommands() {
     private val shards = mutableMapOf<String, OffsetState>()
+    val xInfoStreamCalls = AtomicInteger(0)
+    val maxConcurrentReads = AtomicInteger(0)
+    private val activeReads = AtomicInteger(0)
 
     fun setShard(streamKey: String, length: Long, lag: Long?) {
         shards[streamKey] = OffsetState(length = length, lag = lag)
     }
 
     override fun xInfoStream(streamKey: String): RedisStreamInfo {
-        val state = shards[streamKey] ?: OffsetState(length = 0, lag = null)
-        return RedisStreamInfo(
-            length = state.length,
-            firstEntryId = if (state.length > 0) "1-0" else null,
-            lastEntryId = if (state.length > 0) "${state.length}-0" else null,
-            lastGeneratedId = if (state.length > 0) "${state.length}-0" else null,
-            entriesAdded = state.length,
-        )
+        xInfoStreamCalls.incrementAndGet()
+        return trackConcurrentRead {
+            val state = shards[streamKey] ?: OffsetState(length = 0, lag = null)
+            RedisStreamInfo(
+                length = state.length,
+                firstEntryId = if (state.length > 0) "1-0" else null,
+                lastEntryId = if (state.length > 0) "${state.length}-0" else null,
+                lastGeneratedId = if (state.length > 0) "${state.length}-0" else null,
+                entriesAdded = state.length,
+            )
+        }
     }
 
     override fun xInfoGroups(streamKey: String): List<RedisStreamGroupInfo> {
@@ -2508,6 +2557,19 @@ private class FakeOffsetRedisCommands : CoordinatorRedisCommands() {
 
     override fun memoryUsage(key: String): Long? =
         shards[key]?.length?.times(32)
+
+    private fun <T> trackConcurrentRead(block: () -> T): T {
+        val active = activeReads.incrementAndGet()
+        maxConcurrentReads.updateAndGet { current -> maxOf(current, active) }
+        try {
+            if (delayMs > 0) {
+                Thread.sleep(delayMs)
+            }
+            return block()
+        } finally {
+            activeReads.decrementAndGet()
+        }
+    }
 
     private data class OffsetState(
         val length: Long,

@@ -20,6 +20,7 @@ data class CoordinatorProperties(
     val streams: Streams = Streams(),
     val audit: Audit = Audit(),
     val defaults: Defaults = Defaults(),
+    val monitoring: Monitoring = Monitoring(),
 ) {
     data class Loop(
         val enabled: Boolean = true,
@@ -126,4 +127,12 @@ data class CoordinatorProperties(
         val initialShardCount: Int = 12,
         val consumerMaxConcurrency: Int = 12,
     )
+
+    data class Monitoring(
+        val offsetCacheTtlMs: Long = 5_000,
+        val shardQueryParallelism: Int = 8,
+    ) {
+        val offsetCacheTtl: Duration
+            get() = Duration.ofMillis(offsetCacheTtlMs.coerceAtLeast(0))
+    }
 }
