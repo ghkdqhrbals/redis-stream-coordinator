@@ -23,6 +23,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -30,6 +31,58 @@ data class CoordinatorTickResult(
     val scannedGroups: Int,
     val changedGroups: Int,
 )
+
+private data class ShardRateKey(
+    val streamPrefix: String,
+    val consumerGroup: String,
+    val shard: ShardId,
+)
+
+private data class ShardRateSnapshot(
+    val observedAt: Instant,
+    val streamLength: Long,
+    val lag: Long?,
+) {
+    fun rateFrom(previous: ShardRateSnapshot?): ShardRate {
+        if (previous == null) {
+            return ShardRate(producedPerSecond = null, consumedPerSecond = null)
+        }
+        val seconds = Duration.between(previous.observedAt, observedAt).toMillis() / 1000.0
+        if (seconds <= 0.0) {
+            return ShardRate(producedPerSecond = null, consumedPerSecond = null)
+        }
+        val producedDelta = (streamLength - previous.streamLength).coerceAtLeast(0)
+        val lagDelta = lag?.let { currentLag ->
+            previous.lag?.let { previousLag -> currentLag - previousLag }
+        }
+        val consumedDelta = lagDelta?.let { (producedDelta - it).coerceAtLeast(0) }
+        return ShardRate(
+            producedPerSecond = (producedDelta / seconds).roundRate(),
+            consumedPerSecond = consumedDelta?.let { (it / seconds).roundRate() },
+        )
+    }
+}
+
+private data class ShardRate(
+    val producedPerSecond: Double?,
+    val consumedPerSecond: Double?,
+)
+
+private fun Double.roundRate(): Double =
+    kotlin.math.round(this * 100.0) / 100.0
+
+private fun Iterable<ShardRate>.sumKnownOrNull(selector: (ShardRate) -> Double?): Double? {
+    var sum = 0.0
+    var found = false
+    forEach { rate ->
+        val value = selector(rate)
+        if (value != null) {
+            sum += value
+            found = true
+        }
+    }
+    return if (found) sum.roundRate() else null
+}
 
 @Service
 class CoordinatorService(
@@ -45,6 +98,8 @@ class CoordinatorService(
     ),
     private val objectMapper: ObjectMapper = ObjectMapper(),
 ) {
+    private val shardRateSnapshots = ConcurrentHashMap<ShardRateKey, ShardRateSnapshot>()
+
     /**
      * Creates a coordinator group and provisions the initial stream shards.
      */
@@ -782,6 +837,7 @@ class CoordinatorService(
         stateStore.list().map { group ->
             metrics.recordGroupState(group, invariantViolations(group).size)
             val offsets = group.toStreamShardOffsets().also(metrics::recordStreamShardOffsets)
+            val rates = observeShardRates(offsets).values
             val currentShards = group.members.values.filter { it.isLiveOwner() }.sumOf { it.currentAssignment.size }
             GrafanaGroupRow(
                 streamPrefix = group.streamPrefix,
@@ -800,6 +856,8 @@ class CoordinatorService(
                 totalStreamLength = offsets.shards.sumOf { it.streamLength },
                 totalPendingCount = offsets.shards.sumOf { it.pendingCount.coerceAtLeast(0) },
                 totalLag = offsets.totalLag?.coerceAtLeast(0),
+                producedPerSecond = rates.sumKnownOrNull { it.producedPerSecond },
+                consumedPerSecond = rates.sumKnownOrNull { it.consumedPerSecond },
                 totalMemoryUsageBytes = offsets.totalMemoryUsageBytes,
                 memoryUsageKnown = offsets.memoryUsageKnown,
             )
@@ -933,10 +991,12 @@ class CoordinatorService(
     private fun GroupMetadata.toGrafanaShardRows(): List<GrafanaShardRow> {
         metrics.recordGroupState(this, invariantViolations(this).size)
         val offsets = toStreamShardOffsets().also(metrics::recordStreamShardOffsets)
+        val rates = observeShardRates(offsets)
         val targetOwners = targetOwnersByShard()
         return offsets.shards.map { offset ->
             val currentOwnerIds = offset.ownerMemberIds.sorted()
             val targetOwnerIds = targetOwners[offset.shard].orEmpty().sorted()
+            val rate = rates[offset.shard]
             GrafanaShardRow(
                 streamPrefix = offset.streamPrefix,
                 consumerGroup = offset.consumerGroup,
@@ -959,6 +1019,8 @@ class CoordinatorService(
                 pendingCount = offset.pendingCount,
                 lag = offset.lag?.coerceAtLeast(0),
                 lagKnown = offset.lag != null,
+                producedPerSecond = rate?.producedPerSecond,
+                consumedPerSecond = rate?.consumedPerSecond,
                 memoryUsageBytes = offset.memoryUsageBytes,
                 memoryUsageKnown = offset.memoryUsageBytes != null,
                 targetOwnerMemberIds = targetOwnerIds.joinToString(","),
@@ -966,6 +1028,20 @@ class CoordinatorService(
                 ownerState = ownerState(currentOwnerIds, targetOwnerIds),
                 ownerMemberIds = currentOwnerIds.joinToString(","),
             )
+        }
+    }
+
+    private fun observeShardRates(offsets: StreamShardOffsetsResponse): Map<ShardId, ShardRate> {
+        val observedAt = Instant.now(clock)
+        return offsets.shards.associate { offset ->
+            val key = ShardRateKey(offset.streamPrefix, offset.consumerGroup, offset.shard)
+            val current = ShardRateSnapshot(
+                observedAt = observedAt,
+                streamLength = offset.streamLength.coerceAtLeast(0),
+                lag = offset.lag?.coerceAtLeast(0),
+            )
+            val previous = shardRateSnapshots.put(key, current)
+            offset.shard to current.rateFrom(previous)
         }
     }
 

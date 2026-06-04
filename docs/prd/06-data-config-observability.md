@@ -206,6 +206,7 @@ Monitoring responses should include:
 * member liveness,
 * member capacity,
 * member-owned shard progress,
+* observed produced/consumed messages per second,
 * revoke progress,
 * active resharding,
 * audit metadata for recent mutations.
@@ -227,13 +228,15 @@ Coordinator metrics should cover:
 * consumer shard progress and lag where available,
 * producer routing requests by group,
 * stale producer routing refreshes,
-* stream shard length, end offset, group offset, consumer offset, pending count, and lag,
+* stream shard length, produced rate, estimated consumed rate, end offset, group offset, consumer offset, pending count, and lag,
 * store revision conflicts,
 * Redis metadata write latency,
 * mutex acquire latency and timeout count for Redis-backed development mode,
 * admin mutation count and failure count.
 
 The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at `/actuator/prometheus` when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.
+
+Grafana shard and group rows also expose observation-based `producedPerSecond` and `consumedPerSecond` values. `producedPerSecond` is calculated from Redis Stream length growth between two monitoring observations. `consumedPerSecond` is estimated as `streamLengthDelta - lagDelta`, so it requires Redis lag to be known. The first observation returns `null` because there is no prior sample.
 
 ## Alerts
 

@@ -5,6 +5,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.config.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.protocol.CoordinatorProtocol
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.RedisStreamGroupInfo
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.RedisStreamInfo
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.RedisStreamRecord
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
@@ -345,6 +346,44 @@ class CoordinatorServiceTest {
         assertEquals(setOf("member-a"), rows.map { it.targetOwnerMemberIds }.toSet())
         assertEquals(setOf(""), rows.map { it.currentOwnerMemberIds }.toSet())
         assertEquals(setOf("PENDING_ACK"), rows.map { it.ownerState }.toSet())
+    }
+
+    @Test
+    fun `grafana shard rows expose produced and consumed rates after repeated observations`() {
+        val redis = FakeOffsetRedisCommands()
+        redis.setShard(streamKey = "rate-orders:0", length = 100, lag = 20)
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("rate-orders", "orders-consumer", createGroupRequest(initialShardCount = 1))
+
+        val first = service.grafanaShards("rate-orders", "orders-consumer").single()
+
+        clock.advance(Duration.ofSeconds(10))
+        redis.setShard(streamKey = "rate-orders:0", length = 160, lag = 35)
+        val second = service.grafanaShards("rate-orders", "orders-consumer").single()
+
+        assertEquals(null, first.producedPerSecond)
+        assertEquals(null, first.consumedPerSecond)
+        assertEquals(6.0, second.producedPerSecond)
+        assertEquals(4.5, second.consumedPerSecond)
+    }
+
+    @Test
+    fun `grafana group rows aggregate produced and consumed rates`() {
+        val redis = FakeOffsetRedisCommands()
+        redis.setShard(streamKey = "rate-group-orders:0", length = 100, lag = 20)
+        redis.setShard(streamKey = "rate-group-orders:1", length = 200, lag = 30)
+        val service = service(clock, redisCommands = redis)
+        service.createGroup("rate-group-orders", "orders-consumer", createGroupRequest(initialShardCount = 2))
+
+        service.grafanaGroups().single { it.streamPrefix == "rate-group-orders" }
+        clock.advance(Duration.ofSeconds(5))
+        redis.setShard(streamKey = "rate-group-orders:0", length = 150, lag = 30)
+        redis.setShard(streamKey = "rate-group-orders:1", length = 260, lag = 20)
+
+        val row = service.grafanaGroups().single { it.streamPrefix == "rate-group-orders" }
+
+        assertEquals(22.0, row.producedPerSecond)
+        assertEquals(22.0, row.consumedPerSecond)
     }
 
     @Test
@@ -2433,6 +2472,47 @@ private class FakeMessageRedisCommands(
         return leftParts.getOrNull(1).orEmpty().toLong()
             .compareTo(rightParts.getOrNull(1).orEmpty().toLong())
     }
+}
+
+private class FakeOffsetRedisCommands : CoordinatorRedisCommands() {
+    private val shards = mutableMapOf<String, OffsetState>()
+
+    fun setShard(streamKey: String, length: Long, lag: Long?) {
+        shards[streamKey] = OffsetState(length = length, lag = lag)
+    }
+
+    override fun xInfoStream(streamKey: String): RedisStreamInfo {
+        val state = shards[streamKey] ?: OffsetState(length = 0, lag = null)
+        return RedisStreamInfo(
+            length = state.length,
+            firstEntryId = if (state.length > 0) "1-0" else null,
+            lastEntryId = if (state.length > 0) "${state.length}-0" else null,
+            lastGeneratedId = if (state.length > 0) "${state.length}-0" else null,
+            entriesAdded = state.length,
+        )
+    }
+
+    override fun xInfoGroups(streamKey: String): List<RedisStreamGroupInfo> {
+        val state = shards[streamKey] ?: return emptyList()
+        return listOf(
+            RedisStreamGroupInfo(
+                name = "orders-consumer",
+                consumers = 1,
+                pending = 0,
+                lastDeliveredId = if (state.length > 0) "${state.length}-0" else null,
+                entriesRead = state.lag?.let { state.length - it },
+                lag = state.lag,
+            ),
+        )
+    }
+
+    override fun memoryUsage(key: String): Long? =
+        shards[key]?.length?.times(32)
+
+    private data class OffsetState(
+        val length: Long,
+        val lag: Long?,
+    )
 }
 
 private class CopyingConflictOnceStateStore : CoordinatorStateStore {

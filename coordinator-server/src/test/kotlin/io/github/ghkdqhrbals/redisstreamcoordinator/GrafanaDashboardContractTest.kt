@@ -66,9 +66,12 @@ class GrafanaDashboardContractTest {
         assertTrue(dashboard.contains("/api/datasources/proxy/uid/rsc-coordinator-api/coord/v1/monitoring/grafana/shards"))
         assertTrue(dashboard.contains("function normalizeVariable(value)"))
         assertTrue(dashboard.contains(""""title": "Stream Sharding Overview""""))
+        assertTrue(dashboard.contains(""""title": "Produced Rate by Stream""""))
+        assertTrue(dashboard.contains(""""title": "Consumed Rate by Stream""""))
+        assertTrue(dashboard.contains("""{{stream}} / {{group}} lag"""))
         assertTrue(dashboard.contains(""""h": 24"""))
         assertTrue(dashboard.contains(""""overflow": "auto""""))
-        assertTrue(dashboard.contains(""""y": 28"""))
+        assertTrue(dashboard.contains(""""y": 12"""))
         assertTrue(dashboard.contains("position: relative; display: grid"))
         assertTrue(dashboard.contains(".rsc-hover-detail { position: absolute;"))
         assertTrue(dashboard.contains("const rootRect = root.getBoundingClientRect()"))
@@ -97,6 +100,28 @@ class GrafanaDashboardContractTest {
         }
     }
 
+    @Test
+    fun `import dashboards expose datasource and coordinator URL inputs`() {
+        listOf(
+            "redis-stream-coordinator.json",
+            "redis-stream-coordinator-stream-detail.json",
+            "redis-stream-coordinator-api.json",
+        ).forEach { fileName ->
+            val dashboard = readImportDashboard(fileName)
+
+            assertTrue(dashboard.contains(""""name": "DS_RSC_PROMETHEUS""""), "$fileName should prompt for Prometheus datasource")
+            assertTrue(dashboard.contains(""""name": "DS_RSC_COORDINATOR_API""""), "$fileName should prompt for Coordinator API datasource")
+            assertTrue(dashboard.contains(""""name": "COORDINATOR_API_URL""""), "$fileName should prompt for Coordinator API URL")
+            assertTrue(dashboard.contains(""""pluginId": "yesoreyeram-infinity-datasource""""), "$fileName should require Infinity datasource")
+            assertTrue(dashboard.contains(""""pluginId": "prometheus""""), "$fileName should require Prometheus datasource")
+            assertTrue(dashboard.contains(""""value": "http://coordinator:8080""""), "$fileName should have a concrete import default URL")
+            assertTrue(dashboard.contains("""${'$'}{DS_RSC_COORDINATOR_API}"""), "$fileName should not pin the local Coordinator API datasource uid")
+            assertTrue(dashboard.contains("""${'$'}{COORDINATOR_API_URL}"""), "$fileName should use the import URL input")
+            assertTrue(!dashboard.contains(""""uid": "rsc-coordinator-api""""), "$fileName should not pin the local Coordinator API datasource")
+            assertTrue(!dashboard.contains(""""uid": "rsc-prometheus""""), "$fileName should not pin the local Prometheus datasource")
+        }
+    }
+
     private fun readDashboard(fileName: String): String {
         val candidates = listOf(
             Path.of("monitoring", "grafana", "dashboards", fileName),
@@ -104,6 +129,16 @@ class GrafanaDashboardContractTest {
         )
         val path = candidates.firstOrNull(Files::exists)
             ?: error("Dashboard file not found: $fileName")
+        return Files.readString(path)
+    }
+
+    private fun readImportDashboard(fileName: String): String {
+        val candidates = listOf(
+            Path.of("monitoring", "grafana", "import", fileName),
+            Path.of("..", "monitoring", "grafana", "import", fileName),
+        )
+        val path = candidates.firstOrNull(Files::exists)
+            ?: error("Import dashboard file not found: $fileName")
         return Files.readString(path)
     }
 }

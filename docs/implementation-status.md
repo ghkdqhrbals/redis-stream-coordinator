@@ -180,6 +180,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * Redis Stream Coordinator dashboard.
   * Coordinator API datasource with Grafana-managed Basic Auth.
   * Direct Grafana REST panels for group/member/assignment/shard/message monitoring APIs.
+  * Produced/s and consumed/s monitoring in group, shard, and time-series panels.
   * Stream message payload table with cursor pagination through dashboard variables.
 
 ### RedisStream Spring Boot Starter

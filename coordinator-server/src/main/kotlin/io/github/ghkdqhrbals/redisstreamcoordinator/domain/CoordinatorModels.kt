@@ -640,6 +640,10 @@ data class GrafanaGroupRow(
     val totalStreamLength: Long,
     val totalPendingCount: Long,
     val totalLag: Long?,
+    @field:Schema(description = "Observed Redis Stream entry growth rate across shards. Null until at least two observations are available.", example = "1000.5")
+    val producedPerSecond: Double?,
+    @field:Schema(description = "Estimated consumer catch-up rate across shards, calculated from stream length and lag deltas. Null when lag is unknown or only one observation exists.", example = "950.25")
+    val consumedPerSecond: Double?,
     val totalMemoryUsageBytes: Long,
     val memoryUsageKnown: Boolean,
 )
@@ -685,6 +689,10 @@ data class GrafanaShardRow(
     val pendingCount: Long,
     val lag: Long?,
     val lagKnown: Boolean,
+    @field:Schema(description = "Observed Redis Stream entry growth rate for this shard. Null until at least two observations are available.", example = "100.0")
+    val producedPerSecond: Double?,
+    @field:Schema(description = "Estimated consumer catch-up rate for this shard, calculated from stream length and lag deltas. Null when lag is unknown or only one observation exists.", example = "95.0")
+    val consumedPerSecond: Double?,
     val memoryUsageBytes: Long?,
     val memoryUsageKnown: Boolean,
     val targetOwnerMemberIds: String,

@@ -186,6 +186,7 @@ Monitoring response에는 다음 요약만 포함한다.
 * target/current assignment summary
 * revoke progress
 * consumer-reported shard consumption progress, including stream key, shard, last delivered id, last acked id, pending count, and update time
+* 관측 기반 초당 produce/consume 수
 * active migration progress
 
 ## Metrics
@@ -228,9 +229,11 @@ Coordinator metric is the public observability surface. Consumer and producer mo
 * `redis_stream_coord_consumer_shard_progress_updated_at_seconds`
 * `redis_stream_coord_consumer_shard_progress_age_seconds`
 
-Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, stream shard length, end offset, group offset, consumer offset, pending count, lag, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.
+Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, stream shard length, produced rate, estimated consumed rate, end offset, group offset, consumer offset, pending count, lag, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.
 
 The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at `/actuator/prometheus` when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.
+
+Grafana shard/group row는 `producedPerSecond`, `consumedPerSecond`도 제공한다. `producedPerSecond`는 두 번의 monitoring observation 사이 Redis Stream length 증가량으로 계산한다. `consumedPerSecond`는 `streamLengthDelta - lagDelta` 기반의 추정값이므로 Redis lag가 알려져 있을 때만 계산한다. 첫 observation은 비교 대상이 없으므로 `null`을 반환한다.
 
 ## Redis Command Template Boundary
 
