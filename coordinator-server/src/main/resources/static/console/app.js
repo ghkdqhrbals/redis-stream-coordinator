@@ -1,4 +1,5 @@
 const API_BASE = "/coord/v1/monitoring";
+const GRAFANA_BASE = "/coord/v1/monitoring/grafana";
 const AUTH_KEY = "redisStreamCoordinator.console.auth";
 const USER_KEY = "redisStreamCoordinator.console.user";
 const REQUEST_TIMEOUT_MS = 5000;
@@ -11,6 +12,17 @@ const state = {
     refreshTimer: null,
     selectedMessageShard: null,
     messageCursor: null,
+    grafanaGroups: [],
+    grafanaShards: [],
+    globalMessages: {
+        streamPrefix: "",
+        consumerGroup: "",
+        shardIndex: "all",
+        cursors: [""],
+        page: 0,
+        nextCursor: "",
+        totalMessages: null,
+    },
 };
 
 const elements = {};
@@ -50,6 +62,33 @@ function bindElements() {
         "pageSubtitle",
         "lastUpdated",
         "emptyState",
+        "consoleOverview",
+        "globalCoordinatorSignal",
+        "globalActiveConsumers",
+        "globalStreamEntries",
+        "globalStreamMemory",
+        "globalTotalLag",
+        "globalPendingEntries",
+        "overviewShardCount",
+        "streamOverview",
+        "grafanaGroupCount",
+        "grafanaGroupsTable",
+        "globalMessageStream",
+        "globalMessageGroup",
+        "globalMessageShard",
+        "globalMessageLimit",
+        "globalMessageFirst",
+        "globalMessagePrev",
+        "globalMessageNext",
+        "globalMessageLast",
+        "globalMessageRefresh",
+        "globalMessageStatus",
+        "globalMessageRows",
+        "apiMetricStatus",
+        "apiMetricList",
+        "grafanaOverviewLink",
+        "grafanaDetailLink",
+        "grafanaApiLink",
         "detailView",
         "memberSignal",
         "memberSignalHint",
@@ -92,6 +131,64 @@ function bindEvents() {
         state.selectedMessageShard = elements.messageShardSelect.value;
         state.messageCursor = null;
         loadMessages(true);
+    });
+    elements.globalMessageStream.addEventListener("change", () => {
+        state.globalMessages.streamPrefix = elements.globalMessageStream.value;
+        state.globalMessages.consumerGroup = "";
+        state.globalMessages.shardIndex = "all";
+        resetGlobalMessages();
+        renderGlobalMessageSelectors();
+        loadGlobalMessages();
+    });
+    elements.globalMessageGroup.addEventListener("change", () => {
+        state.globalMessages.consumerGroup = elements.globalMessageGroup.value;
+        state.globalMessages.shardIndex = "all";
+        resetGlobalMessages();
+        renderGlobalMessageSelectors();
+        loadGlobalMessages();
+    });
+    elements.globalMessageShard.addEventListener("change", () => {
+        state.globalMessages.shardIndex = elements.globalMessageShard.value || "all";
+        resetGlobalMessages();
+        loadGlobalMessages();
+    });
+    elements.globalMessageLimit.addEventListener("change", () => {
+        resetGlobalMessages();
+        loadGlobalMessages();
+    });
+    elements.globalMessageRefresh.addEventListener("click", () => {
+        resetGlobalMessages();
+        loadGlobalMessages();
+    });
+    elements.globalMessageFirst.addEventListener("click", () => {
+        resetGlobalMessages();
+        loadGlobalMessages();
+    });
+    elements.globalMessagePrev.addEventListener("click", () => {
+        if (state.globalMessages.page <= 0) {
+            return;
+        }
+        state.globalMessages.page -= 1;
+        state.globalMessages.nextCursor = "";
+        loadGlobalMessages();
+    });
+    elements.globalMessageNext.addEventListener("click", () => {
+        if (!state.globalMessages.nextCursor) {
+            return;
+        }
+        state.globalMessages.page += 1;
+        state.globalMessages.cursors[state.globalMessages.page] = state.globalMessages.nextCursor;
+        state.globalMessages.nextCursor = "";
+        loadGlobalMessages();
+    });
+    elements.globalMessageLast.addEventListener("click", () => {
+        const total = Number(state.globalMessages.totalMessages);
+        const limit = Number(elements.globalMessageLimit.value || 25);
+        const lastPage = Number.isFinite(total) && total > 0 ? Math.max(0, Math.ceil(total / limit) - 1) : 0;
+        state.globalMessages.page = lastPage;
+        state.globalMessages.cursors[state.globalMessages.page] = "__rsc_tail__:0";
+        state.globalMessages.nextCursor = "";
+        loadGlobalMessages();
     });
     elements.autoRefresh.addEventListener("change", scheduleRefresh);
     elements.refreshInterval.addEventListener("change", scheduleRefresh);
@@ -146,12 +243,17 @@ async function refreshAll() {
     }
 
     try {
-        const [health, groupsResponse] = await Promise.all([
+        const [health, groupsResponse, grafanaGroups, grafanaShards, prometheusText] = await Promise.all([
             apiRequest("/health"),
             apiRequest("/groups"),
+            grafanaRequest("/groups"),
+            grafanaRequest("/shards?streamPrefix=&consumerGroup="),
+            fetchPrometheusMetrics(),
         ]);
 
         state.groups = groupsResponse.groups || [];
+        state.grafanaGroups = Array.isArray(grafanaGroups) ? grafanaGroups : [];
+        state.grafanaShards = Array.isArray(grafanaShards) ? grafanaShards : [];
         if (!state.selectedKey && state.groups.length > 0) {
             state.selectedKey = groupKey(state.groups[0]);
         }
@@ -160,6 +262,7 @@ async function refreshAll() {
         }
 
         renderHealth(health);
+        renderConsoleOverview(health, prometheusText);
         renderGroups();
         await refreshSelectedGroup();
     } catch (error) {
@@ -249,11 +352,352 @@ async function apiRequest(path, authOverride) {
     return response.json();
 }
 
+async function grafanaRequest(path) {
+    return authenticatedFetchJson(`${GRAFANA_BASE}${path}`);
+}
+
+async function authenticatedFetchJson(url) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response;
+
+    try {
+        response = await fetch(url, {
+            headers: {
+                "Accept": "application/json",
+                "Authorization": state.authHeader,
+            },
+            cache: "no-store",
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (error.name === "AbortError") {
+            throw new Error("Request timed out. Check coordinator or Redis connectivity.");
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeout);
+    }
+
+    if (response.status === 401) {
+        const error = new Error("Unauthorized");
+        error.status = 401;
+        throw error;
+    }
+    if (response.status === 403) {
+        const error = new Error("This account does not have monitor access.");
+        error.status = 403;
+        throw error;
+    }
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Request failed with HTTP ${response.status}`);
+    }
+    return response.json();
+}
+
+async function fetchPrometheusMetrics() {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        const response = await fetch("/actuator/prometheus", {
+            headers: { "Accept": "text/plain" },
+            cache: "no-store",
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        return response.ok ? response.text() : "";
+    } catch (_error) {
+        return "";
+    }
+}
+
 function renderHealth(health) {
     elements.coordinatorId.textContent = health.coordinatorId || "Unknown coordinator";
     elements.redisStatus.textContent = health.redis || "-";
     elements.loopStatus.textContent = health.loop || "-";
     setBadge(elements.healthBadge, health.status || "Unknown", health.status === "UP" ? "ok" : "bad");
+}
+
+function renderConsoleOverview(health, prometheusText) {
+    elements.consoleOverview.classList.remove("hidden");
+    const shards = state.grafanaShards;
+    const groups = state.grafanaGroups;
+    const activeMembers = groups.reduce((sum, group) => sum + Number(group.activeMembers || 0), 0);
+    const totalMembers = groups.reduce((sum, group) => sum + Number(group.totalMembers || 0), 0);
+    const streamEntries = sumByUniqueShard(shards, "streamLength");
+    const totalMemory = sumByUniqueShard(shards, "memoryUsageBytes");
+    const totalLag = groups.reduce((sum, group) => sum + Number(group.totalLag || 0), 0);
+    const pending = groups.reduce((sum, group) => sum + Number(group.totalPendingCount || 0), 0);
+
+    elements.globalCoordinatorSignal.textContent = health.status === "UP" ? "Online" : valueOrDash(health.status);
+    elements.globalActiveConsumers.textContent = `${compactNumber(activeMembers)} / ${compactNumber(totalMembers)}`;
+    elements.globalStreamEntries.textContent = compactNumber(streamEntries);
+    elements.globalStreamMemory.textContent = formatBytes(totalMemory);
+    elements.globalTotalLag.textContent = compactNumber(totalLag);
+    elements.globalPendingEntries.textContent = compactNumber(pending);
+    elements.overviewShardCount.textContent = `${shards.length} rows`;
+    elements.grafanaGroupCount.textContent = `${groups.length} groups`;
+
+    renderStreamOverview(shards, groups);
+    renderGrafanaGroupsTable(groups);
+    renderGlobalMessageSelectors();
+    renderApiMetrics(prometheusText || "");
+    renderGrafanaLinks();
+    if (shouldLoadGlobalMessages()) {
+        loadGlobalMessages();
+    }
+}
+
+function renderStreamOverview(shards, groups) {
+    if (!Array.isArray(shards) || shards.length === 0) {
+        elements.streamOverview.innerHTML = `<p class="empty-line">No stream shard rows returned.</p>`;
+        return;
+    }
+
+    const groupsByStream = new Map();
+    groups.forEach((group) => {
+        const stream = group.streamPrefix || "-";
+        const list = groupsByStream.get(stream) || [];
+        list.push(group);
+        groupsByStream.set(stream, list);
+    });
+    const shardsByGroup = new Map();
+    shards.forEach((shard) => {
+        const key = groupKey(shard);
+        const list = shardsByGroup.get(key) || [];
+        list.push(shard);
+        shardsByGroup.set(key, list);
+    });
+
+    elements.streamOverview.innerHTML = Array.from(groupsByStream.entries())
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([streamPrefix, streamGroups]) => {
+            const streamLag = streamGroups.reduce((sum, group) => sum + Number(group.totalLag || 0), 0);
+            const streamEntries = Math.max(...streamGroups.map((group) => Number(group.totalStreamLength || 0)), 0);
+            return `
+                <section class="stream-card">
+                    <div class="stream-card-head">
+                        <div>
+                            <span class="health-dot ${streamLag > 0 ? "warn" : "ok"}"></span>
+                            <strong>${escapeHtml(streamPrefix)}</strong>
+                            <small>${streamGroups.length} consumer group${streamGroups.length === 1 ? "" : "s"}</small>
+                        </div>
+                        <div class="stream-card-stats">
+                            <span>lag ${compactNumber(streamLag)}</span>
+                            <span>entries ${compactNumber(streamEntries)}</span>
+                        </div>
+                    </div>
+                    <div class="stream-card-groups">
+                        ${streamGroups.sort((a, b) => a.consumerGroup.localeCompare(b.consumerGroup)).map((group) => {
+                            const rows = (shardsByGroup.get(groupKey(group)) || []).sort((a, b) => Number(a.shardIndex) - Number(b.shardIndex));
+                            return `
+                                <section class="stream-group-card">
+                                    <div class="stream-group-head">
+                                        <strong>${escapeHtml(group.consumerGroup)}</strong>
+                                        <span>${escapeHtml(group.state)} · ${escapeHtml(group.assignedShardRatio || `${group.currentShards}/${group.shardCount}`)} assigned</span>
+                                    </div>
+                                    <div class="mini-shard-grid">
+                                        ${rows.map((shard) => miniShard(shard)).join("") || `<p class="empty-line">No shards.</p>`}
+                                    </div>
+                                </section>
+                            `;
+                        }).join("")}
+                    </div>
+                </section>
+            `;
+        }).join("");
+}
+
+function miniShard(shard) {
+    const lag = numberOrNull(shard.lag);
+    const tone = lag === null ? "unknown" : lag === 0 ? "ok" : lag < 100 ? "warn" : "bad";
+    const owner = shard.currentOwnerMemberIds || shard.targetOwnerMemberIds || "-";
+    const detail = [
+        `:${shard.shardIndex}`,
+        `lag ${valueOrDash(shard.lag)}`,
+        `length ${compactNumber(shard.streamLength)}`,
+        `pending ${compactNumber(shard.pendingCount)}`,
+        `owner ${owner}`,
+        `redis ${shard.redisNodeEndpoint || "-"}`,
+        `produced/s ${valueOrDash(formatRate(shard.producedPerSecond))}`,
+        `consumed/s ${valueOrDash(formatRate(shard.consumedPerSecond))}`,
+        `memory ${formatBytes(shard.memoryUsageBytes)}`,
+    ].join(" / ");
+    return `<span class="mini-shard ${tone}" title="${escapeAttr(detail)}" aria-label="${escapeAttr(detail)}">:${escapeHtml(shard.shardIndex)}</span>`;
+}
+
+function renderGrafanaGroupsTable(groups) {
+    if (!groups.length) {
+        elements.grafanaGroupsTable.innerHTML = `<tr><td colspan="9" class="empty-line">No coordinator groups.</td></tr>`;
+        return;
+    }
+    elements.grafanaGroupsTable.innerHTML = groups
+        .slice()
+        .sort((a, b) => a.streamPrefix.localeCompare(b.streamPrefix) || a.consumerGroup.localeCompare(b.consumerGroup))
+        .map((group) => `
+            <tr>
+                <td><strong>${escapeHtml(group.streamPrefix)}</strong></td>
+                <td>${escapeHtml(group.consumerGroup)}<br>${statePill(group.state)}</td>
+                <td>${escapeHtml(group.assignedShardRatio || `${group.currentShards} / ${group.shardCount}`)}</td>
+                <td>${compactNumber(group.activeMembers)} / ${compactNumber(group.totalMembers)}</td>
+                <td>${valueOrDash(group.totalLag)}</td>
+                <td>${compactNumber(group.totalPendingCount)}</td>
+                <td>${formatRate(group.producedPerSecond)}</td>
+                <td>${formatRate(group.consumedPerSecond)}</td>
+                <td>${formatBytes(group.totalMemoryUsageBytes)}</td>
+            </tr>
+        `).join("");
+}
+
+function renderGlobalMessageSelectors() {
+    const streams = unique(state.grafanaGroups.map((group) => group.streamPrefix)).sort();
+    if (!state.globalMessages.streamPrefix || !streams.includes(state.globalMessages.streamPrefix)) {
+        state.globalMessages.streamPrefix = streams[0] || "";
+    }
+    const groups = state.grafanaGroups
+        .filter((group) => group.streamPrefix === state.globalMessages.streamPrefix)
+        .map((group) => group.consumerGroup)
+        .sort();
+    if (!state.globalMessages.consumerGroup || !groups.includes(state.globalMessages.consumerGroup)) {
+        state.globalMessages.consumerGroup = groups[0] || "";
+    }
+    const shardRows = state.grafanaShards
+        .filter((shard) => shard.streamPrefix === state.globalMessages.streamPrefix && shard.consumerGroup === state.globalMessages.consumerGroup)
+        .sort((a, b) => Number(a.shardIndex) - Number(b.shardIndex));
+    const shardValues = shardRows.map((shard) => String(shard.shardIndex));
+    if (state.globalMessages.shardIndex !== "all" && !shardValues.includes(state.globalMessages.shardIndex)) {
+        state.globalMessages.shardIndex = "all";
+    }
+
+    elements.globalMessageStream.innerHTML = streams.map((stream) => {
+        const selected = stream === state.globalMessages.streamPrefix ? " selected" : "";
+        return `<option value="${escapeAttr(stream)}"${selected}>${escapeHtml(stream)}</option>`;
+    }).join("") || `<option value="">No streams</option>`;
+    elements.globalMessageGroup.innerHTML = groups.map((group) => {
+        const selected = group === state.globalMessages.consumerGroup ? " selected" : "";
+        return `<option value="${escapeAttr(group)}"${selected}>${escapeHtml(group)}</option>`;
+    }).join("") || `<option value="">No groups</option>`;
+    elements.globalMessageShard.innerHTML = `<option value="all"${state.globalMessages.shardIndex === "all" ? " selected" : ""}>All shards</option>` +
+        shardRows.map((shard) => {
+            const selected = String(shard.shardIndex) === state.globalMessages.shardIndex ? " selected" : "";
+            return `<option value="${escapeAttr(shard.shardIndex)}"${selected}>:${escapeHtml(shard.shardIndex)} / lag ${escapeHtml(valueOrDash(shard.lag))}</option>`;
+        }).join("");
+    updateGlobalMessageButtons();
+}
+
+async function loadGlobalMessages() {
+    if (!shouldLoadGlobalMessages()) {
+        elements.globalMessageRows.innerHTML = `<tr><td colspan="4" class="empty-line">Select a stream and consumer group.</td></tr>`;
+        return;
+    }
+    const params = new URLSearchParams({
+        streamPrefix: state.globalMessages.streamPrefix,
+        consumerGroup: state.globalMessages.consumerGroup,
+        shardIndex: state.globalMessages.shardIndex || "all",
+        direction: "BACKWARD",
+        limit: elements.globalMessageLimit.value || "25",
+    });
+    const cursor = state.globalMessages.cursors[state.globalMessages.page];
+    if (cursor) {
+        params.set("cursor", cursor);
+    }
+    elements.globalMessageStatus.textContent = "Loading messages...";
+    updateGlobalMessageButtons(true);
+    try {
+        const rows = await grafanaRequest(`/messages?${params}`);
+        const limit = Number(elements.globalMessageLimit.value || 25);
+        const total = rows.length > 0 ? Number(rows[0].pageTotalMessages || 0) : 0;
+        state.globalMessages.totalMessages = total;
+        state.globalMessages.nextCursor = rows.length > 0 ? rows[rows.length - 1].pageNextCursor || "" : "";
+        elements.globalMessageRows.innerHTML = rows.map(grafanaMessageRow).join("") ||
+            `<tr><td colspan="4" class="empty-line">No records.</td></tr>`;
+        const pageCount = total > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
+        elements.globalMessageStatus.textContent = `${rows.length}/${limit} message(s), page ${Math.min(state.globalMessages.page + 1, pageCount)} / ${pageCount}, total ${compactNumber(total)}`;
+    } catch (error) {
+        elements.globalMessageRows.innerHTML = `<tr><td colspan="4" class="empty-line">${escapeHtml(error.message || "Failed to load messages.")}</td></tr>`;
+        elements.globalMessageStatus.textContent = "Failed to load messages.";
+    } finally {
+        updateGlobalMessageButtons(false);
+    }
+}
+
+function grafanaMessageRow(row) {
+    return `
+        <tr>
+            <td><span class="mono">${escapeHtml(formatInstant(row.recordTime || row.recordTimestampMs))}</span></td>
+            <td><span class="mono">${escapeHtml(row.shardLabel || `:${row.shardIndex}`)}</span></td>
+            <td><span class="mono">${escapeHtml(row.recordId)}</span></td>
+            <td><div class="field-list"><span class="field-pill">${escapeHtml(row.fieldsJson || row.payload || "{}")}</span></div></td>
+        </tr>
+    `;
+}
+
+function renderApiMetrics(prometheusText) {
+    const metrics = parseApiMetrics(prometheusText);
+    if (!metrics.length) {
+        setBadge(elements.apiMetricStatus, "No scrape", "warn");
+        elements.apiMetricList.innerHTML = `<p class="empty-line">No API metrics are available yet.</p>`;
+        return;
+    }
+    setBadge(elements.apiMetricStatus, `${metrics.length} routes`, "ok");
+    elements.apiMetricList.innerHTML = metrics
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 12)
+        .map((metric) => `
+            <div class="api-metric-row">
+                <span class="mono">${escapeHtml(metric.route)}</span>
+                <strong>${compactNumber(metric.count)} req</strong>
+                <small>${escapeHtml(metric.method)} ${escapeHtml(metric.status)} · avg ${formatDuration(metric.avgSeconds)}</small>
+            </div>
+        `).join("");
+}
+
+function parseApiMetrics(text) {
+    const byKey = new Map();
+    text.split("\n").forEach((line) => {
+        const count = line.match(/^redis_stream_coord_api_request_duration_seconds_count\{([^}]*)}\s+([0-9.eE+-]+)/);
+        const sum = line.match(/^redis_stream_coord_api_request_duration_seconds_sum\{([^}]*)}\s+([0-9.eE+-]+)/);
+        if (!count && !sum) {
+            return;
+        }
+        const labels = parsePrometheusLabels((count || sum)[1]);
+        const key = [labels.method || "-", labels.route || "-", labels.status || "-", labels.stream || "-", labels.group || "-"].join("\u0000");
+        const entry = byKey.get(key) || {
+            method: labels.method || "-",
+            route: labels.route || "-",
+            status: labels.status || "-",
+            stream: labels.stream || "-",
+            group: labels.group || "-",
+            count: 0,
+            sum: 0,
+        };
+        if (count) entry.count = Number(count[2] || 0);
+        if (sum) entry.sum = Number(sum[2] || 0);
+        byKey.set(key, entry);
+    });
+    return Array.from(byKey.values()).map((entry) => ({
+        ...entry,
+        avgSeconds: entry.count > 0 ? entry.sum / entry.count : 0,
+    }));
+}
+
+function parsePrometheusLabels(source) {
+    const labels = {};
+    source.replace(/([a-zA-Z_][a-zA-Z0-9_]*)="((?:\\"|[^"])*)"/g, (_match, key, value) => {
+        labels[key] = value.replaceAll('\\"', '"');
+        return "";
+    });
+    return labels;
+}
+
+function renderGrafanaLinks() {
+    const origin = "https://monitor.ghkdqhrbals.org";
+    const stream = encodeURIComponent(state.globalMessages.streamPrefix || "create-order");
+    const group = encodeURIComponent(state.globalMessages.consumerGroup || "demo-workers");
+    elements.grafanaOverviewLink.href = `${origin}/d/redis-stream-coordinator/redis-stream-coordinator-overview?orgId=1&from=now-15m&to=now&timezone=browser&refresh=30s`;
+    elements.grafanaDetailLink.href = `${origin}/d/redis-stream-coordinator-stream-detail/redis-stream-coordinator-stream-detail?orgId=1&from=now-15m&to=now&timezone=browser&var-streamPrefix=${stream}&var-consumerGroup=${group}&var-shardIndex=all&refresh=30s`;
+    elements.grafanaApiLink.href = `${origin}/d/redis-stream-coordinator-api/redis-stream-coordinator-api-performance?orgId=1&from=now-15m&to=now&timezone=browser&var-streamPrefix=${stream}&var-consumerGroup=${group}&var-apiRoute=$__all&refresh=30s`;
 }
 
 function renderGroups() {
@@ -698,6 +1142,27 @@ function renderLastUpdated() {
     elements.lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
 }
 
+function shouldLoadGlobalMessages() {
+    return Boolean(state.globalMessages.streamPrefix && state.globalMessages.consumerGroup);
+}
+
+function resetGlobalMessages() {
+    state.globalMessages.cursors = [""];
+    state.globalMessages.page = 0;
+    state.globalMessages.nextCursor = "";
+    state.globalMessages.totalMessages = null;
+}
+
+function updateGlobalMessageButtons(loading = false) {
+    const total = Number(state.globalMessages.totalMessages);
+    const limit = Number(elements.globalMessageLimit?.value || 25);
+    const lastPage = Number.isFinite(total) && total > 0 ? Math.max(0, Math.ceil(total / limit) - 1) : 0;
+    elements.globalMessageFirst.disabled = loading || state.globalMessages.page === 0;
+    elements.globalMessagePrev.disabled = loading || state.globalMessages.page === 0;
+    elements.globalMessageNext.disabled = loading || !state.globalMessages.nextCursor;
+    elements.globalMessageLast.disabled = loading || !shouldLoadGlobalMessages() || state.globalMessages.page >= lastPage;
+}
+
 function selectedGroup() {
     return state.groups.find((group) => groupKey(group) === state.selectedKey);
 }
@@ -776,6 +1241,26 @@ function valueOrDash(value) {
     return value === null || value === undefined || value === "" ? "-" : value;
 }
 
+function numberOrNull(value) {
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+function sumByUniqueShard(rows, field) {
+    const seen = new Set();
+    return rows.reduce((sum, row) => {
+        const key = `${row.streamPrefix}:${row.shardIndex}`;
+        if (seen.has(key)) {
+            return sum;
+        }
+        seen.add(key);
+        return sum + Number(row[field] || 0);
+    }, 0);
+}
+
 function sumAssignmentSize(assignments) {
     return Object.values(assignments || {}).reduce((sum, shards) => sum + (Array.isArray(shards) ? shards.length : 0), 0);
 }
@@ -803,6 +1288,51 @@ function relativeAge(date) {
 function compactNumber(value) {
     const number = Number(value || 0);
     return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(number);
+}
+
+function formatBytes(value) {
+    const number = numberOrNull(value);
+    if (number === null) {
+        return "-";
+    }
+    if (number >= 1073741824) {
+        return `${trimDecimal(number / 1073741824)} GiB`;
+    }
+    if (number >= 1048576) {
+        return `${trimDecimal(number / 1048576)} MiB`;
+    }
+    if (number >= 1024) {
+        return `${trimDecimal(number / 1024)} KiB`;
+    }
+    return `${number} B`;
+}
+
+function formatRate(value) {
+    const number = numberOrNull(value);
+    return number === null ? "-" : `${trimDecimal(number)}/s`;
+}
+
+function formatDuration(seconds) {
+    const number = numberOrNull(seconds) || 0;
+    if (number >= 60) {
+        return `${trimDecimal(number / 60)} min`;
+    }
+    if (number >= 1) {
+        return `${trimDecimal(number)} s`;
+    }
+    return `${trimDecimal(number * 1000)} ms`;
+}
+
+function trimDecimal(value) {
+    return Number(value).toFixed(1).replace(/\.0$/, "");
+}
+
+function formatInstant(value) {
+    if (!value) {
+        return "-";
+    }
+    const date = typeof value === "number" ? new Date(value) : new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
 }
 
 function ownersByShard(assignments) {
