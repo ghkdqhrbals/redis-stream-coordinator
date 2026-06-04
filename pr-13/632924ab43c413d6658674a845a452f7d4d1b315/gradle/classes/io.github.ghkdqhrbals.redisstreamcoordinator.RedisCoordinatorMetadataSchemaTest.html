@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - RedisCoordinatorMetadataSchemaTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>RedisCoordinatorMetadataSchemaTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/io.github.ghkdqhrbals.redisstreamcoordinator.html">io.github.ghkdqhrbals.redisstreamcoordinator</a> &gt; RedisCoordinatorMetadataSchemaTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">5</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.110s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a href="#">Tests</a>
+</li>
+<li>
+<a href="#">Standard output</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">redis metadata parser accepts current and legacy v1 metadata()</td>
+<td class="success">0.065s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">redis metadata parser accepts legacy migration id fields()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">redis metadata parser ignores removed producer routing fields()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">redis metadata parser rejects unsupported future schema()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">redis metadata parser upgrades legacy coordinator managed shard layout metadata()</td>
+<td class="success">0.033s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>2026-06-04T08:15:33.554Z  INFO 2782 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest]: RedisCoordinatorMetadataSchemaTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-04T08:15:33.556Z  INFO 2782 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest
+2026-06-04T08:15:33.557Z  INFO 2782 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest]: RedisCoordinatorMetadataSchemaTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-04T08:15:33.558Z  INFO 2782 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-06-04T08:15:33.583Z  INFO 2782 --- [    Test worker] g.g.r.RedisCoordinatorMetadataSchemaTest : Starting RedisCoordinatorMetadataSchemaTest using Java 24.0.2 with PID 2782 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-06-04T08:15:33.583Z  INFO 2782 --- [    Test worker] g.g.r.RedisCoordinatorMetadataSchemaTest : No active profile set, falling back to 1 default profile: &quot;default&quot;
+2026-06-04T08:15:33.776Z  INFO 2782 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-04T08:15:33.777Z  INFO 2782 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-06-04T08:15:33.785Z  INFO 2782 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 6 ms. Found 0 Redis repository interfaces.
+2026-06-04T08:15:34.256Z  INFO 2782 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-06-04T08:15:34.272Z  INFO 2782 --- [    Test worker] g.g.r.RedisCoordinatorMetadataSchemaTest : Started RedisCoordinatorMetadataSchemaTest in 0.71 seconds (process running for 15.041)
+2026-06-04T08:15:34.273Z  WARN 2782 --- [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 8.14.5</a> at Jun 4, 2026, 8:15:35 AM</p>
+</div>
+</div>
+</body>
+</html>

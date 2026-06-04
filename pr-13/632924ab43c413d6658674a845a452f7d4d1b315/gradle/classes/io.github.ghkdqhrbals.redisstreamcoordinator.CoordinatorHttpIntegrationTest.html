@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - CoordinatorHttpIntegrationTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>CoordinatorHttpIntegrationTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/io.github.ghkdqhrbals.redisstreamcoordinator.html">io.github.ghkdqhrbals.redisstreamcoordinator</a> &gt; CoordinatorHttpIntegrationTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">12</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">1.313s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a href="#">Tests</a>
+</li>
+<li>
+<a href="#">Standard output</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">admin api requires basic auth()</td>
+<td class="success">0.009s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">admin api validates create group body()</td>
+<td class="success">0.033s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">basic auth scheme is parsed case insensitively()</td>
+<td class="success">0.010s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">http api creates group and accepts heartbeat()</td>
+<td class="success">0.083s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">http api handles graceful leave and monitoring shows empty group()</td>
+<td class="success">0.020s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">http api returns producer routing metadata()</td>
+<td class="success">0.014s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">http api scales group and refreshes producer routing metadata()</td>
+<td class="success">0.054s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">member api allows heartbeat without auth by default()</td>
+<td class="success">0.013s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">monitoring console is exposed without triggering api basic auth()</td>
+<td class="success">0.033s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">monitoring exposes coordination version compatibility lifecycle()</td>
+<td class="success">0.047s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">monitoring session verifies credentials without reading coordinator state()</td>
+<td class="success">0.017s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">openapi docs and swagger ui are exposed for interactive tests()</td>
+<td class="success">0.980s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>2026-06-04T08:15:29.229Z  INFO 2782 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest]: CoordinatorHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-04T08:15:29.231Z  INFO 2782 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest
+2026-06-04T08:15:29.232Z  INFO 2782 --- [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest]: CoordinatorHttpIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-04T08:15:29.233Z  INFO 2782 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-06-04T08:15:29.263Z  INFO 2782 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : Starting CoordinatorHttpIntegrationTest using Java 24.0.2 with PID 2782 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-06-04T08:15:29.263Z  INFO 2782 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : No active profile set, falling back to 1 default profile: &quot;default&quot;
+2026-06-04T08:15:29.464Z  INFO 2782 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-04T08:15:29.465Z  INFO 2782 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-06-04T08:15:29.486Z  INFO 2782 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 19 ms. Found 0 Redis repository interfaces.
+2026-06-04T08:15:29.786Z  INFO 2782 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-06-04T08:15:29.803Z  INFO 2782 --- [    Test worker] i.g.g.r.CoordinatorHttpIntegrationTest   : Started CoordinatorHttpIntegrationTest in 0.565 seconds (process running for 10.571)
+2026-06-04T08:15:29.804Z  WARN 2782 --- [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-06-04T08:15:29.807Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:29.807Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:29.808Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:29.835Z  INFO 2782 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_GROUP outcome=SUCCESS status=201 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=http-orders consumerGroup=orders-consumer reshardingId= method=POST path=/coord/v1/streams/http-orders/groups/orders-consumer route=/coord/v1/streams/{streamPrefix}/groups/{consumerGroup} queryString= durationMs=22 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-04T08:15:29.891Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:29.892Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:29.893Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:29.926Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:29.926Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:29.927Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:29.937Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:29.937Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:29.938Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:29.941Z  INFO 2782 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_GROUP outcome=SUCCESS status=201 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=http-leave-empty consumerGroup=orders-consumer reshardingId= method=POST path=/coord/v1/streams/http-leave-empty/groups/orders-consumer route=/coord/v1/streams/{streamPrefix}/groups/{consumerGroup} queryString= durationMs=1 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-04T08:15:29.957Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:29.958Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:29.959Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:30.006Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:30.006Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:30.008Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+2026-06-04T08:15:30.011Z  INFO 2782 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_GROUP outcome=SUCCESS status=201 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=http-scale-routing consumerGroup=orders-consumer reshardingId= method=POST path=/coord/v1/streams/http-scale-routing/groups/orders-consumer route=/coord/v1/streams/{streamPrefix}/groups/{consumerGroup} queryString= durationMs=2 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-04T08:15:30.026Z  INFO 2782 --- [    Test worker] redis-stream-coordinator.audit           : audit action=SCALE_GROUP outcome=SUCCESS status=202 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=http-scale-routing consumerGroup=orders-consumer reshardingId= method=POST path=/coord/v1/streams/http-scale-routing/groups/orders-consumer/scale route=/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale queryString= durationMs=9 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-04T08:15:30.061Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:30.062Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:30.063Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:30.090Z  INFO 2782 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_GROUP outcome=FAILED status=400 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=http-validation consumerGroup=orders-consumer reshardingId= method=POST path=/coord/v1/streams/http-validation/groups/orders-consumer route=/coord/v1/streams/{streamPrefix}/groups/{consumerGroup} queryString= durationMs=25 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-04T08:15:30.096Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:30.096Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:30.098Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:31.025Z  INFO 2782 --- [    Test worker] o.springdoc.api.AbstractOpenApiResource  : Init duration for springdoc-openapi is: 921 ms
+2026-06-04T08:15:31.078Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:31.078Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:31.080Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+2026-06-04T08:15:31.095Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:31.096Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:31.098Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+2026-06-04T08:15:31.101Z  INFO 2782 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_GROUP outcome=SUCCESS status=201 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=http-routing consumerGroup=orders-consumer reshardingId= method=POST path=/coord/v1/streams/http-routing/groups/orders-consumer route=/coord/v1/streams/{streamPrefix}/groups/{consumerGroup} queryString= durationMs=2 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-04T08:15:31.111Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:31.111Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:31.112Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-04T08:15:31.116Z  INFO 2782 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_GROUP outcome=SUCCESS status=201 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=http-auth consumerGroup=auth-consumer reshardingId= method=POST path=/coord/v1/streams/http-auth/groups/auth-consumer route=/coord/v1/streams/{streamPrefix}/groups/{consumerGroup} queryString= durationMs=1 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-04T08:15:31.125Z  INFO 2782 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-04T08:15:31.125Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-04T08:15:31.128Z  INFO 2782 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 8.14.5</a> at Jun 4, 2026, 8:15:35 AM</p>
+</div>
+</div>
+</body>
+</html>
