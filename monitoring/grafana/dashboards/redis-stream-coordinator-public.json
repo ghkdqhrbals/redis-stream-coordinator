@@ -555,7 +555,7 @@
           "source": "url",
           "format": "table",
           "parser": "backend",
-          "url": "http://coordinator:8080/coord/v1/monitoring/grafana/groups",
+          "url": "/coord/v1/monitoring/grafana/groups",
           "url_options": {
             "method": "GET"
           },
@@ -752,7 +752,7 @@
           "source": "url",
           "format": "table",
           "parser": "backend",
-          "url": "http://coordinator:8080/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup=",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup=",
           "url_options": {
             "method": "GET"
           },
