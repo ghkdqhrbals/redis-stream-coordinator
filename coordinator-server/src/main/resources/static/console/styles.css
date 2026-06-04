@@ -396,6 +396,68 @@ button {
     padding: 0 10px;
 }
 
+.admin-header-actions,
+.admin-button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.admin-grid {
+    align-items: start;
+}
+
+.admin-label,
+.admin-form label {
+    display: grid;
+    gap: 7px;
+    color: var(--muted-strong);
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.admin-form {
+    display: grid;
+    gap: 12px;
+}
+
+.admin-form input,
+.admin-label select {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #0f151c;
+    color: var(--text);
+    padding: 0 12px;
+    outline: none;
+}
+
+.admin-form button {
+    min-height: 38px;
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--accent-strong);
+    color: #04130f;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.admin-button-row {
+    margin-top: 10px;
+}
+
+.admin-note {
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.admin-current-state {
+    margin-top: 12px;
+}
+
 .side-panel,
 .content-panel {
     border: 1px solid var(--border);

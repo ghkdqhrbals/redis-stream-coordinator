@@ -145,7 +145,11 @@ JDBC store도 Redis store와 동일한 aggregate metadata JSON을 저장한다. 
 
 ## Access Control
 
-MVP는 Basic Auth를 사용한다. `api.users`가 비어 있으면 `admin-username` / `admin-password`가 `READ`, `WRITE`, `MEMBER` 전체 권한을 가진다.
+Coordinator는 `POST /coord/v1/auth/login`으로 signed Bearer token을 발급한다. 운영자는 설정된 username/password로 한 번 로그인해 기본 7일 만료 token을 받고, 이후 API 호출에는 `Authorization: Bearer <token>`을 보낸다. Basic Auth는 하위 호환과 bootstrap 도구를 위해 계속 허용하지만, 운영 예시는 password가 매 요청에 남지 않도록 login + Bearer token 흐름을 우선 사용한다.
+
+Token 서명에는 `coordinator.api.token-secret`을 사용한다. 운영 배포에서는 이를 반드시 platform secret manager로 명시하고 rotation해야 한다. 값이 비어 있으면 local development 용도로만 기본 admin credential material에서 fallback secret을 만든다.
+
+`api.users`가 비어 있으면 `admin-username` / `admin-password`가 `READ`, `WRITE`, `MEMBER` 전체 권한을 가진다.
 
 `api.users`가 설정되면 각 user의 role로 ACL을 평가한다.
 
@@ -200,7 +204,6 @@ Coordinator metric is the public observability surface. Consumer and producer mo
 * `redis_stream_coord_member_active`
 * `redis_stream_coord_member_heartbeat_age_seconds`
 * `redis_stream_coord_member_lease_remaining_seconds`
-* `redis_stream_coord_member_assigned_max_concurrency`
 * `redis_stream_coord_member_runtime_max_concurrency`
 * `redis_stream_coord_member_active_workers`
 * `redis_stream_coord_member_current_shards`

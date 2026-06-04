@@ -30,6 +30,8 @@ data class CoordinatorProperties(
     data class Api(
         val adminUsername: String = "admin",
         val adminPassword: String = "password",
+        val tokenSecret: String = "",
+        val tokenTtl: Duration = Duration.ofDays(7),
         val authenticateMemberApi: Boolean = false,
         val users: List<ApiUser> = emptyList(),
         val rateLimit: RateLimit = RateLimit(),

@@ -43,6 +43,56 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `first group create rejects pre-existing Redis stream prefix keys`() {
+        val redis = FakeExistingKeyRedisCommands(setOf("existing-prefix:0"))
+        val service = service(
+            clock = clock,
+            properties = CoordinatorProperties(
+                streams = CoordinatorProperties.Streams(provisioningEnabled = true),
+                defaults = CoordinatorProperties.Defaults(initialShardCount = 2, consumerMaxConcurrency = 4),
+            ),
+            redisCommands = redis,
+        )
+
+        val error = kotlin.runCatching {
+            service.createGroup("existing-prefix", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS, error.error)
+        assertTrue(error.message.orEmpty().contains("existing-prefix:0"))
+    }
+
+    @Test
+    fun `create stream validates invalid stream prefix before storing metadata`() {
+        val error = kotlin.runCatching {
+            service.createStream("{bad}", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+        }.exceptionOrNull() as IllegalArgumentException
+
+        assertEquals("streamPrefix must not contain Redis Cluster hash tag braces", error.message)
+    }
+
+    @Test
+    fun `additional group create under managed prefix does not reject existing coordinator shard keys`() {
+        val redis = FakeExistingKeyRedisCommands(mutableSetOf<String>())
+        val service = service(
+            clock = clock,
+            properties = CoordinatorProperties(
+                streams = CoordinatorProperties.Streams(provisioningEnabled = true),
+                defaults = CoordinatorProperties.Defaults(initialShardCount = 2, consumerMaxConcurrency = 4),
+            ),
+            redisCommands = redis,
+        )
+
+        service.createGroup("managed-prefix", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        redis.existingKeys += "managed-prefix:0"
+        redis.existingKeys += "managed-prefix:1"
+
+        val response = service.createGroup("managed-prefix", "analytics-consumer", createGroupRequest(initialShardCount = 2))
+
+        assertEquals("analytics-consumer", response.consumerGroup)
+    }
+
+    @Test
     fun `delete group removes inactive metadata`() {
         service.createGroup("delete-orders", "orders-consumer", createGroupRequest())
 
@@ -173,6 +223,8 @@ class CoordinatorServiceTest {
         assertEquals(listOf("search-orders:0", "search-orders:2"), rows.map { it.streamKey })
         assertEquals(listOf("search-orders:0", "search-orders:1", "search-orders:2"), redis.rangeRequests)
         assertEquals("all", rows.first().shardSelector)
+        assertEquals(100L, rows.first().recordTimestampMs)
+        assertEquals(Instant.ofEpochMilli(100), rows.first().recordTime)
         assertEquals(null, rows.first().pageNextCursor)
     }
 
@@ -894,124 +946,80 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `capacity rebalances by member weight`() {
+    fun `logical members receive even shard assignments`() {
         service.createGroup("events", "events-consumer", createGroupRequest(initialShardCount = 8))
-        val first = service.heartbeat("events", "events-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
-        service.heartbeat(
-            "events",
-            "events-consumer",
-            "member-a",
-            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
-        )
-        service.heartbeat("events", "events-consumer", "member-b", heartbeat("member-b", memberEpoch = 0))
-
-        service.updateConsumerConcurrency(
-            "events",
-            "events-consumer",
-            UpdateConsumerConcurrencyRequest(
-                defaultMaxConcurrency = 1,
-                memberOverrides = mapOf("member-b" to 3),
-                requestedBy = "test",
-                reason = "member-b has more workers",
-            ),
-        )
-
+        (0 until 4).forEach { index ->
+            service.heartbeat("events", "events-consumer", "pod-a-m$index", heartbeat("pod-a-m$index", memberEpoch = 0))
+        }
         val assignments = service.assignments("events", "events-consumer").targetAssignment
 
-        assertEquals(2, assignments.getValue("member-a").size)
-        assertEquals(6, assignments.getValue("member-b").size)
+        assertEquals(setOf("pod-a-m0", "pod-a-m1", "pod-a-m2", "pod-a-m3"), assignments.keys)
+        assertEquals(listOf(2, 2, 2, 2), assignments.values.map { it.size }.sorted())
     }
 
     @Test
-    fun `capacity movement advances epochs`() {
-        service.createGroup("policy-epochs", "events-consumer", createGroupRequest(initialShardCount = 8))
-        val first = service.heartbeat(
-            "policy-epochs",
+    fun `new logical members rebalance shards by member count`() {
+        service.createGroup("member-split", "events-consumer", createGroupRequest(initialShardCount = 8))
+        val first = service.heartbeat("member-split", "events-consumer", "pod-a-m0", heartbeat("pod-a-m0", memberEpoch = 0))
+        service.heartbeat(
+            "member-split",
             "events-consumer",
-            "member-a",
-            heartbeat("member-a", memberEpoch = 0),
+            "pod-a-m0",
+            heartbeat("pod-a-m0", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+        )
+        service.heartbeat("member-split", "events-consumer", "pod-a-m1", heartbeat("pod-a-m1", memberEpoch = 0))
+        service.heartbeat("member-split", "events-consumer", "pod-a-m2", heartbeat("pod-a-m2", memberEpoch = 0))
+        service.heartbeat("member-split", "events-consumer", "pod-a-m3", heartbeat("pod-a-m3", memberEpoch = 0))
+
+        val assignments = service.assignments("member-split", "events-consumer").targetAssignment
+
+        assertEquals(listOf(2, 2, 2, 2), assignments.values.map { it.size }.sorted())
+    }
+
+    @Test
+    fun `member split join advances assignment epochs`() {
+        service.createGroup("member-split-epochs", "events-consumer", createGroupRequest(initialShardCount = 8))
+        val first = service.heartbeat(
+            "member-split-epochs",
+            "events-consumer",
+            "pod-a-m0",
+            heartbeat("pod-a-m0", memberEpoch = 0),
         )
         service.heartbeat(
-            "policy-epochs",
+            "member-split-epochs",
             "events-consumer",
-            "member-a",
-            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+            "pod-a-m0",
+            heartbeat("pod-a-m0", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
         )
+        val before = service.getGroup("member-split-epochs", "events-consumer")
         val second = service.heartbeat(
-            "policy-epochs",
+            "member-split-epochs",
             "events-consumer",
-            "member-b",
-            heartbeat("member-b", memberEpoch = 0),
+            "pod-a-m1",
+            heartbeat("pod-a-m1", memberEpoch = 0),
         )
-        val before = service.getGroup("policy-epochs", "events-consumer")
-
-        val update = service.updateConsumerConcurrency(
-            "policy-epochs",
-            "events-consumer",
-            UpdateConsumerConcurrencyRequest(
-                defaultMaxConcurrency = 1,
-                memberOverrides = mapOf("member-b" to 3),
-                requestedBy = "test",
-                reason = "member-b has more workers",
-            ),
-        )
-        val after = service.getGroup("policy-epochs", "events-consumer")
+        val after = service.getGroup("member-split-epochs", "events-consumer")
         val memberA = service.heartbeat(
-            "policy-epochs",
+            "member-split-epochs",
             "events-consumer",
-            "member-a",
-            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
+            "pod-a-m0",
+            heartbeat("pod-a-m0", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
         )
         val memberB = service.heartbeat(
-            "policy-epochs",
+            "member-split-epochs",
             "events-consumer",
-            "member-b",
-            heartbeat("member-b", memberEpoch = second.memberEpoch),
+            "pod-a-m1",
+            heartbeat("pod-a-m1", memberEpoch = second.memberEpoch),
         )
 
-        assertTrue(update.groupEpoch > before.groupEpoch)
-        assertEquals(before.groupEpoch + 1, update.groupEpoch)
-        assertEquals(update.groupEpoch, after.assignmentEpoch)
+        assertTrue(after.groupEpoch > before.groupEpoch)
+        assertEquals(before.groupEpoch + 1, after.groupEpoch)
+        assertEquals(after.groupEpoch, after.assignmentEpoch)
         assertEquals(after.assignmentEpoch, memberA.memberEpoch)
         assertEquals(after.assignmentEpoch, memberB.memberEpoch)
-        assertEquals(2, memberA.assignment.assignedShards.size)
-        assertEquals(6, memberB.assignment.pendingShards.size)
+        assertEquals(4, memberA.assignment.assignedShards.size)
+        assertEquals(4, memberB.assignment.pendingShards.size)
         assertTrue(memberB.assignment.assignedShards.isEmpty())
-    }
-
-    @Test
-    fun `capacity metadata update keeps assignment epoch`() {
-        service.createGroup("policy-metadata", "events-consumer", createGroupRequest(initialShardCount = 2))
-        val first = service.heartbeat(
-            "policy-metadata",
-            "events-consumer",
-            "member-a",
-            heartbeat("member-a", memberEpoch = 0),
-        )
-        service.heartbeat(
-            "policy-metadata",
-            "events-consumer",
-            "member-a",
-            heartbeat("member-a", memberEpoch = first.memberEpoch, ownedShards = first.assignment.assignedShards),
-        )
-        val before = service.getGroup("policy-metadata", "events-consumer")
-
-        val update = service.updateConsumerConcurrency(
-            "policy-metadata",
-            "events-consumer",
-            UpdateConsumerConcurrencyRequest(
-                defaultMaxConcurrency = 8,
-                requestedBy = "test",
-                reason = "single member capacity metadata only",
-            ),
-        )
-        val after = service.getGroup("policy-metadata", "events-consumer")
-
-        assertEquals(before.groupEpoch, update.groupEpoch)
-        assertEquals(before.groupEpoch, after.groupEpoch)
-        assertEquals(before.assignmentEpoch, after.assignmentEpoch)
-        assertTrue(after.metadataVersion > before.metadataVersion)
-        assertEquals(mapOf("member-a" to 2), after.targetAssignmentSummary)
     }
 
     @Test
@@ -1726,21 +1734,9 @@ class CoordinatorServiceTest {
                 ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "must wait for metadata sync"),
             )
         }.exceptionOrNull() as CoordinatorException
-        val concurrencyError = kotlin.runCatching {
-            service.updateConsumerConcurrency(
-                "metadata-sync-admin",
-                "orders-consumer",
-                UpdateConsumerConcurrencyRequest(
-                    defaultMaxConcurrency = 2,
-                    requestedBy = "test",
-                    reason = "must wait for metadata sync",
-                ),
-            )
-        }.exceptionOrNull() as CoordinatorException
 
         assertEquals(HeartbeatStatus.SYNC_METADATA, sync.status)
         assertEquals(CoordinatorError.METADATA_SYNC_IN_PROGRESS, scaleError.error)
-        assertEquals(CoordinatorError.METADATA_SYNC_IN_PROGRESS, concurrencyError.error)
 
         service.createGroup("metadata-sync-rollback", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val rollbackJoined = service.heartbeat(
@@ -2618,6 +2614,18 @@ private class FakeMessageRedisCommands(
     }
 }
 
+private class FakeExistingKeyRedisCommands(
+    existingKeys: Set<String>,
+) : CoordinatorRedisCommands() {
+    val existingKeys: MutableSet<String> = existingKeys.toMutableSet()
+
+    override fun isConfigured(): Boolean =
+        true
+
+    override fun hasKey(key: String): Boolean =
+        key in existingKeys
+}
+
 private class FakeOffsetRedisCommands(
     private val delayMs: Long = 0,
 ) : CoordinatorRedisCommands() {
@@ -2728,9 +2736,6 @@ private class CopyingConflictOnceStateStore : CoordinatorStateStore {
 
     private fun GroupMetadata.deepCopy(): GroupMetadata =
         copy(
-            consumerConcurrencyPolicy = consumerConcurrencyPolicy.copy(
-                memberOverrides = consumerConcurrencyPolicy.memberOverrides.toMap(),
-            ),
             members = members
                 .mapValues { (_, member) ->
                     member.copy(

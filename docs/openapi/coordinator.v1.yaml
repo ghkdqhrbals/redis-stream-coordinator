@@ -14,11 +14,13 @@ info:
     traffic on one node. This API treats a logical stream as multiple physical shard stream keys and lets a
     dedicated coordinator own the assignment protocol.
 servers:
+  - url: https://coordinator.ghkdqhrbals.org
+    description: Public coordinator HTTPS endpoint.
   - url: http://localhost:8080
     description: Local coordinator server.
-  - url: https://api.ghkdqhrbals.org
-    description: Example public HTTPS endpoint.
 tags:
+  - name: Authentication
+    description: Token issuing endpoint for coordinator API callers.
   - name: Groups
     description: Group metadata lifecycle and read-only group state.
   - name: Producer Routing
@@ -32,8 +34,37 @@ tags:
   - name: Grafana
     description: JSON endpoints shaped for Grafana dashboard variables and table panels.
 security:
+  - bearerAuth: []
   - basicAuth: []
 paths:
+  /coord/v1/auth/login:
+    post:
+      tags: [Authentication]
+      operationId: loginCoordinatorApi
+      summary: Issue coordinator API token.
+      description: Authenticates a configured coordinator user and returns a signed Bearer token. The default token lifetime is seven days.
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              admin:
+                value:
+                  username: admin
+                  password: password
+      responses:
+        "200":
+          description: Bearer token issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials.
+
   /coord/v1/streams/{streamPrefix}:
     parameters:
       - $ref: "#/components/parameters/streamPrefix"
@@ -64,7 +95,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/StreamCreateResponse"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: Stream prefix already has coordinator metadata or Redis Stream keys.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}:
     parameters:
@@ -85,8 +120,6 @@ paths:
               create:
                 value:
                   initialShardCount: 20
-                  consumerConcurrencyPolicy:
-                    defaultMaxConcurrency: 4
                   requestedBy: operator@example.com
                   reason: bootstrap create-order stream group
       responses:
@@ -97,7 +130,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/GroupResponse"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: Group already exists, or the first group for this prefix would collide with existing Redis Stream keys.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     get:
       tags: [Groups]
       operationId: getCoordinatorGroup
@@ -218,29 +255,6 @@ paths:
                 $ref: "#/components/schemas/Migration"
         "409":
           $ref: "#/components/responses/Conflict"
-
-  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency:
-    parameters:
-      - $ref: "#/components/parameters/streamPrefix"
-      - $ref: "#/components/parameters/consumerGroup"
-    patch:
-      tags: [Groups]
-      operationId: updateConsumerConcurrencyPolicy
-      summary: Update server-side consumer worker limits.
-      description: Updates the coordinator-owned concurrency policy without changing shard count.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateConsumerConcurrencyRequest"
-      responses:
-        "200":
-          description: Updated concurrency policy.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConsumerConcurrencyResponse"
 
   /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}:
     parameters:
@@ -630,6 +644,10 @@ components:
     basicAuth:
       type: http
       scheme: basic
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: HMAC-SHA256
   parameters:
     streamPrefix:
       name: streamPrefix
@@ -734,6 +752,32 @@ components:
             items:
               $ref: "#/components/schemas/GrafanaOptionRow"
   schemas:
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          example: Bearer
+        expiresAt:
+          type: string
+          format: date-time
+        expiresInSeconds:
+          type: integer
+          format: int64
+          example: 604800
+        roles:
+          type: array
+          items:
+            type: string
     CreateGroupRequest:
       type: object
       required: [requestedBy]
@@ -741,8 +785,6 @@ components:
         initialShardCount:
           type: integer
           minimum: 1
-        consumerConcurrencyPolicy:
-          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
         requestedBy:
           type: string
         reason:
@@ -790,8 +832,6 @@ components:
         targetShardCount:
           type: integer
           minimum: 1
-        consumerConcurrencyPolicy:
-          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
         requestedBy:
           type: string
         reason:
@@ -829,22 +869,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Migration"
-    UpdateConsumerConcurrencyRequest:
-      type: object
-      required: [defaultMaxConcurrency, requestedBy, reason]
-      properties:
-        defaultMaxConcurrency:
-          type: integer
-          minimum: 1
-        memberOverrides:
-          type: object
-          additionalProperties:
-            type: integer
-            minimum: 1
-        requestedBy:
-          type: string
-        reason:
-          type: string
     RollbackMigrationRequest:
       type: object
       required: [requestedBy, reason]
@@ -853,18 +877,6 @@ components:
           type: string
         reason:
           type: string
-    ConsumerConcurrencyPolicy:
-      type: object
-      required: [defaultMaxConcurrency]
-      properties:
-        defaultMaxConcurrency:
-          type: integer
-          minimum: 1
-        memberOverrides:
-          type: object
-          additionalProperties:
-            type: integer
-            minimum: 1
     GroupResponse:
       type: object
       required:
@@ -893,8 +905,6 @@ components:
           format: int64
         shardCount:
           type: integer
-        consumerConcurrencyPolicy:
-          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
         activeMigration:
           oneOf:
             - $ref: "#/components/schemas/Migration"
@@ -907,25 +917,6 @@ components:
           type: object
           additionalProperties:
             type: integer
-    ConsumerConcurrencyResponse:
-      type: object
-      properties:
-        streamPrefix:
-          type: string
-        consumerGroup:
-          type: string
-        metadataVersion:
-          type: integer
-          format: int64
-        groupEpoch:
-          type: integer
-          format: int64
-        consumerConcurrencyPolicy:
-          $ref: "#/components/schemas/ConsumerConcurrencyPolicy"
-        affectedMembers:
-          type: array
-          items:
-            type: string
     ProducerRoutingResponse:
       type: object
       properties:
@@ -1016,8 +1007,6 @@ components:
         metadataVersion:
           type: integer
           format: int64
-        assignedMaxConcurrency:
-          type: integer
         assignment:
           $ref: "#/components/schemas/AssignmentView"
     AssignmentView:

@@ -18,7 +18,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 1,
                 assignmentEpoch = 1,
                 metadataVersion = 2,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(
                     assignedShards = setOf(CoordinatorShard(0), CoordinatorShard(1)),
                     pendingShards = emptySet(),
@@ -48,7 +47,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 1,
                 assignmentEpoch = 1,
                 metadataVersion = 2,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(0), CoordinatorShard(1)), emptySet(), 2),
             ),
             HeartbeatResponse(
@@ -60,7 +58,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 2,
                 assignmentEpoch = 2,
                 metadataVersion = 3,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
         )
@@ -87,7 +84,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 1,
                 assignmentEpoch = 1,
                 metadataVersion = 2,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(revokedShard, CoordinatorShard(1)), emptySet(), 2),
             ),
             HeartbeatResponse(
@@ -99,7 +95,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 2,
                 assignmentEpoch = 2,
                 metadataVersion = 3,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
             HeartbeatResponse(
@@ -111,7 +106,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 2,
                 assignmentEpoch = 2,
                 metadataVersion = 3,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
         )
@@ -491,7 +485,6 @@ class CoordinatorManagedConsumerTest {
             groupEpoch = assignment.metadataVersion,
             assignmentEpoch = assignment.metadataVersion,
             metadataVersion = assignment.metadataVersion,
-            assignedMaxConcurrency = 4,
             assignment = assignment,
         )
 

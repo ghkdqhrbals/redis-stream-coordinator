@@ -145,7 +145,9 @@ The JDBC table stores the same aggregate metadata JSON used by the Redis store. 
 
 ## ACL
 
-The MVP security model uses Basic Auth.
+The coordinator issues signed Bearer tokens through `POST /coord/v1/auth/login`. Operators authenticate once with a configured username/password, receive a token that expires after seven days by default, and send subsequent API calls with `Authorization: Bearer <token>`. Basic Auth remains accepted for compatibility and for bootstrap tooling, but operator examples should prefer login plus Bearer token so passwords do not appear on every request.
+
+Token signing uses `coordinator.api.token-secret`. Production deployments should set this explicitly and rotate it through the platform secret manager. If it is omitted, the coordinator falls back to the default admin credential material for local development only.
 
 Roles:
 

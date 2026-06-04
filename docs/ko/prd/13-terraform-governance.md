@@ -2,7 +2,7 @@
 
 ## 목적
 
-Coordinator admin API는 control-plane source of truth를 변경한다. Group 생성/삭제, shard count, consumer concurrency policy, resharding rollback이 여기에 해당한다. 운영 환경에서는 이런 mutation을 가능하면 Terraform 또는 GitOps workflow로 검토하고 적용해야 한다.
+Coordinator admin API는 control-plane source of truth를 변경한다. Group 생성/삭제, shard count, resharding rollback이 여기에 해당한다. 운영 환경에서는 이런 mutation을 가능하면 Terraform 또는 GitOps workflow로 검토하고 적용해야 한다.
 
 Terraform은 runtime audit log를 대체하지 않는다. Terraform은 desired state, plan output, 승인 이력, 누가 merge/apply했는지를 남긴다. Coordinator audit log는 실제 API에 도착한 요청, 실패한 요청, forbidden 요청, request id, caller identity, client address, request summary, request body fingerprint를 남긴다.
 
@@ -15,7 +15,6 @@ Terraform 또는 GitOps가 관리하기 좋은 것:
 | Group 존재 여부 | `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` and `DELETE /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` |
 | Initial shard count | create group request |
 | Target shard count | `POST /coord/v1/streams/{streamPrefix}/scale` |
-| Consumer concurrency policy | `PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` |
 | 운영 사유와 actor metadata | mutation request body plus `X-Request-Id` |
 
 Terraform 또는 GitOps가 관리하면 안 되는 것:
@@ -23,6 +22,7 @@ Terraform 또는 GitOps가 관리하면 안 되는 것:
 | Runtime state | 이유 |
 | --- | --- |
 | Member heartbeat | 일시적인 liveness와 ownership reconciliation이다. |
+| Consumer runtime parallelism | `@StreamListener(concurrency = N)` 같은 consumer deployment 설정 영역이며 coordinator admin API 대상이 아니다. |
 | Current assignment report | member가 보고하는 관측값이지 desired state가 아니다. |
 | Redis Stream offset, pending entry, message payload | data plane 책임이다. |
 | Revoke/drain progress | live rebalance transition이다. |
@@ -36,9 +36,8 @@ Terraform 또는 GitOps가 관리하면 안 되는 것:
 
 | Resource | 책임 |
 | --- | --- |
-| `redisstreamcoordinator_group` | `{streamPrefix, consumerGroup}` metadata record, initial shard count, default consumer concurrency policy를 관리한다. |
+| `redisstreamcoordinator_group` | `{streamPrefix, consumerGroup}` metadata record와 initial shard count를 관리한다. |
 | `redisstreamcoordinator_group_shard_count` | 기존 group의 shard count 변경을 적용하고, coordinator가 새 producer routing metadata를 노출할 때까지 기다린다. |
-| `redisstreamcoordinator_consumer_concurrency_policy` | `defaultMaxConcurrency`와 member-name override를 관리한다. |
 
 Provider import id는 다음 형식을 권장한다.
 
@@ -124,12 +123,11 @@ GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 Provider가 managed desired state로 다룰 field:
 
 * group existence,
-* `shardCount`,
-* `consumerConcurrencyPolicy.defaultMaxConcurrency`,
-* `consumerConcurrencyPolicy.memberOverrides`.
+* `shardCount`.
 
 Provider가 computed runtime state로 다룰 field:
 
+* heartbeat로 보고되는 consumer runtime parallelism,
 * `groupEpoch`,
 * `assignmentEpoch`,
 * `metadataVersion`,

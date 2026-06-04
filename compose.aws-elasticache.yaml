@@ -14,6 +14,8 @@ services:
       COORDINATOR_DEFAULTS_INITIAL_SHARD_COUNT: "6"
       COORDINATOR_DEFAULTS_CONSUMER_MAX_CONCURRENCY: "6"
       REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      REDIS_STREAM_COORDINATOR_TOKEN_SECRET: ${REDIS_STREAM_COORDINATOR_TOKEN_SECRET:-}
+      REDIS_STREAM_COORDINATOR_TOKEN_TTL: ${REDIS_STREAM_COORDINATOR_TOKEN_TTL:-7d}
       MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
     ports:
       - "8080:8080"
@@ -44,7 +46,7 @@ services:
         wget -qO- \
           --header="Content-Type: application/json" \
           --header="Authorization: Basic YWRtaW46cGFzc3dvcmQ=" \
-          --post-data='{"initialShardCount":6,"hashAlgorithm":"murmur3","consumerConcurrencyPolicy":{"defaultMaxConcurrency":6},"requestedBy":"compose.aws-elasticache","reason":"aws elasticache pod smoke"}' \
+          --post-data='{"initialShardCount":6,"hashAlgorithm":"murmur3","requestedBy":"compose.aws-elasticache","reason":"aws elasticache pod smoke"}' \
           http://coordinator:8080/coord/v1/streams/create-order/groups/demo-workers
         echo
         echo "Coordinator group initialized"

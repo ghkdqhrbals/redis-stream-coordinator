@@ -65,6 +65,8 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.info.title").value("Redis Stream Coordinator API"))
             .andExpect(jsonPath("$.components.securitySchemes.basicAuth.type").value("http"))
             .andExpect(jsonPath("$.components.securitySchemes.basicAuth.scheme").value("basic"))
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
 
         mockMvc.perform(get("/swagger-ui.html"))
             .andExpect(status().is3xxRedirection)
@@ -97,6 +99,52 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.authenticated").value(true))
             .andExpect(jsonPath("$.username").value("admin"))
+    }
+
+    @Test
+    fun `login issues seven day bearer token for coordinator api calls`() {
+        val loginResult = mockMvc.perform(
+            post("/coord/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"username":"admin","password":"password"}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.tokenType").value("Bearer"))
+            .andExpect(jsonPath("$.expiresInSeconds").value(604800))
+            .andExpect(jsonPath("$.roles[0]").value("ADMIN"))
+            .andReturn()
+
+        val accessToken = objectMapper.readTree(loginResult.response.contentAsString)
+            .get("accessToken")
+            .asString()
+
+        mockMvc.perform(
+            get("/coord/v1/monitoring/session")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.authenticated").value(true))
+            .andExpect(jsonPath("$.username").value("admin"))
+            .andExpect(jsonPath("$.roles").isArray)
+
+        mockMvc.perform(
+            post("/coord/v1/streams/token-auth/groups/orders-consumer")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createGroupRequest(initialShardCount = 2))),
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.streamPrefix").value("token-auth"))
+    }
+
+    @Test
+    fun `login rejects invalid credentials`() {
+        mockMvc.perform(
+            post("/coord/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"username":"admin","password":"wrong"}"""),
+        )
+            .andExpect(status().isUnauthorized)
     }
 
     @Test

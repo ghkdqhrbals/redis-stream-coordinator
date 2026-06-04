@@ -13,7 +13,15 @@ docker compose --profile coordinator up --build
 Check coordinator health:
 
 ```bash
-curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
+RSC_TOKEN="$(
+  curl -sS -H 'Content-Type: application/json' \
+    -X POST http://localhost:8080/coord/v1/auth/login \
+    -d '{"username":"admin","password":"password"}' |
+  jq -r '.accessToken'
+)"
+
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
+  http://localhost:8080/coord/v1/monitoring/health
 ```
 
 Expected response:
@@ -25,7 +33,7 @@ Expected response:
 Create a group:
 
 ```bash
-curl -u admin:password \
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   -H 'Content-Type: application/json' \
   -X POST http://localhost:8080/coord/v1/streams/orders/groups/orders-consumer \
   -d '{"initialShardCount":4,"requestedBy":"local","reason":"local bootstrap"}'
@@ -45,7 +53,9 @@ The coordinator image uses the same Spring Boot configuration keys as the jar. I
 
 | Environment variable | Purpose |
 | --- | --- |
-| `REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD` | Basic Auth password for the default `admin` user. |
+| `REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD` | Password used by `/coord/v1/auth/login` for the default `admin` user. Basic Auth remains accepted for compatibility. |
+| `REDIS_STREAM_COORDINATOR_TOKEN_SECRET` | HMAC signing secret for seven-day Bearer tokens. Set this explicitly in production. |
+| `REDIS_STREAM_COORDINATOR_TOKEN_TTL` | Bearer token lifetime. Default is `7d`. |
 | `COORDINATOR_STORE_TYPE` | `redis` for Redis-backed state, `memory` for local smoke tests. |
 | `COORDINATOR_STREAMS_PROVISIONING_ENABLED` | Enables Redis Stream and consumer-group provisioning. |
 | `SPRING_DATA_REDIS_CLUSTER_NODES` | Comma-separated Redis Cluster seed nodes. |

@@ -104,7 +104,7 @@ Member startup은 다음을 하지 않는다.
 
 * local YAML shard count를 desired state로 제출
 * group metadata 생성 또는 변경
-* server-side consumer concurrency policy 변경
+* consumer deployment 또는 listener concurrency 변경
 
 ## Admin API Source of Truth
 
@@ -113,21 +113,20 @@ Member startup은 다음을 하지 않는다.
 Source of truth:
 
 * shard count: coordinator group metadata
-* consumer `maxConcurrency`: coordinator consumer concurrency policy
+* consumer `concurrency`: `@StreamListener(concurrency = N)`이 만드는 consumer-side logical member 수
 * routing metadata: coordinator producer routing endpoint
 
 ## Create Group
 
-`initialShardCount`와 `consumerConcurrencyPolicy.defaultMaxConcurrency`는 생략할 수 있다. 생략하면 coordinator default를 사용한다.
+`initialShardCount`는 생략할 수 있다. 생략하면 coordinator default를 사용한다.
 
 처리 순서:
 
 1. group이 이미 존재하지 않는지 확인한다.
 2. 요청 shard count를 검증한다.
 3. provisioning이 켜져 있으면 shard stream key와 Redis consumer group을 생성한다.
-4. consumer concurrency policy를 저장한다.
-5. `shardCount`와 `groupEpoch=1`을 저장한다.
-6. duplicate create request는 `409 Conflict`로 거절한다.
+4. `shardCount`와 `groupEpoch=1`을 저장한다.
+5. duplicate create request는 `409 Conflict`로 거절한다.
 
 ## Scale Out / Scale In
 
@@ -139,19 +138,7 @@ Coordinator는 다음 조건에서만 요청을 수락한다.
 * `targetShardCount`가 현재 shard count와 다르다.
 * `targetShardCount`가 양수다.
 
-Scale request에 consumer concurrency policy가 포함되면 같은 metadata update 안에서 저장한다.
-
-## Consumer Concurrency Update
-
-로컬 worker capacity limit만 바꿀 때는 consumer concurrency API를 사용한다. 이 작업은 shard count를 바꾸지 않는다.
-
-규칙:
-
-* policy는 heartbeat response의 `assignedMaxConcurrency`로 전파된다.
-* member가 더 큰 runtime capacity를 보고해도 server-side policy를 초과할 수 없다.
-* concurrency를 낮춰도 shard count는 줄어들지 않는다.
-* assignment weight policy가 `maxConcurrency`에 의존하면 coordinator는 `groupEpoch`를 증가시키고 assignment를 다시 계산한다.
-* no-op update는 새 metadata write 없이 현재 policy를 반환한다.
+Consumer parallelism은 scale metadata가 아니다. 운영자는 consumer deployment 또는 listener configuration을 바꿔 병렬성을 조정한다. coordinator는 heartbeat로 들어온 logical member들을 관찰하고 live member count 기준으로 재배치한다.
 
 ## Monitoring
 
@@ -160,7 +147,7 @@ Group monitoring은 다음을 반환한다.
 * group epoch
 * assignment epoch
 * shard count
-* consumer concurrency policy
+* consumer logical member 수와 runtime capacity
 * active resharding
 * target/current assignment summary
 * member liveness

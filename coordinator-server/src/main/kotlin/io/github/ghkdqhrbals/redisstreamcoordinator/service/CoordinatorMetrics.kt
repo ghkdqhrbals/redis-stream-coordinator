@@ -30,7 +30,6 @@ interface CoordinatorMetrics {
     fun recordMemberExpired(group: GroupMetadata, count: Int)
     fun recordRebalance(group: GroupMetadata, reason: String, duration: Duration)
     fun recordScaleRequest(streamPrefix: String, consumerGroup: String, status: String)
-    fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String)
     fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String)
     fun recordTick(result: CoordinatorTickResult, duration: Duration)
     fun recordStateConflict(operation: String, attempt: Int)
@@ -53,7 +52,6 @@ object NoopCoordinatorMetrics : CoordinatorMetrics {
     override fun recordMemberExpired(group: GroupMetadata, count: Int) = Unit
     override fun recordRebalance(group: GroupMetadata, reason: String, duration: Duration) = Unit
     override fun recordScaleRequest(streamPrefix: String, consumerGroup: String, status: String) = Unit
-    override fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String) = Unit
     override fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String) = Unit
     override fun recordTick(result: CoordinatorTickResult, duration: Duration) = Unit
     override fun recordStateConflict(operation: String, attempt: Int) = Unit
@@ -92,9 +90,6 @@ class AutoConfiguredCoordinatorMetrics(
 
     override fun recordScaleRequest(streamPrefix: String, consumerGroup: String, status: String) =
         delegate.recordScaleRequest(streamPrefix, consumerGroup, status)
-
-    override fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String) =
-        delegate.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, status)
 
     override fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String) =
         delegate.recordProducerRouting(streamPrefix, consumerGroup, status)
@@ -167,13 +162,6 @@ class MicrometerCoordinatorMetrics(
         if (status != "SUCCESS" && status != "NOOP") {
             registry.counter("redis_stream_coord_scale_request_failed_total", tags).increment()
         }
-    }
-
-    override fun recordConsumerConcurrencyUpdate(streamPrefix: String, consumerGroup: String, status: String) {
-        registry.counter(
-            "redis_stream_coord_consumer_concurrency_update_total",
-            groupTags(streamPrefix, consumerGroup).and("status", status),
-        ).increment()
     }
 
     override fun recordProducerRouting(streamPrefix: String, consumerGroup: String, status: String) {
@@ -282,7 +270,6 @@ class MicrometerCoordinatorMetrics(
         registerGauge("redis_stream_coord_member_active", tags, meters.active)
         registerGauge("redis_stream_coord_member_heartbeat_age_seconds", tags, meters.heartbeatAgeSeconds)
         registerGauge("redis_stream_coord_member_lease_remaining_seconds", tags, meters.leaseRemainingSeconds)
-        registerGauge("redis_stream_coord_member_assigned_max_concurrency", tags, meters.assignedMaxConcurrency)
         registerGauge("redis_stream_coord_member_runtime_max_concurrency", tags, meters.runtimeMaxConcurrency)
         registerGauge("redis_stream_coord_member_active_workers", tags, meters.activeWorkers)
         registerGauge("redis_stream_coord_member_current_shards", tags, meters.currentShards)
@@ -374,7 +361,6 @@ class MicrometerCoordinatorMetrics(
         val active = AtomicLong(0)
         val heartbeatAgeSeconds = AtomicLong(0)
         val leaseRemainingSeconds = AtomicLong(0)
-        val assignedMaxConcurrency = AtomicLong(0)
         val runtimeMaxConcurrency = AtomicLong(0)
         val activeWorkers = AtomicLong(0)
         val currentShards = AtomicLong(0)
@@ -385,7 +371,6 @@ class MicrometerCoordinatorMetrics(
             active.set(if (member.state == MemberState.ACTIVE || member.state == MemberState.STARTING) 1 else 0)
             heartbeatAgeSeconds.set(Duration.between(member.lastHeartbeatAt, now).seconds.coerceAtLeast(0))
             leaseRemainingSeconds.set(Duration.between(now, member.memberLeaseExpiresAt).seconds.coerceAtLeast(0))
-            assignedMaxConcurrency.set(member.assignedMaxConcurrency.toLong())
             runtimeMaxConcurrency.set(member.runtimeMaxConcurrency.toLong())
             activeWorkers.set(member.activeConsumerWorkers.toLong())
             currentShards.set(member.currentAssignment.size.toLong())

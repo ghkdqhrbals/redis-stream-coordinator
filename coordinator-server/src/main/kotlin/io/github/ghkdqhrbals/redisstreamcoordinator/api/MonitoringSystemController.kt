@@ -1,7 +1,6 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.api
 
-import io.github.ghkdqhrbals.redisstreamcoordinator.config.AUTH_PRINCIPAL_ATTRIBUTE
-import io.github.ghkdqhrbals.redisstreamcoordinator.config.AUTH_ROLES_ATTRIBUTE
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.security.AuthRequestAttributes
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.HealthResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MonitoringSessionResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.protocol.CoordinatorCompatibilityResponse
@@ -33,8 +32,8 @@ class MonitoringSystemController(
     fun session(request: HttpServletRequest): MonitoringSessionResponse =
         MonitoringSessionResponse(
             authenticated = true,
-            username = request.getAttribute(AUTH_PRINCIPAL_ATTRIBUTE) as? String,
-            roles = (request.getAttribute(AUTH_ROLES_ATTRIBUTE) as? Iterable<*>)
+            username = request.getAttribute(AuthRequestAttributes.PRINCIPAL) as? String,
+            roles = (request.getAttribute(AuthRequestAttributes.ROLES) as? Iterable<*>)
                 ?.mapNotNull { it as? String }
                 ?: emptyList(),
         )

@@ -38,7 +38,7 @@
 * [x] Graceful leave
 * [x] Member lease expiry와 fencing
 * [x] Unauthorized `ownedShards` / invalid `revokingShards` 보고에 대한 stale ownership fencing
-* [x] Server-side consumer concurrency policy를 반영한 sticky assignment
+* [x] Live logical member 수 기준 sticky assignment
 * [x] `assignedShards`와 `pendingShards` 분리
 * [x] Revoke-before-assign handoff
 * [x] Rebalance timeout fencing

@@ -121,5 +121,5 @@ Excluded scope:
 * MVP access control: Basic Auth `admin/password`
 * MVP rebalance style: coordinator-driven incremental reconciliation
 * MVP shard count source of truth: Coordinator Admin API로 생성/변경된 coordinator metadata
-* MVP consumer `maxConcurrency` source of truth: Coordinator Admin API로 변경된 consumer concurrency policy
+* MVP consumer concurrency source of truth: consumer deployment 또는 listener configuration. coordinator는 heartbeat로 들어온 logical member를 관찰한다.
 * MVP coordinator deployment artifact: Java 24 Docker image plus Spring Boot jar

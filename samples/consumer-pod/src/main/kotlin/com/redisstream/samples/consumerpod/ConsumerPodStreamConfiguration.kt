@@ -51,7 +51,7 @@ class ConsumerPodStreamListener(
         pollTimeoutMs = "\${CONSUMER_REDIS_POLL_TIMEOUT_MS:250}",
     )
     fun consume(message: ConsumedRedisStreamMessage) {
-        handle(message, consumerGroupName, listenerConcurrency)
+        handle(message, consumerGroupName)
     }
 
     @StreamListener(
@@ -64,7 +64,7 @@ class ConsumerPodStreamListener(
         pollTimeoutMs = "\${CONSUMER_REDIS_POLL_TIMEOUT_MS:250}",
     )
     fun consumeSecondary(message: ConsumedRedisStreamMessage) {
-        handle(message, secondaryConsumerGroupName, secondaryListenerConcurrency)
+        handle(message, secondaryConsumerGroupName)
     }
 
     @StreamListener(
@@ -77,18 +77,17 @@ class ConsumerPodStreamListener(
         pollTimeoutMs = "\${CONSUMER_REDIS_POLL_TIMEOUT_MS:250}",
     )
     fun consumeLowVolumePayment(message: ConsumedRedisStreamMessage) {
-        handle(message, lowVolumePaymentConsumerGroupName, lowVolumePaymentListenerConcurrency)
+        handle(message, lowVolumePaymentConsumerGroupName)
     }
 
     private fun handle(
         message: ConsumedRedisStreamMessage,
         consumerGroupName: String,
-        listenerConcurrency: Int,
     ) {
         if (!processingDelay.isZero && !processingDelay.isNegative) {
             Thread.sleep(processingDelay.toMillis())
         }
-        val context = sampleContext(consumerGroupName, listenerConcurrency)
+        val context = sampleContext(consumerGroupName)
         eventLog.record("message-handled", message, context)
         logger.info(
             "Handled Redis Stream message member={} shard={} streamKey={} recordId={} fields={}",
@@ -103,12 +102,10 @@ class ConsumerPodStreamListener(
 
     private fun sampleContext(
         consumerGroupName: String,
-        listenerConcurrency: Int,
     ): CoordinatorConsumerContext =
         CoordinatorConsumerContext(
             memberId = "auto-generated",
             memberName = consumerGroupName,
-            assignedMaxConcurrency = listenerConcurrency,
             metadataVersion = 0,
             groupEpoch = 0,
             assignmentEpoch = 0,

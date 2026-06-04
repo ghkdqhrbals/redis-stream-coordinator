@@ -36,7 +36,7 @@ class StreamOperationsController(
         description = "Creates the initial shard layout for a sharded Redis Stream prefix. The official create path only requires streamPrefix; consumer groups reconcile through their own runtime configuration and heartbeat flow.",
         responses = [
             ApiResponse(responseCode = "201", description = "Stream shard layout was created."),
-            ApiResponse(responseCode = "409", description = "The stream prefix already has coordinator metadata."),
+            ApiResponse(responseCode = "409", description = "The stream prefix already has coordinator metadata or Redis Stream keys."),
             ApiResponse(responseCode = "503", description = "Redis or stream provisioning is unavailable."),
         ],
     )

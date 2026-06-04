@@ -86,7 +86,6 @@ Invariant:
   "state": "ACTIVE",
   "memberEpoch": 11,
   "metadataVersion": 8,
-  "assignedMaxConcurrency": 12,
   "runtimeMaxConcurrency": 12,
   "activeConsumerWorkers": 8,
   "currentAssignment": [
@@ -103,10 +102,9 @@ Member metadata는 member lifecycle의 source of truth이다.
 
 * `lastHeartbeatAt`: coordinator가 마지막 heartbeat를 정상 반영한 시각이다.
 * `memberLeaseExpiresAt`: 이 시각 이후에는 `EXPIRED`로 fencing하고 재할당을 시작한다.
-* `assignedMaxConcurrency`: Coordinator Admin API가 저장한 server-side consumer concurrency policy 기준으로 허용된 consumer worker 수이다.
 * `runtimeMaxConcurrency`: member process가 heartbeat로 보고한 local consumer worker 상한이다.
 * `activeConsumerWorkers`: member가 현재 실행 중인 consumer worker 수이다.
-* `maxConcurrency`는 partition/shard 개수가 아니며, target assignment의 shard 수 상한으로 쓰지 않는다.
+* `runtimeMaxConcurrency`는 partition/shard 개수가 아니며, target assignment의 shard 수 상한으로 쓰지 않는다.
 
 ## Logical Member와 Worker Capacity
 
@@ -222,8 +220,9 @@ Steps:
 * Bean 기반 `runtimeMaxConcurrency`는 member 내부 consumer worker 수이다.
 * `runtimeMaxConcurrency`는 topic partition 수나 Redis Stream shard 수를 의미하지 않는다.
 * Redis Stream shard는 한 시점에 정확히 하나의 live member만 소유한다.
-* 하나의 member는 여러 shard를 소유할 수 있고, 소유 shard를 `assignedMaxConcurrency` 이하의 consumer worker가 multiplexing해서 읽는다.
-* coordinator는 `maxConcurrency`를 처리량 가중치로 참고할 수 있지만, shard count 변경과 동일하게 취급하지 않는다.
+* 하나의 member는 여러 shard를 소유할 수 있고, member runtime이 소유 shard를 multiplexing해서 읽는다.
+* consumer parallelism은 deployment/listener configuration으로 제어한다.
+* coordinator는 live logical member 수 기준으로 shard를 균등 배치한다. heartbeat의 `runtimeMaxConcurrency`는 관측값이며 assignment weight가 아니다.
 * built-in polling adapter는 여러 worker가 있어도 같은 shard에 대해 동시에 Redis read를 수행하지 않는다.
 
 Annotation listener에서 `concurrency = 4`는 독립적으로 assign되는 coordinator member 네 개를 뜻한다. Bean 기반 integration에서 `runtimeMaxConcurrency = 4`는 하나의 member가 최대 네 개의 handler execution을 병렬로 실행할 수 있다는 뜻이다. 어떤 경우에도 member가 shard 네 개까지만 소유할 수 있다는 뜻은 아니다.

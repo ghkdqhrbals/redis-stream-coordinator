@@ -213,10 +213,19 @@ During Spring bean initialization, both managed consumers and producer routing c
 
 ```bash
 docker compose --profile coordinator up --build
-curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
+
+RSC_TOKEN="$(
+  curl -sS -H 'Content-Type: application/json' \
+    -X POST http://localhost:8080/coord/v1/auth/login \
+    -d '{"username":"admin","password":"password"}' |
+  jq -r '.accessToken'
+)"
+
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
+  http://localhost:8080/coord/v1/monitoring/health
 ```
 
-The coordinator monitoring console is available at `http://localhost:8080/console`. Sign in with the configured coordinator Basic Auth user; the local default is `admin` / `password`. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
+The coordinator monitoring console is available at `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
 
 The runtime API reference is available at `http://localhost:8080/scalar`. The published static API reference is generated from `docs/openapi/coordinator.v1.yaml`.
 

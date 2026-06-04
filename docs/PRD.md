@@ -50,7 +50,7 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Change shard count only through the Coordinator Admin API.
 * Treat bean-based `runtimeMaxConcurrency` as local worker capacity for one coordinator member, not as shard count and not as listener member count.
 * Keep coordinator YAML limited to Redis connectivity, security, event-loop defaults, and operational defaults.
-* Store per-group shard count and consumer concurrency policy in coordinator metadata.
+* Store per-group shard count in coordinator metadata. Consumer parallelism is controlled by consumer deployment/listener configuration.
 * Store each group aggregate in one Redis metadata key and use store revision CAS for updates.
 * If a consumer reports a higher metadata version than Redis currently stores, the coordinator repeatedly sends `SYNC_METADATA` until the consumer heartbeats with the current Redis metadata version.
 * During metadata correction, consumers drain removed shards and receive `REVOKE_PENDING` until conflicting previous owners are released; only `OK` permits starting newly assigned shards.

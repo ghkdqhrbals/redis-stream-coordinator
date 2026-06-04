@@ -79,7 +79,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Graceful leave with `memberEpoch=-1`.
 * [x] Member lease expiry and fencing state.
 * [x] Stale ownership report validation and fencing for unauthorized `ownedShards` or non-terminal `revokingShards`.
-* [x] Sticky assignment with balancing by server-side consumer concurrency policy.
+* [x] Sticky assignment with balancing by live logical member count.
 * [x] `assignedShards` and `pendingShards` split.
 * [x] Revoke-before-assign handoff.
 * [x] Rebalance timeout fencing.
@@ -135,7 +135,6 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * `redis_stream_coord_member_active`
   * `redis_stream_coord_member_heartbeat_age_seconds`
   * `redis_stream_coord_member_lease_remaining_seconds`
-  * `redis_stream_coord_member_assigned_max_concurrency`
   * `redis_stream_coord_member_runtime_max_concurrency`
   * `redis_stream_coord_member_active_workers`
   * `redis_stream_coord_member_current_shards`

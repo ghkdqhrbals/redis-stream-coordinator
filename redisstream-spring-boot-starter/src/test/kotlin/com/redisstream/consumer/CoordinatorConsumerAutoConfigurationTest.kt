@@ -417,7 +417,6 @@ private class RecordingCoordinatorClient(
             groupEpoch = 1,
             assignmentEpoch = 1,
             metadataVersion = 1,
-            assignedMaxConcurrency = 1,
             assignment = AssignmentView(
                 assignedShards = emptySet(),
                 pendingShards = emptySet(),

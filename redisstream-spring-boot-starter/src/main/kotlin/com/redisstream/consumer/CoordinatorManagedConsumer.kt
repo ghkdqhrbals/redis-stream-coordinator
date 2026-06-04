@@ -20,7 +20,6 @@ class CoordinatorManagedConsumer(
     private var task: ScheduledFuture<*>? = null
     private var memberEpoch: Long = 0
     private var metadataVersion: Long = 0
-    private var assignedMaxConcurrency: Int = properties.runtimeMaxConcurrency
     private var ownedShards: Set<CoordinatorShard> = emptySet()
     private var revokingShards: Map<CoordinatorShard, RevokingShardReport> = emptyMap()
     private var lastContext: CoordinatorConsumerContext = context(0, 0)
@@ -235,7 +234,6 @@ class CoordinatorManagedConsumer(
     private fun applyAssignment(response: HeartbeatResponse, context: CoordinatorConsumerContext) {
         memberEpoch = response.memberEpoch
         metadataVersion = response.metadataVersion
-        assignedMaxConcurrency = response.assignedMaxConcurrency
 
         val nextAssigned = response.assignment.assignedShards.toSortedSet()
         val newlyAssigned = nextAssigned - ownedShards
@@ -272,7 +270,6 @@ class CoordinatorManagedConsumer(
     private fun applyDrainOnlyAssignment(response: HeartbeatResponse, context: CoordinatorConsumerContext) {
         memberEpoch = response.memberEpoch
         metadataVersion = response.metadataVersion
-        assignedMaxConcurrency = response.assignedMaxConcurrency
 
         val keepReading = ownedShards
             .filter { it in response.assignment.assignedShards }
@@ -306,7 +303,6 @@ class CoordinatorManagedConsumer(
         CoordinatorConsumerContext(
             memberId = properties.memberId,
             memberName = properties.heartbeatMemberName,
-            assignedMaxConcurrency = assignedMaxConcurrency,
             metadataVersion = metadataVersion,
             groupEpoch = groupEpoch,
             assignmentEpoch = assignmentEpoch,

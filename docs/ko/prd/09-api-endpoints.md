@@ -27,7 +27,7 @@ Common headers:
 ```http
 Content-Type: application/json
 Accept: application/json
-Authorization: Basic <base64(admin:password)>
+Authorization: Bearer <token-from-POST-/coord/v1/auth/login>
 X-Request-Id: <caller-generated-id>
 ```
 
@@ -85,7 +85,6 @@ Common status codes:
 | Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | inactive group metadata 삭제 | yes | live member가 있으면 force 없이는 reject |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/scale` | stream 전체 shard scale-out/in migration 시작 | yes | active migration or same target is rejected/no-op |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing` | producer 라우팅 메타데이터 조회 | no | not required |
-| Admin | `PATCH` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` | server-side consumer `maxConcurrency` 변경 | yes | same policy returns current policy |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | migration 상태 조회 | no | not required |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | migration rollback 요청 | yes | current migration state decides acceptance |
 | Member | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat` | member liveness/owned shard 보고 및 assignment 수신 | yes | `requestId`; effective state is `memberEpoch` + `ownedShards` |
@@ -155,7 +154,6 @@ Response summary:
 | `assignmentEpoch` | Current target assignment epoch. |
 | `metadataVersion` | Current metadata version. |
 | `shardCount` | Stored shard count. |
-| `consumerConcurrencyPolicy` | Server-side consumer concurrency policy. |
 | `activeMigration` | Active migration summary or null. |
 | `targetAssignmentSummary` | Desired ownership summary. |
 | `currentAssignmentSummary` | Member-reported ownership summary. |
@@ -236,7 +234,7 @@ Request body:
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `deprecatedAfter` | no | Operational hint for rollback/drain window. |
 
-stream-level scale request에는 `consumerConcurrencyPolicy`를 넣지 않는다. consumer concurrency는 group runtime policy이므로 group-scoped consumer concurrency endpoint에서 별도로 관리한다.
+stream-level scale request는 shard count만 변경한다. consume parallelism은 consumer application이 `@StreamListener(concurrency = N)` 같은 runtime 설정으로 정한다. coordinator는 heartbeat로 들어온 logical member들을 관찰하고 assignment를 계산할 뿐, admin API로 consumer runtime parallelism을 변경하지 않는다.
 
 Compatibility note: 현재 구현 단계에서는 `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale`도 남아 있지만, 운영자가 사용할 공식 scale path는 stream-scoped endpoint이다.
 
@@ -253,36 +251,6 @@ Duplicate request behavior:
 
 * active migration이 있으면 새 migration을 만들지 않고 `409 Conflict`로 거절한다.
 * `targetShardCount`가 현재 active shard count와 같으면 새 migration을 만들지 않고 no-op response로 처리한다.
-
-### Update Consumer Concurrency
-
-```http
-PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
-```
-
-Updates member-side consumer worker limit. This does not change shard count.
-
-Request body:
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `defaultMaxConcurrency` | yes | Default consumer worker limit for members without override. |
-| `memberOverrides` | no | Optional per-member-name max concurrency override. |
-| `reason` | yes | Human-readable change reason. |
-| `requestedBy` | yes | Operator or automation identity for audit. |
-
-Response summary:
-
-| Field | Meaning |
-| --- | --- |
-| `metadataVersion` | New metadata version. |
-| `groupEpoch` | Bumped only if assignment weight policy depends on `maxConcurrency`. |
-| `consumerConcurrencyPolicy` | Stored policy. |
-| `affectedMembers` | Members that will receive changed `assignedMaxConcurrency` on heartbeat. |
-
-Duplicate request behavior:
-
-* 요청 policy가 현재 policy와 같으면 metadata를 새로 쓰지 않고 현재 policy를 반환한다.
 
 ### Get Migration
 
@@ -386,7 +354,6 @@ Response body:
 | `groupEpoch` | Latest group epoch. |
 | `assignmentEpoch` | Latest target assignment epoch. |
 | `metadataVersion` | Latest metadata version. |
-| `assignedMaxConcurrency` | Server-side consumer worker limit assigned to this member. |
 | `assignment.assignedShards` | `OK`에서는 즉시 read 가능한 shard이다. `SYNC_METADATA`와 `REVOKE_PENDING`에서는 이미 읽고 있던 shard 중 계속 유지 가능한 shard이다. |
 | `assignment.pendingShards` | Target shards blocked until previous owner releases them. |
 | `assignment.metadataVersion` | Metadata version to apply with the assignment. |

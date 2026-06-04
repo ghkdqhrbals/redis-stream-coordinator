@@ -60,7 +60,7 @@ open class CoordinatorRedisCommands(
     /**
      * Returns whether both template and connection access are available for Redis-backed features.
      */
-    fun isConfigured(): Boolean =
+    open fun isConfigured(): Boolean =
         redisTemplate != null && redisConnectionFactory != null
 
     /**

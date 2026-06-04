@@ -202,7 +202,6 @@ private class ScriptedRoutingClient(
             groupEpoch = 0,
             assignmentEpoch = 0,
             metadataVersion = 0,
-            assignedMaxConcurrency = 0,
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 

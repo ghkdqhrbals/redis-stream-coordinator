@@ -492,12 +492,13 @@ function renderMessages(page, reset) {
             <table>
                 <thead>
                 <tr>
+                    <th>Time</th>
+                    <th>Shard</th>
                     <th>Offset</th>
-                    <th>Payload</th>
                     <th>Fields</th>
                 </tr>
                 </thead>
-                <tbody>${existingRows}${rows || `<tr><td colspan="3" class="empty-line">No records.</td></tr>`}</tbody>
+                <tbody>${existingRows}${rows || `<tr><td colspan="4" class="empty-line">No records.</td></tr>`}</tbody>
             </table>
         </div>
     `;
@@ -513,11 +514,24 @@ function messageRow(record) {
         .join("");
     return `
         <tr>
+            <td>${formatRecordTime(record)}</td>
+            <td><span class="mono">:${escapeHtml(record.shard?.shardIndex ?? "-")}</span></td>
             <td><span class="mono">${escapeHtml(record.recordId)}</span></td>
-            <td><span class="message-payload">${escapeHtml(record.payload || "")}</span></td>
             <td><div class="field-list">${fields || `<span class="muted-text">empty</span>`}</div></td>
         </tr>
     `;
+}
+
+function formatRecordTime(record) {
+    const value = record.recordTime || record.recordTimestampMs;
+    if (!value) {
+        return "-";
+    }
+    const date = typeof value === "number" ? new Date(value) : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return escapeHtml(String(value));
+    }
+    return `<span class="mono">${escapeHtml(date.toLocaleString())}</span>`;
 }
 
 function renderMemberWorkload(members, assignments, progress) {

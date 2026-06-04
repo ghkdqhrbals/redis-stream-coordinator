@@ -38,7 +38,7 @@ class GroupAdminController(
         description = "Creates the coordinator source-of-truth metadata and initial shard layout for a sharded Redis Stream group. Producers and consumers fail fast when this group does not exist.",
         responses = [
             ApiResponse(responseCode = "201", description = "Group metadata was created."),
-            ApiResponse(responseCode = "409", description = "The group already exists."),
+            ApiResponse(responseCode = "409", description = "The group already exists, or the first group for this prefix would collide with existing Redis Stream keys."),
             ApiResponse(responseCode = "503", description = "Redis or stream provisioning is unavailable."),
         ],
     )

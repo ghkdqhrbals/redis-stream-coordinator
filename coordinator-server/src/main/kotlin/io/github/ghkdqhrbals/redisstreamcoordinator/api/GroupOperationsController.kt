@@ -5,18 +5,15 @@ import io.swagger.v3.oas.annotations.Hidden
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
-import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ConsumerConcurrencyResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.Migration
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ProducerRoutingResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.RollbackMigrationRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ScaleGroupRequest
-import io.github.ghkdqhrbals.redisstreamcoordinator.domain.UpdateConsumerConcurrencyRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -27,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}")
 @Tag(
     name = "Group Operations",
-    description = "Producer routing, shard resharding, consumer concurrency, and migration rollback operations.",
+    description = "Producer routing, shard resharding, and migration rollback operations.",
 )
 class GroupOperationsController(
     private val coordinator: CoordinatorService,
@@ -78,28 +75,6 @@ class GroupOperationsController(
         val migration = coordinator.scaleGroup(streamPrefix, consumerGroup, request)
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(migration)
     }
-
-    /**
-     * Updates the server-side consumer worker capacity policy without changing shard count.
-     */
-    @Operation(
-        operationId = "updateConsumerConcurrencyPolicy",
-        summary = "Update consumer concurrency policy",
-        description = "Updates the server-side consumer worker limit policy without changing shard count or producer routing.",
-        responses = [
-            ApiResponse(responseCode = "200", description = "Updated concurrency policy."),
-            ApiResponse(responseCode = "404", description = "The group does not exist."),
-        ],
-    )
-    @PatchMapping("/consumer-concurrency")
-    fun updateConsumerConcurrency(
-        @Parameter(description = "Sharded Redis Stream prefix used to build physical stream keys such as create-order:4.", example = "create-order")
-        @PathVariable streamPrefix: String,
-        @Parameter(description = "Redis Stream consumer group name.", example = "demo-workers")
-        @PathVariable consumerGroup: String,
-        @Valid @RequestBody request: UpdateConsumerConcurrencyRequest,
-    ): ConsumerConcurrencyResponse =
-        coordinator.updateConsumerConcurrency(streamPrefix, consumerGroup, request)
 
     /**
      * Returns one recorded resharding migration by id.

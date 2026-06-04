@@ -146,7 +146,10 @@ class CoordinatorService(
     fun createStream(streamPrefix: String, request: CreateStreamRequest): StreamCreateResponse {
         val existingGroups = stateStore.list().filter { it.streamPrefix == streamPrefix }
         if (existingGroups.isNotEmpty()) {
-            throw CoordinatorException(CoordinatorError.GROUP_ALREADY_EXISTS)
+            throw CoordinatorException(
+                CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
+                "Stream prefix '$streamPrefix' is already managed by coordinator metadata",
+            )
         }
         val response = createGroupOnce(streamPrefix, defaultStreamConsumerGroup(streamPrefix), request.toGroupRequest())
         return StreamCreateResponse(
@@ -167,8 +170,9 @@ class CoordinatorService(
 
         val now = Instant.now(clock)
         val shardCount = request.initialShardCount ?: properties.defaults.initialShardCount
-        val policy = request.consumerConcurrencyPolicy
-            ?: ConsumerConcurrencyPolicy(properties.defaults.consumerMaxConcurrency)
+        if (stateStore.list().none { it.streamPrefix == streamPrefix }) {
+            requireStreamPrefixNotAlreadyMaterialized(streamPrefix, shardCount)
+        }
         val group = GroupMetadata(
             streamPrefix = streamPrefix,
             consumerGroup = consumerGroup,
@@ -177,7 +181,6 @@ class CoordinatorService(
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
             shardCount = shardCount,
-            consumerConcurrencyPolicy = policy,
             createdAt = now,
             updatedAt = now,
         )
@@ -196,6 +199,21 @@ class CoordinatorService(
         }
         recordGroupState(group)
         return group.toResponse()
+    }
+
+    private fun requireStreamPrefixNotAlreadyMaterialized(streamPrefix: String, shardCount: Int) {
+        if (!properties.streams.provisioningEnabled || !redisCommands.isConfigured()) {
+            return
+        }
+
+        val existingKeys = (listOf(streamPrefix) + RedisStreamShardKeys.forShardCount(streamPrefix, shardCount).map { it.value })
+            .filter(redisCommands::hasKey)
+        if (existingKeys.isNotEmpty()) {
+            throw CoordinatorException(
+                CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
+                "Stream prefix '$streamPrefix' already has Redis key(s): ${existingKeys.joinToString(", ")}",
+            )
+        }
     }
 
     private fun defaultStreamConsumerGroup(streamPrefix: String): String =
@@ -391,74 +409,12 @@ class CoordinatorService(
         migration.state = MigrationState.ACTIVE
         migration.updatedAt = now
         group.shardCount = migration.toShardCount
-        request.consumerConcurrencyPolicy?.let { group.consumerConcurrencyPolicy = it }
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
         enforceRebalanceTimeouts(group, now)
         stateStore.save(group.key(), group)
         recordGroupState(group)
         return migration
-    }
-
-    /**
-     * Updates member concurrency weights and triggers reassignment when effective capacity changes.
-     */
-    @CriticalSection(operation = "update-consumer-concurrency")
-    fun updateConsumerConcurrency(
-        streamPrefix: String,
-        consumerGroup: String,
-        request: UpdateConsumerConcurrencyRequest,
-    ): ConsumerConcurrencyResponse {
-        try {
-            val response = withStateConflictRetry("update-consumer-concurrency") {
-                updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request)
-            }
-            metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "SUCCESS")
-            return response
-        } catch (error: RuntimeException) {
-            metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "ERROR")
-            throw error
-        }
-    }
-
-    /**
-     * Applies a concurrency policy update inside the already-held state mutex.
-     */
-    private fun updateConsumerConcurrencyOnce(
-        streamPrefix: String,
-        consumerGroup: String,
-        request: UpdateConsumerConcurrencyRequest,
-    ): ConsumerConcurrencyResponse {
-        val group = requireGroup(streamPrefix, consumerGroup)
-        requireNoMetadataCorrection(group)
-        val nextPolicy = ConsumerConcurrencyPolicy(request.defaultMaxConcurrency, request.memberOverrides)
-        if (group.consumerConcurrencyPolicy != nextPolicy) {
-            val now = Instant.now(clock)
-            val previousTargetAssignments = group.targetAssignmentSnapshot()
-            group.consumerConcurrencyPolicy = nextPolicy
-            group.members.values.forEach { it.assignedMaxConcurrency = group.assignedMaxConcurrency(it.memberName) }
-            reconcile(group, now)
-            if (group.targetAssignmentSnapshot() != previousTargetAssignments) {
-                bumpMetadata(group, now, bumpGroupEpoch = true)
-                reconcile(group, now)
-            } else {
-                bumpMetadata(group, now, bumpGroupEpoch = false)
-            }
-            enforceRebalanceTimeouts(group, now)
-            stateStore.save(group.key(), group)
-        }
-        recordGroupState(group)
-
-        return ConsumerConcurrencyResponse(
-            streamPrefix = streamPrefix,
-            consumerGroup = consumerGroup,
-            metadataVersion = group.metadataVersion,
-            groupEpoch = group.groupEpoch,
-            consumerConcurrencyPolicy = group.consumerConcurrencyPolicy,
-            affectedMembers = group.members.values
-                .filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
-                .map { it.memberId },
-        )
     }
 
     /**
@@ -634,7 +590,6 @@ class CoordinatorService(
         member.activeConsumerWorkers =
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
-        member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
         member.rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis()
         member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else ownershipReport.ownedShards
         if (member.state == MemberState.LEAVING) {
@@ -683,7 +638,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = member.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -1010,7 +964,6 @@ class CoordinatorService(
                         metadataVersion = member.metadataVersion,
                         currentShardCount = member.currentAssignment.size,
                         revokingShardCount = member.revoking.size,
-                        assignedMaxConcurrency = member.assignedMaxConcurrency,
                         runtimeMaxConcurrency = member.runtimeMaxConcurrency,
                         activeConsumerWorkers = member.activeConsumerWorkers,
                         lastHeartbeatAt = member.lastHeartbeatAt,
@@ -1726,7 +1679,6 @@ class CoordinatorService(
             state = MemberState.STARTING,
             memberEpoch = nextEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = group.assignedMaxConcurrency(memberName),
             runtimeMaxConcurrency = request.runtimeConsumerCapacity.runtimeMaxConcurrency,
             activeConsumerWorkers = 0,
             currentAssignment = emptySet(),
@@ -1800,7 +1752,6 @@ class CoordinatorService(
         member.activeConsumerWorkers =
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
-        member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
         member.rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis()
         member.lastHeartbeatAt = now
         member.memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl)
@@ -1819,7 +1770,6 @@ class CoordinatorService(
         member.activeConsumerWorkers =
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
-        member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
         member.rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis()
         member.lastHeartbeatAt = now
         member.memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl)
@@ -1954,7 +1904,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = existing.assignedMaxConcurrency,
             assignment = AssignmentView(emptySet(), emptySet(), group.metadataVersion),
         )
 
@@ -1982,7 +1931,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = existing.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -2011,7 +1959,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = existing.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -2043,7 +1990,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = member.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -2067,7 +2013,6 @@ class CoordinatorService(
             groupEpoch = 0,
             assignmentEpoch = 0,
             metadataVersion = 0,
-            assignedMaxConcurrency = 0,
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
@@ -2286,36 +2231,32 @@ class CoordinatorService(
 
         unassigned.sorted().forEach { shard ->
             val owner = liveMembers.minWith(compareBy<MemberMetadata> {
-                result.getValue(it.memberId).size.toDouble() / group.memberWeight(it)
+                result.getValue(it.memberId).size
             }.thenBy { it.memberId })
             result.getValue(owner.memberId).add(shard)
         }
 
-        balanceExistingAssignments(
-            result,
-            liveMembers.associate { it.memberId to group.memberWeight(it) },
-        )
+        balanceExistingAssignments(result)
 
         return result
     }
 
     /**
-     * Moves shards from overloaded members only when the weighted load spread improves.
+     * Moves shards from overloaded members only when the shard-count spread improves.
      */
     private fun balanceExistingAssignments(
         assignments: MutableMap<String, MutableSet<ShardId>>,
-        memberWeights: Map<String, Int>,
     ) {
         if (assignments.size <= 1) return
 
         while (true) {
-            val currentSpread = assignmentSpread(assignments, memberWeights)
-            val mostLoaded = assignments.maxWith(weightedLoadComparator(memberWeights).thenByDescending { it.key })
-            val leastLoaded = assignments.minWith(weightedLoadComparator(memberWeights).thenBy { it.key })
+            val currentSpread = assignmentSpread(assignments)
+            val mostLoaded = assignments.maxWith(memberLoadComparator().thenByDescending { it.key })
+            val leastLoaded = assignments.minWith(memberLoadComparator().thenBy { it.key })
             val movedShard = mostLoaded.value.sortedDescending().firstOrNull { shard ->
                 mostLoaded.value.remove(shard)
                 leastLoaded.value.add(shard)
-                val improves = assignmentSpread(assignments, memberWeights) < currentSpread
+                val improves = assignmentSpread(assignments) < currentSpread
                 leastLoaded.value.remove(shard)
                 mostLoaded.value.add(shard)
                 improves
@@ -2326,15 +2267,12 @@ class CoordinatorService(
         }
     }
 
-    private fun weightedLoadComparator(memberWeights: Map<String, Int>): Comparator<Map.Entry<String, MutableSet<ShardId>>> =
-        compareBy { entry -> entry.value.size.toDouble() / memberWeights.getValue(entry.key) }
+    private fun memberLoadComparator(): Comparator<Map.Entry<String, MutableSet<ShardId>>> =
+        compareBy { entry -> entry.value.size }
 
-    private fun assignmentSpread(
-        assignments: Map<String, Set<ShardId>>,
-        memberWeights: Map<String, Int>,
-    ): Double {
-        val loads = assignments.map { (memberId, shards) -> shards.size.toDouble() / memberWeights.getValue(memberId) }
-        return (loads.maxOrNull() ?: 0.0) - (loads.minOrNull() ?: 0.0)
+    private fun assignmentSpread(assignments: Map<String, Set<ShardId>>): Int {
+        val loads = assignments.map { (_, shards) -> shards.size }
+        return (loads.maxOrNull() ?: 0) - (loads.minOrNull() ?: 0)
     }
 
     /**
@@ -2388,13 +2326,6 @@ class CoordinatorService(
     private fun GroupMetadata.liveMembers(): List<MemberMetadata> =
         members.values.filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
 
-    private fun GroupMetadata.assignedMaxConcurrency(memberName: String): Int =
-        consumerConcurrencyPolicy.memberOverrides[memberName]
-            ?: consumerConcurrencyPolicy.defaultMaxConcurrency
-
-    private fun GroupMetadata.memberWeight(member: MemberMetadata): Int =
-        assignedMaxConcurrency(member.memberName).coerceAtLeast(1)
-
     private fun MemberMetadata.isPrunable(now: Instant, retention: Duration): Boolean {
         val terminal = when (state) {
             MemberState.EXPIRED, MemberState.FENCED -> true
@@ -2435,7 +2366,6 @@ class CoordinatorService(
             assignmentEpoch = assignmentEpoch,
             metadataVersion = metadataVersion,
             shardCount = shardCount,
-            consumerConcurrencyPolicy = consumerConcurrencyPolicy,
             activeMigration = activeReshardingId?.let { migrations[it] },
             targetAssignmentSummary = targetAssignments.mapValues { it.value.size },
             currentAssignmentSummary = members.values
