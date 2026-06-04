@@ -858,14 +858,21 @@ button {
 
 .stream-overview {
     display: grid;
-    gap: 12px;
+    gap: 8px;
+    overflow: visible;
 }
 
 .stream-card {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: #121922;
-    padding: 13px;
+    padding: 10px;
+    overflow: visible;
+}
+
+.compact-stream-card {
+    display: grid;
+    gap: 8px;
 }
 
 .stream-card-head,
@@ -879,7 +886,7 @@ button {
 .stream-card-head strong,
 .stream-group-head strong {
     color: var(--text);
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .stream-card-head small,
@@ -893,25 +900,27 @@ button {
 .stream-card-stats {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
     justify-content: flex-end;
 }
 
 .stream-card-stats span {
-    min-height: 24px;
+    min-height: 22px;
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: 6px;
     background: #0f151c;
     color: var(--muted-strong);
-    padding: 4px 8px;
+    padding: 3px 7px;
     font-size: 11px;
     font-weight: 760;
 }
 
-.stream-card-groups {
+.stream-card-groups,
+.stream-group-selector {
     display: grid;
-    gap: 10px;
-    margin-top: 12px;
+    gap: 7px;
+    margin-top: 0;
+    overflow: visible;
 }
 
 .stream-group-card {
@@ -919,6 +928,70 @@ button {
     border-radius: var(--radius);
     background: rgba(255, 255, 255, 0.015);
     padding: 11px;
+}
+
+.stream-group-option {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.015);
+    color: var(--text);
+    cursor: pointer;
+    padding: 8px;
+    text-align: left;
+    transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    overflow: visible;
+}
+
+.stream-group-option:hover,
+.stream-group-option:focus-visible {
+    border-color: rgba(125, 211, 252, 0.42);
+    background: rgba(125, 211, 252, 0.055);
+    outline: none;
+}
+
+.stream-group-option.selected {
+    border-color: rgba(125, 211, 252, 0.72);
+    background: rgba(14, 165, 233, 0.1);
+    box-shadow: inset 3px 0 0 rgba(125, 211, 252, 0.85);
+}
+
+.stream-group-option-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.stream-group-option-head strong {
+    display: block;
+    font-size: 12px;
+    color: var(--text);
+}
+
+.stream-group-option-head small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.stream-group-option-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.stream-group-option-meta b {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: rgba(15, 23, 42, 0.7);
+    color: var(--muted-strong);
+    padding: 2px 5px;
+    font-size: 10px;
+    font-weight: 780;
+    white-space: nowrap;
 }
 
 .health-dot {
@@ -959,27 +1032,87 @@ button {
 
 .mini-shard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-    gap: 7px;
-    margin-top: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(28px, 28px));
+    gap: 5px;
+    margin-top: 7px;
+    overflow: visible;
 }
 
 .mini-shard {
     display: inline-grid;
-    min-width: 38px;
-    min-height: 32px;
+    position: relative;
+    min-width: 28px;
+    min-height: 24px;
     place-items: center;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 5px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 820;
     transition: transform 120ms ease, filter 120ms ease;
+    outline: none;
 }
 
-.mini-shard:hover {
+.mini-shard:hover,
+.mini-shard:focus-visible {
     filter: brightness(1.15);
     transform: translateY(1px) scale(0.98);
+}
+
+.shard-popover {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    z-index: 40;
+    display: none;
+    width: 230px;
+    transform: translateX(-50%);
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 7px;
+    background: #070b10;
+    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.45);
+    color: var(--text);
+    padding: 8px;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    line-height: 1.35;
+    pointer-events: none;
+}
+
+.shard-popover::after {
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    width: 8px;
+    height: 8px;
+    content: "";
+    transform: translate(-50%, -4px) rotate(45deg);
+    border-right: 1px solid rgba(148, 163, 184, 0.32);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.32);
+    background: #070b10;
+}
+
+.shard-popover strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.shard-popover span {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--muted-strong);
+}
+
+.shard-popover b {
+    color: var(--muted);
+    font-weight: 720;
+}
+
+.mini-shard:hover .shard-popover,
+.mini-shard:focus-visible .shard-popover {
+    display: block;
 }
 
 .groups-table {

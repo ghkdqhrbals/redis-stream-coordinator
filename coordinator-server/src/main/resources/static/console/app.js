@@ -475,56 +475,77 @@ function renderStreamOverview(shards, groups) {
         .map(([streamPrefix, streamGroups]) => {
             const streamLag = streamGroups.reduce((sum, group) => sum + Number(group.totalLag || 0), 0);
             const streamEntries = Math.max(...streamGroups.map((group) => Number(group.totalStreamLength || 0)), 0);
+            const streamMemory = Math.max(...streamGroups.map((group) => Number(group.totalMemoryUsageBytes || 0)), 0);
+            const streamShardCount = Math.max(...streamGroups.map((group) => Number(group.shardCount || 0)), 0);
             return `
-                <section class="stream-card">
+                <section class="stream-card compact-stream-card">
                     <div class="stream-card-head">
                         <div>
                             <span class="health-dot ${streamLag > 0 ? "warn" : "ok"}"></span>
                             <strong>${escapeHtml(streamPrefix)}</strong>
-                            <small>${streamGroups.length} consumer group${streamGroups.length === 1 ? "" : "s"}</small>
+                            <small>${streamGroups.length} group${streamGroups.length === 1 ? "" : "s"} · ${streamShardCount} shards</small>
                         </div>
                         <div class="stream-card-stats">
                             <span>lag ${compactNumber(streamLag)}</span>
                             <span>entries ${compactNumber(streamEntries)}</span>
+                            <span>${formatBytes(streamMemory)}</span>
                         </div>
                     </div>
-                    <div class="stream-card-groups">
+                    <div class="stream-group-selector" role="list" aria-label="${escapeAttr(streamPrefix)} consumer groups">
                         ${streamGroups.sort((a, b) => a.consumerGroup.localeCompare(b.consumerGroup)).map((group) => {
                             const rows = (shardsByGroup.get(groupKey(group)) || []).sort((a, b) => Number(a.shardIndex) - Number(b.shardIndex));
+                            const key = groupKey(group);
+                            const selected = key === state.selectedKey ? " selected" : "";
                             return `
-                                <section class="stream-group-card">
-                                    <div class="stream-group-head">
-                                        <strong>${escapeHtml(group.consumerGroup)}</strong>
-                                        <span>${escapeHtml(group.state)} · ${escapeHtml(group.assignedShardRatio || `${group.currentShards}/${group.shardCount}`)} assigned</span>
+                                <button class="stream-group-option${selected}" type="button" data-key="${escapeAttr(key)}">
+                                    <div class="stream-group-option-head">
+                                        <span>
+                                            <strong>${escapeHtml(group.consumerGroup)}</strong>
+                                            <small>${escapeHtml(group.state)} · ${escapeHtml(group.assignedShardRatio || `${group.currentShards}/${group.shardCount}`)} assigned</small>
+                                        </span>
+                                        <span class="stream-group-option-meta">
+                                            <b>members ${compactNumber(group.activeMembers || 0)}/${compactNumber(group.totalMembers || 0)}</b>
+                                            <b>lag ${compactNumber(group.totalLag || 0)}</b>
+                                            <b>pending ${compactNumber(group.totalPendingCount || 0)}</b>
+                                        </span>
                                     </div>
                                     <div class="mini-shard-grid">
                                         ${rows.map((shard) => miniShard(shard)).join("") || `<p class="empty-line">No shards.</p>`}
                                     </div>
-                                </section>
+                                </button>
                             `;
                         }).join("")}
                     </div>
                 </section>
             `;
         }).join("");
+
+    elements.streamOverview.querySelectorAll(".stream-group-option").forEach((button) => {
+        button.addEventListener("click", () => selectGroup(button.dataset.key));
+    });
 }
 
 function miniShard(shard) {
     const lag = numberOrNull(shard.lag);
     const tone = lag === null ? "unknown" : lag === 0 ? "ok" : lag < 100 ? "warn" : "bad";
     const owner = shard.currentOwnerMemberIds || shard.targetOwnerMemberIds || "-";
-    const detail = [
-        `:${shard.shardIndex}`,
-        `lag ${valueOrDash(shard.lag)}`,
-        `length ${compactNumber(shard.streamLength)}`,
-        `pending ${compactNumber(shard.pendingCount)}`,
-        `owner ${owner}`,
-        `redis ${shard.redisNodeEndpoint || "-"}`,
-        `produced/s ${valueOrDash(formatRate(shard.producedPerSecond))}`,
-        `consumed/s ${valueOrDash(formatRate(shard.consumedPerSecond))}`,
-        `memory ${formatBytes(shard.memoryUsageBytes)}`,
-    ].join(" / ");
-    return `<span class="mini-shard ${tone}" title="${escapeAttr(detail)}" aria-label="${escapeAttr(detail)}">:${escapeHtml(shard.shardIndex)}</span>`;
+    const detail = `:${shard.shardIndex} / lag ${valueOrDash(shard.lag)} / length ${compactNumber(shard.streamLength)} / owner ${owner}`;
+    return `
+        <span class="mini-shard ${tone}" tabindex="0" aria-label="${escapeAttr(detail)}">
+            :${escapeHtml(shard.shardIndex)}
+            <span class="shard-popover" role="tooltip">
+                <strong>Shard :${escapeHtml(shard.shardIndex)}</strong>
+                <span><b>Lag</b>${valueOrDash(shard.lag)}</span>
+                <span><b>Length</b>${compactNumber(shard.streamLength)}</span>
+                <span><b>Pending</b>${compactNumber(shard.pendingCount)}</span>
+                <span><b>Owner</b>${escapeHtml(owner)}</span>
+                <span><b>Redis</b>${escapeHtml(shard.redisNodeEndpoint || "-")}</span>
+                <span><b>Produced/s</b>${valueOrDash(formatRate(shard.producedPerSecond))}</span>
+                <span><b>Consumed/s</b>${valueOrDash(formatRate(shard.consumedPerSecond))}</span>
+                <span><b>Memory</b>${formatBytes(shard.memoryUsageBytes)}</span>
+            </span>
+        </span>
+    `;
 }
 
 function renderGrafanaGroupsTable(groups) {
@@ -741,21 +762,27 @@ function renderGroups() {
         }).join("");
 
     elements.groupList.querySelectorAll(".group-row").forEach((button) => {
-        button.addEventListener("click", () => {
-            state.selectedKey = button.dataset.key;
-            const group = selectedGroup();
-            if (group) {
-                state.globalMessages.streamPrefix = group.streamPrefix;
-                state.globalMessages.consumerGroup = group.consumerGroup;
-                state.globalMessages.shardIndex = "all";
-                resetGlobalMessages();
-                renderGlobalMessageSelectors();
-                loadGlobalMessages();
-                renderGrafanaLinks();
-            }
-            renderGroups();
-        });
+        button.addEventListener("click", () => selectGroup(button.dataset.key));
     });
+}
+
+function selectGroup(key) {
+    state.selectedKey = key;
+    const group = selectedGroup();
+    if (!group) {
+        renderGroups();
+        renderStreamOverview(state.grafanaShards, state.grafanaGroups);
+        return;
+    }
+    state.globalMessages.streamPrefix = group.streamPrefix;
+    state.globalMessages.consumerGroup = group.consumerGroup;
+    state.globalMessages.shardIndex = "all";
+    resetGlobalMessages();
+    renderGroups();
+    renderStreamOverview(state.grafanaShards, state.grafanaGroups);
+    renderGlobalMessageSelectors();
+    loadGlobalMessages();
+    renderGrafanaLinks();
 }
 
 function renderGroupDetail(group) {
