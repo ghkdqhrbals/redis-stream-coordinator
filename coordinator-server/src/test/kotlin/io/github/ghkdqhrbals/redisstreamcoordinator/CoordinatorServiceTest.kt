@@ -353,7 +353,13 @@ class CoordinatorServiceTest {
     fun `grafana shard rows expose produced and consumed rates after repeated observations`() {
         val redis = FakeOffsetRedisCommands()
         redis.setShard(streamKey = "rate-orders:0", length = 100, lag = 20)
-        val service = service(clock, redisCommands = redis)
+        val service = service(
+            clock,
+            redisCommands = redis,
+            properties = CoordinatorProperties(
+                monitoring = CoordinatorProperties.Monitoring(offsetCacheTtlMs = 0),
+            ),
+        )
         service.createGroup("rate-orders", "orders-consumer", createGroupRequest(initialShardCount = 1))
 
         val first = service.grafanaShards("rate-orders", "orders-consumer").single()
@@ -373,14 +379,19 @@ class CoordinatorServiceTest {
         val redis = FakeOffsetRedisCommands()
         redis.setShard(streamKey = "rate-group-orders:0", length = 100, lag = 20)
         redis.setShard(streamKey = "rate-group-orders:1", length = 200, lag = 30)
-        val service = service(clock, redisCommands = redis)
+        val service = service(
+            clock,
+            redisCommands = redis,
+            properties = CoordinatorProperties(
+                monitoring = CoordinatorProperties.Monitoring(offsetCacheTtlMs = 0),
+            ),
+        )
         service.createGroup("rate-group-orders", "orders-consumer", createGroupRequest(initialShardCount = 2))
 
         service.grafanaGroups().single { it.streamPrefix == "rate-group-orders" }
         clock.advance(Duration.ofSeconds(20))
         redis.setShard(streamKey = "rate-group-orders:0", length = 150, lag = 30)
         redis.setShard(streamKey = "rate-group-orders:1", length = 260, lag = 20)
-
         val row = service.grafanaGroups().single { it.streamPrefix == "rate-group-orders" }
 
         assertEquals(5.5, row.producedPerSecond)

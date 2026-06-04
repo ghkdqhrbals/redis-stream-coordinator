@@ -118,6 +118,7 @@ class CoordinatorService(
     private val shardRateSnapshots = ConcurrentHashMap<ShardRateKey, ShardRateSnapshot>()
     private val monitoringOffsetCache = ConcurrentHashMap<MonitoringOffsetCacheKey, MonitoringOffsetCacheEntry>()
     private val monitoringOffsetLocks = ConcurrentHashMap<MonitoringOffsetCacheKey, Any>()
+    private val monitoringOffsetRefreshInFlight = ConcurrentHashMap<MonitoringOffsetCacheKey, AtomicBoolean>()
     private val redisHealthRefreshInFlight = AtomicBoolean(false)
     @Volatile
     private var redisHealthCache: RedisHealthCacheEntry? = null
@@ -2540,18 +2541,24 @@ class CoordinatorService(
         val now = Instant.now(clock)
         val key = MonitoringOffsetCacheKey(streamPrefix, consumerGroup)
         val cached = monitoringOffsetCache[key]
-        if (cached != null && cached.shardCount == shardCount && now.isBefore(cached.expiresAt)) {
+        if (cached != null && cached.shardCount == shardCount) {
+            if (now.isBefore(cached.expiresAt)) {
+                return cached.offsets
+            }
+            refreshMonitoringOffsetCacheAsync(key, cacheTtl)
             return cached.offsets
         }
         val lock = monitoringOffsetLocks.computeIfAbsent(key) { Any() }
         return synchronized(lock) {
             val refreshedNow = Instant.now(clock)
             val refreshedCached = monitoringOffsetCache[key]
-            if (refreshedCached != null &&
-                refreshedCached.shardCount == shardCount &&
-                refreshedNow.isBefore(refreshedCached.expiresAt)
-            ) {
-                refreshedCached.offsets
+            if (refreshedCached != null && refreshedCached.shardCount == shardCount) {
+                if (refreshedNow.isBefore(refreshedCached.expiresAt)) {
+                    refreshedCached.offsets
+                } else {
+                    refreshMonitoringOffsetCacheAsync(key, cacheTtl)
+                    refreshedCached.offsets
+                }
             } else {
                 toStreamShardOffsets().also { offsets ->
                     monitoringOffsetCache[key] = MonitoringOffsetCacheEntry(
@@ -2562,6 +2569,28 @@ class CoordinatorService(
                 }
             }
         }
+    }
+
+    private fun GroupMetadata.refreshMonitoringOffsetCacheAsync(
+        key: MonitoringOffsetCacheKey,
+        cacheTtl: Duration,
+    ) {
+        val refreshFlag = monitoringOffsetRefreshInFlight.computeIfAbsent(key) { AtomicBoolean(false) }
+        if (!refreshFlag.compareAndSet(false, true)) {
+            return
+        }
+        CompletableFuture.runAsync({
+            try {
+                val offsets = toStreamShardOffsets()
+                monitoringOffsetCache[key] = MonitoringOffsetCacheEntry(
+                    shardCount = shardCount,
+                    expiresAt = Instant.now(clock).plus(cacheTtl),
+                    offsets = offsets,
+                )
+            } finally {
+                refreshFlag.set(false)
+            }
+        }, monitoringGroupExecutor)
     }
 
     private fun MemberMetadata.isLiveOwner(): Boolean =
