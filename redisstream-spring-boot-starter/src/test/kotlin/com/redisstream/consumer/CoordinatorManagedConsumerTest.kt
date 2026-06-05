@@ -397,7 +397,9 @@ class CoordinatorManagedConsumerTest {
         consumer.pollOnce()
 
         assertEquals(1, lifecycle.fencedCount)
+        assertEquals(listOf(assigned, assigned), lifecycle.assigned)
         assertEquals(0, client.requests[2].memberEpoch)
+        assertEquals(0, client.requests[2].metadataVersion)
         assertEquals(emptySet(), client.requests[2].ownedShards)
         assertEquals(emptyList(), client.requests[2].revokingShards)
     }
@@ -430,6 +432,7 @@ class CoordinatorManagedConsumerTest {
         consumer.pollOnce()
 
         assertEquals(0, client.requests[2].memberEpoch)
+        assertEquals(0, client.requests[2].metadataVersion)
         assertEquals(emptySet(), client.requests[2].ownedShards)
         assertEquals(emptyList(), client.requests[2].revokingShards)
     }

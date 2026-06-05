@@ -2012,6 +2012,38 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `unknown member can rejoin with zero epoch and receive assignment`() {
+        service.createGroup("unknown-member-rejoin", "orders-consumer", createGroupRequest(initialShardCount = 2))
+
+        val unknown = service.heartbeat(
+            "unknown-member-rejoin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 7, ownedShards = setOf(ShardId(0))),
+        )
+        val rejoined = service.heartbeat(
+            "unknown-member-rejoin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = 0),
+        )
+        val acknowledged = service.heartbeat(
+            "unknown-member-rejoin",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = rejoined.memberEpoch, ownedShards = rejoined.assignment.assignedShards),
+        )
+        val assignments = service.assignments("unknown-member-rejoin", "orders-consumer")
+
+        assertEquals(HeartbeatStatus.UNKNOWN_MEMBER_ID, unknown.status)
+        assertEquals(HeartbeatStatus.OK, rejoined.status)
+        assertEquals(setOf(ShardId(0), ShardId(1)), rejoined.assignment.assignedShards)
+        assertEquals(HeartbeatStatus.OK, acknowledged.status)
+        assertEquals(setOf(ShardId(0), ShardId(1)), assignments.currentAssignments.getValue("member-a"))
+        assertTrue(assignments.invariantViolations.isEmpty())
+    }
+
+    @Test
     fun `heartbeat fences member that reports pending shard ownership before revoke completes`() {
         service.createGroup("premature-ownership", "orders-consumer", createGroupRequest(initialShardCount = 2))
         val memberA = service.heartbeat(

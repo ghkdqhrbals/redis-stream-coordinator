@@ -233,6 +233,7 @@ Coordinator는 Kubernetes readiness, service endpoint propagation, external load
 | --- | --- | --- | --- |
 | 새 consumer join | 불필요한 full rebalance | member 등록, epoch 발급, 필요할 때만 sticky target assignment 재계산 | heartbeat response의 assigned/pending shard 적용 |
 | 기존 consumer가 `memberEpoch=0`으로 rejoin | stale ownership report | rejoin 처리 후 target/current assignment 기준으로 ownership 검증 | coordinator가 반환하지 않은 shard 중단 |
+| Coordinator가 `UNKNOWN_MEMBER_ID` 반환 | Consumer가 stale epoch을 계속 보내 assignment를 받지 못함 | stale heartbeat는 ownership 없이 거절하고, 같은 member가 `memberEpoch=0`으로 다시 오면 rejoin으로 수락 | ownership/revoking state를 비우고 `memberEpoch=0` full heartbeat 전송, 이후 assigned shard만 시작 |
 | consumer가 unassigned shard를 owned로 보고 | split ownership | stale report 거절 또는 fence | read 중단 후 rejoin |
 | graceful leave | shard가 너무 일찍 재할당될 수 있음 | `LEAVING` 표시, release 전까지 새 owner에는 pending 유지 | read 중단, drain, `REVOKED` 보고 |
 | leave 없이 crash | timeout까지 shard stuck | member lease TTL 이후 expire하고 assignment 재계산 | 복구 process는 `memberEpoch=0`으로 rejoin |

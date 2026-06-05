@@ -78,6 +78,8 @@ The coordinator compares both views to enforce safety:
 
 `memberEpoch` increments when the coordinator needs to fence stale member state or acknowledge a new member lifecycle. A member that sends a heartbeat with an old epoch can be fenced and required to rejoin.
 
+If the coordinator returns `UNKNOWN_MEMBER_ID`, the consumer must treat its local ownership as invalid. The consumer stops reads and ACKs, clears local owned and revoking shard state, and sends the next full heartbeat with the same `memberId` and `memberEpoch=0`. When the group still exists, this heartbeat is a rejoin request and the coordinator can issue a fresh member epoch and assignment.
+
 ### Store Revision
 
 `storeRevision` protects Redis-backed group metadata from stale overwrites. It is incremented only with committed metadata updates and remains the final compare-and-set guard when a process resumes with an old snapshot.

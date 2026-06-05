@@ -77,6 +77,8 @@ Invariant:
 * member data-plane은 `memberEpoch`과 `assignmentEpoch`이 유효한 assignment에서만 read/ack한다.
 * `STABLE` group에서는 active member의 current assignment 합집합이 target assignment와 같아야 한다.
 
+Coordinator가 `UNKNOWN_MEMBER_ID`를 반환하면 consumer는 local ownership이 더 이상 유효하지 않다고 판단해야 한다. Consumer는 read/ack를 중단하고 local owned shard와 revoking shard 상태를 비운 뒤, 같은 `memberId`와 `memberEpoch=0`으로 full heartbeat를 다시 보낸다. Group metadata가 여전히 존재하면 이 heartbeat는 rejoin 요청이며, coordinator는 새 member epoch과 assignment를 내려줄 수 있다.
+
 ## Member Metadata
 
 ```json
