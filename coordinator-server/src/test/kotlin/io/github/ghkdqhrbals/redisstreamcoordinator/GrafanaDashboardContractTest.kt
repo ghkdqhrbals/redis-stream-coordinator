@@ -29,10 +29,10 @@ class GrafanaDashboardContractTest {
         val importDashboard = readImportDashboard("redis-stream-coordinator-stream-detail.json")
 
         listOf(dashboard, importDashboard).forEach { content ->
-            val timeIndex = content.indexOf("<th>Time</th>")
-            val shardIndex = content.indexOf("<th>Shard</th>")
-            val offsetIndex = content.indexOf("""<th class=\"rsc-message-offset\">Offset</th>""")
-            val fieldsIndex = content.indexOf("<th>Fields</th>")
+            val timeIndex = content.indexOf("<th>Time")
+            val shardIndex = content.indexOf("<th>Shard")
+            val offsetIndex = content.indexOf("""<th class=\"rsc-message-offset\">Offset""")
+            val fieldsIndex = content.indexOf("<th>Fields")
 
             assertTrue(timeIndex >= 0)
             assertTrue(timeIndex < shardIndex)
@@ -44,6 +44,31 @@ class GrafanaDashboardContractTest {
             assertTrue(!content.contains("<th>Payload</th>"))
             assertTrue(!content.contains("""rsc-message-payload"""))
         }
+    }
+
+    @Test
+    fun `stream messages tables expose resizable columns`() {
+        val dashboard = readDashboard("redis-stream-coordinator-stream-detail.json")
+        val importDashboard = readImportDashboard("redis-stream-coordinator-stream-detail.json")
+        val indexHtml = readStaticConsole("index.html")
+        val messagesHtml = readStaticConsole("messages.html")
+        val appJs = readStaticConsole("app.js")
+        val resizeJs = readStaticConsole("table-resize.js")
+
+        listOf(dashboard, importDashboard).forEach { content ->
+            assertTrue(content.contains("""data-role": "message-table""") || content.contains("""data-role=\"message-table\""""))
+            assertTrue(content.contains("rsc-message-resize-handle"))
+            assertTrue(content.contains("function bindColumnResize()"))
+            assertTrue(content.contains("redisStreamCoordinator.grafana.messageTableWidths"))
+        }
+        listOf(indexHtml, messagesHtml).forEach { content ->
+            assertTrue(content.contains("resizable-message-table"))
+            assertTrue(content.contains("column-resize-handle"))
+            assertTrue(content.contains("""/console/table-resize.js"""))
+        }
+        assertTrue(appJs.contains("window.initResizableTables"))
+        assertTrue(resizeJs.contains("function initResizableTables"))
+        assertTrue(resizeJs.contains("redisStreamCoordinator.console.tableWidths."))
     }
 
     @Test

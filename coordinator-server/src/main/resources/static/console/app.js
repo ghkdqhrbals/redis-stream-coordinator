@@ -992,19 +992,28 @@ function renderMessages(page, reset) {
             <button id="messageOlderButton" class="ghost-button small" type="button" ${page.nextCursor ? "" : "disabled"}>Load older</button>
         </div>
         <div class="table-wrap">
-            <table>
+            <table class="message-table resizable-message-table" data-resizable-table="group-message-browser">
+                <colgroup>
+                    <col style="width: 190px">
+                    <col style="width: 90px">
+                    <col style="width: 190px">
+                    <col>
+                </colgroup>
                 <thead>
                 <tr>
-                    <th>Time</th>
-                    <th>Shard</th>
-                    <th>Offset</th>
-                    <th>Fields</th>
+                    <th>Time<span class="column-resize-handle" aria-hidden="true"></span></th>
+                    <th>Shard<span class="column-resize-handle" aria-hidden="true"></span></th>
+                    <th>Offset<span class="column-resize-handle" aria-hidden="true"></span></th>
+                    <th>Fields<span class="column-resize-handle" aria-hidden="true"></span></th>
                 </tr>
                 </thead>
                 <tbody>${existingRows}${rows || `<tr><td colspan="4" class="empty-line">No records.</td></tr>`}</tbody>
             </table>
         </div>
     `;
+    if (window.initResizableTables) {
+        window.initResizableTables(elements.messageBrowser);
+    }
     const button = document.getElementById("messageOlderButton");
     if (button) {
         button.addEventListener("click", () => loadMessages(false));

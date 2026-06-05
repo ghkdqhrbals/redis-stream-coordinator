@@ -1330,21 +1330,12 @@ td {
 
 .message-table {
     min-width: 860px;
+    table-layout: fixed;
 }
 
-.message-table th:first-child,
-.message-table td:first-child {
-    width: 190px;
-}
-
-.message-table th:nth-child(2),
-.message-table td:nth-child(2) {
-    width: 90px;
-}
-
-.message-table th:nth-child(3),
-.message-table td:nth-child(3) {
-    width: 190px;
+.message-table th {
+    position: relative;
+    user-select: none;
 }
 
 .message-table .field-pill {
@@ -1368,6 +1359,37 @@ td {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+}
+
+.column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -5px;
+    z-index: 2;
+    width: 10px;
+    height: 100%;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.column-resize-handle::after {
+    position: absolute;
+    top: 8px;
+    right: 4px;
+    width: 1px;
+    height: calc(100% - 16px);
+    background: transparent;
+    content: "";
+}
+
+.column-resize-handle:hover::after,
+.resizable-message-table.is-resizing .column-resize-handle::after {
+    background: var(--accent);
+}
+
+.column-resize-active {
+    cursor: col-resize;
+    user-select: none;
 }
 
 .field-pill {
