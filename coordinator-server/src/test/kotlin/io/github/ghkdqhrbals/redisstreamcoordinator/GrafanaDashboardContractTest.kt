@@ -47,17 +47,20 @@ class GrafanaDashboardContractTest {
     }
 
     @Test
-    fun `admin console exposes shard scaling and stress controls`() {
+    fun `admin console exposes shard scaling without producer stress controls`() {
         val adminHtml = readStaticConsole("admin.html")
         val adminJs = readStaticConsole("admin.js")
         val indexHtml = readStaticConsole("index.html")
 
         assertTrue(indexHtml.contains("""href="/console/admin.html""""))
         assertTrue(adminHtml.contains("Apply shard scale"))
-        assertTrue(adminHtml.contains("Produce stress messages"))
+        assertTrue(adminHtml.contains("Create stream"))
         assertTrue(!adminJs.contains("/consumer-concurrency"))
         assertTrue(!adminHtml.contains("Update concurrency policy"))
-        assertTrue(adminJs.contains("/sample/stress"))
+        assertTrue(!adminHtml.contains("Producer Stress"))
+        assertTrue(!adminHtml.contains("Produce stress messages"))
+        assertTrue(!adminJs.contains("/sample/stress"))
+        assertTrue(!adminJs.contains("handleStressProduce"))
         assertTrue(adminJs.contains("/scale"))
     }
 

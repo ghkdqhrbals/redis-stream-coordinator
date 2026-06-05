@@ -40,10 +40,6 @@ function bindAdminElements() {
         "adminScaleReason",
         "adminScaleOut",
         "adminScaleIn",
-        "adminStressForm",
-        "adminPublisherUrl",
-        "adminStressCount",
-        "adminStressParallelism",
         "adminResult",
     ].forEach((id) => {
         adminElements[id] = document.getElementById(id);
@@ -64,7 +60,6 @@ function bindAdminEvents() {
     });
     adminElements.adminScaleOut.addEventListener("click", () => applyShardScale(currentShardCount() + 1));
     adminElements.adminScaleIn.addEventListener("click", () => applyShardScale(Math.max(1, currentShardCount() - 1)));
-    adminElements.adminStressForm.addEventListener("submit", handleStressProduce);
 }
 
 async function handleAdminLogin(event) {
@@ -176,30 +171,12 @@ async function applyShardScale(targetShardCount) {
     await refreshAdminGroups();
 }
 
-async function handleStressProduce(event) {
-    event.preventDefault();
-    const baseUrl = adminElements.adminPublisherUrl.value.trim().replace(/\/+$/, "");
-    if (!baseUrl) {
-        showAdminError("Enter publisher base URL.");
-        return;
-    }
-    const response = await adminRequest(`${baseUrl}/sample/stress`, {
-        method: "POST",
-        body: {
-            count: Number(adminElements.adminStressCount.value),
-            parallelism: Number(adminElements.adminStressParallelism.value),
-        },
-        external: true,
-    });
-    renderAdminResult(response);
-}
-
 async function adminRequest(path, options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), ADMIN_REQUEST_TIMEOUT_MS);
     const headers = {
         Accept: "application/json",
-        ...(options.external ? {} : { Authorization: options.authHeader || adminState.authHeader }),
+        Authorization: options.authHeader || adminState.authHeader,
     };
     if (options.body) {
         headers["Content-Type"] = "application/json";

@@ -13,7 +13,7 @@
             <div class="brand-mark" aria-hidden="true">RC</div>
             <div>
                 <h1>Admin Operations</h1>
-                <p>Shard scaling, consumer concurrency, and publisher stress controls</p>
+                <p>Stream metadata and shard scaling controls</p>
             </div>
         </div>
         <div class="admin-header-actions">
@@ -102,26 +102,6 @@
                 <button id="adminScaleIn" class="ghost-button" type="button">-1 shard</button>
             </div>
             <p class="admin-note">Scale-in starts a resharding flow. Producers refresh routing after write failures or cache refresh, and consumers drain revoked shards before removed shards are retired.</p>
-        </article>
-
-        <article class="access-card">
-            <h2>Producer Stress</h2>
-            <form id="adminStressForm" class="admin-form">
-                <label>
-                    Publisher base URL
-                    <input id="adminPublisherUrl" value="http://127.0.0.1:18090">
-                </label>
-                <label>
-                    Message count
-                    <input id="adminStressCount" type="number" min="1" max="100000" value="1000">
-                </label>
-                <label>
-                    Parallelism
-                    <input id="adminStressParallelism" type="number" min="1" max="256" value="32">
-                </label>
-                <button type="submit">Produce stress messages</button>
-            </form>
-            <p class="admin-note">Calls the sample publisher pod <code>/sample/stress</code> endpoint. Use the publisher pod URL that is reachable from this browser.</p>
         </article>
 
         <article class="access-card wide">
