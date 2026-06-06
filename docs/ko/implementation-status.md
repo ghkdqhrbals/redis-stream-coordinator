@@ -49,8 +49,7 @@
 
 ### Redis Integration
 
-* [x] Local three-node Redis Cluster Docker Compose
-* [x] Host-to-Docker Redis Cluster redirect를 위한 Lettuce node address mapping
+* [x] 외부 Redis Cluster를 바라보는 Docker pod/stress compose
 * [x] Memory state store
 * [x] Redis state store
 * [x] Redis group별 단일 metadata hash key
@@ -130,7 +129,8 @@ docker build -t redis-stream-coordinator/coordinator-server:jvm-ci .
 Redis integration tests:
 
 ```bash
-docker compose up -d
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
   --tests '*RedisCoordinatorStateStoreIntegrationTest' \
   --tests '*RedisStreamProvisioningIntegrationTest'

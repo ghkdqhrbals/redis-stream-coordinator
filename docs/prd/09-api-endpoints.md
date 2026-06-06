@@ -214,7 +214,7 @@ Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `targetShardCount` | yes | New shard count. Must be positive and different from the current active shard count. |
+| `targetShardCount` | yes | New shard count. Must be zero or positive and different from the current active shard count. `0` drains and removes every shard. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `reason` | yes | Human-readable change reason. |
 | `deprecatedAfter` | no | Operational hint for rollback/drain timing. |

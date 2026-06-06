@@ -212,7 +212,9 @@ During Spring bean initialization, both managed consumers and producer routing c
 ## Docker Quick Start
 
 ```bash
-docker compose --profile coordinator up --build
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 
 RSC_TOKEN="$(
   curl -sS -H 'Content-Type: application/json' \
@@ -225,15 +227,13 @@ curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/health
 ```
 
-The coordinator monitoring console is available at `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
+The Docker quick start uses the external Redis Cluster declared through `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD`; this repository no longer keeps a local Redis Cluster compose file. The coordinator monitoring console is available at `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
 
 The runtime API reference is available at `http://localhost:8080/scalar`. The published static API reference is generated from `docs/openapi/coordinator.v1.yaml`.
 
 Run a full pod smoke stack with your configured external Redis, coordinator, two consumer pods, and one auto-publishing pod:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 curl -sS http://localhost:18090/sample/status
 curl -sS http://localhost:18081/sample/events

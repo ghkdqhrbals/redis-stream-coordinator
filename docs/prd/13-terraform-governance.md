@@ -180,4 +180,6 @@ Recommended flow:
 3. Poll monitoring APIs until assignment and revoke progress are healthy.
 4. Fail the Terraform run if the coordinator reports an active incompatible resharding or unsafe delete condition.
 
+For `targetShardCount=0`, step 2 means producer routing returns `shardCount=0` and an empty shard list. Terraform must still poll monitoring state until every removed stream shard is drained for every Redis consumer group before treating the stream as retired.
+
 Duplicate-sensitive workloads must still quiesce producers before shard count changes. Terraform can orchestrate the admin mutation, but it cannot prove that all application publish retries are drained unless the application exposes that signal.

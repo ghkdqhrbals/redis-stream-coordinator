@@ -136,9 +136,18 @@ The coordinator accepts the request only when:
 
 * there is no active resharding for the group,
 * `targetShardCount` differs from the current shard count,
-* `targetShardCount` is positive.
+* `targetShardCount` is zero or positive.
 
 Consumer parallelism is not part of scale metadata. Operators change consumer parallelism by changing the consumer deployment or listener configuration. The coordinator observes the resulting logical members through heartbeat and rebalances by live member count.
+
+Scale-in does not move messages from removed shard streams. Removed shards enter a drain phase:
+
+* `targetShardCount=0` is a valid full drain. It removes every shard from producer routing after all removed shards drain.
+* Producers refresh routing metadata and stop writing new records to removed shard indexes.
+* Consumers keep processing records that already exist on removed shard streams.
+* The coordinator must not mark removed shards deprecated while any live member still owns or revokes them.
+* The coordinator must also inspect Redis `XINFO GROUPS` for every removed physical stream shard and wait until every Redis consumer group attached to that stream reports `pending=0` and known `lag=0`.
+* If Redis reports `lag=null` for any group on a removed shard, drain completion is not proven and scale-in remains in `DRAINING`.
 
 ## Monitoring
 

@@ -26,8 +26,7 @@ Overall status:
 | Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity/progress reporting, runtime concurrency enforcement, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
 | Producer starter | Done for MVP | Producer routing cache, routing validation, stale-cache invalidation after write failure, opt-in publish retry, Redis Stream publisher, payload helper, and batch publish are implemented. |
 | Processing guarantee | Done for MVP | Public guarantee is at-least-once. Single-processing guarantees are not provided because application business side effects cannot be atomically committed with Redis Stream ACKs. |
-| Local Redis Cluster | Done | `compose.yaml` starts three Redis Cluster masters and supports host access through `localhost:7001..7003`. |
-| Docker distribution | Ready for MVP | Dockerfile, local Compose coordinator profile, PR smoke test, manual GHCR publish workflow, and user guide are implemented. First public image release remains. |
+| Docker distribution | Ready for MVP | Dockerfile, external-Redis pod/stress Compose files, PR smoke test, manual GHCR publish workflow, and user guide are implemented. First public image release remains. |
 | Open source operations | Ready for MVP | Contributing guide, security policy, changelog, testing guide, Docker guide, and operations runbook are available. |
 
 ## Verified Commands
@@ -43,10 +42,11 @@ python3 .github/scripts/test_docker_distribution.py
 docker build -t redis-stream-coordinator/coordinator-server:jvm-ci .
 ```
 
-Redis integration tests are gated and require the local Redis Cluster:
+Redis integration tests are gated and require an external Redis Cluster:
 
 ```bash
-docker compose up -d
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --tests '*RedisCoordinatorStateStoreIntegrationTest'
 REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --tests '*RedisStreamProvisioningIntegrationTest'
 ```
@@ -219,7 +219,8 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 ### Docker, CI, And Open Source Docs
 
 * [x] Coordinator server Dockerfile with Java 24 runtime and non-root user.
-* [x] Local `docker compose --profile coordinator` path for Redis Cluster plus coordinator.
+* [x] `compose.pods.yaml` for coordinator, sample pods, Prometheus, and Grafana against an external Redis Cluster.
+* [x] `compose.stress.yaml` for external-Redis producer/consumer stress smoke.
 * [x] Docker smoke workflow that builds the image and checks `/coord/v1/monitoring/health`.
 * [x] Manual GHCR publish workflow for versioned coordinator image tags.
 * [x] Docker distribution metadata test script.
@@ -285,8 +286,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 | Stream provisioning | `RedisStreamProvisioning.kt`, `RedisStreamShardKeys.kt` |
 | Consumer starter | `redisstream-spring-boot-starter/src/main/kotlin/com/redisstream/consumer/*` |
 | Producer starter | `redisstream-spring-boot-starter/src/main/kotlin/com/redisstream/producer/*` |
-| Redis Cluster | `compose.yaml` |
-| Docker distribution | `Dockerfile`, `.dockerignore`, `.github/workflows/docker-image.yml`, `docs/docker.md` |
+| Docker distribution | `Dockerfile`, `.dockerignore`, `compose.pods.yaml`, `compose.stress.yaml`, `.github/workflows/docker-image.yml`, `docs/docker.md` |
 | Open source docs | `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `docs/testing.md`, `docs/operations-runbook.md` |
 | PRD | `docs/PRD.md`, `docs/prd/*` |
 

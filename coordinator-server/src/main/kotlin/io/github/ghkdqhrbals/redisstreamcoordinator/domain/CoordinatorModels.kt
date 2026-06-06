@@ -151,8 +151,8 @@ data class DeleteGroupRequest(
 
 @Schema(description = "Request body for changing physical shard count.")
 data class ScaleGroupRequest(
-    @field:Min(1)
-    @field:Schema(description = "Target physical shard stream count.", example = "40")
+    @field:Min(0)
+    @field:Schema(description = "Target physical shard stream count. Zero drains and removes all shards.", example = "40")
     val targetShardCount: Int,
     @field:NotBlank
     @field:Schema(description = "Operator or automation identity requesting resharding.", example = "platform-admin")
@@ -166,8 +166,8 @@ data class ScaleGroupRequest(
 
 @Schema(description = "Request body for changing a stream's physical shard count across all registered consumer groups.")
 data class ScaleStreamRequest(
-    @field:Min(1)
-    @field:Schema(description = "Target physical shard stream count.", example = "40")
+    @field:Min(0)
+    @field:Schema(description = "Target physical shard stream count. Zero drains and removes all shards.", example = "40")
     val targetShardCount: Int,
     @field:NotBlank
     @field:Schema(description = "Operator or automation identity requesting resharding.", example = "platform-admin")

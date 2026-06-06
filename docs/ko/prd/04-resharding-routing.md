@@ -136,9 +136,18 @@ Coordinator는 다음 조건에서만 요청을 수락한다.
 
 * group에 active resharding이 없다.
 * `targetShardCount`가 현재 shard count와 다르다.
-* `targetShardCount`가 양수다.
+* `targetShardCount`가 0 이상이다.
 
 Consumer parallelism은 scale metadata가 아니다. 운영자는 consumer deployment 또는 listener configuration을 바꿔 병렬성을 조정한다. coordinator는 heartbeat로 들어온 logical member들을 관찰하고 live member count 기준으로 재배치한다.
+
+Scale-in은 제거 대상 shard stream의 메시지를 다른 shard로 이동하지 않는다. 제거 대상 shard는 drain phase에 들어간다.
+
+* `targetShardCount=0`은 유효한 full drain이다. 모든 제거 대상 shard가 drain된 뒤 producer routing에서 모든 shard를 제거한다.
+* Producer는 routing metadata를 갱신하고 제거 대상 shard index로 새 record를 쓰지 않는다.
+* Consumer는 제거 대상 shard stream에 이미 존재하는 record를 계속 처리한다.
+* Coordinator는 live member가 제거 대상 shard를 아직 소유하거나 revoke 중이면 removed shard를 deprecated 처리하면 안 된다.
+* Coordinator는 제거 대상 physical stream shard마다 Redis `XINFO GROUPS`를 조회하고, 해당 stream을 consume하는 모든 Redis consumer group이 `pending=0`과 known `lag=0`을 보고할 때까지 기다려야 한다.
+* Redis가 제거 대상 shard의 어떤 group에 대해 `lag=null`을 반환하면 drain 완료가 증명되지 않은 상태이므로 scale-in은 `DRAINING`에 머문다.
 
 ## Monitoring
 

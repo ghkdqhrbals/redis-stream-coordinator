@@ -252,7 +252,9 @@ class CoordinatorService(
     fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse {
         try {
             val group = requireGroup(streamPrefix, consumerGroup)
-            streamProvisioner.provision(group.streamShardProvisioningPlan())
+            if (group.shardCount > 0) {
+                streamProvisioner.provision(group.streamShardProvisioningPlan())
+            }
             recordGroupState(group)
             val response = group.toProducerRoutingResponse()
             metrics.recordProducerRouting(streamPrefix, consumerGroup, "SUCCESS")
@@ -344,6 +346,12 @@ class CoordinatorService(
      * Builds the PREPARING resharding record before provisioning or activating new stream shards.
      */
     private fun scaleGroupOnce(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
+        if (request.targetShardCount < 0) {
+            throw CoordinatorException(
+                CoordinatorError.INVALID_REQUEST,
+                "targetShardCount must be zero or positive",
+            )
+        }
         val group = requireGroup(streamPrefix, consumerGroup)
         requireNoMetadataCorrection(group)
         val now = Instant.now(clock)
@@ -398,13 +406,15 @@ class CoordinatorService(
         now: Instant,
     ): Migration {
         // Commit PREPARING first; conflict retries must not create Redis shards without matching coordinator state.
-        streamProvisioner.provision(
-            RedisStreamShardProvisioningPlan.forShardCount(
-                streamPrefix = group.streamPrefix,
-                consumerGroup = group.consumerGroup,
-                shardCount = migration.toShardCount,
-            ),
-        )
+        if (migration.toShardCount > 0) {
+            streamProvisioner.provision(
+                RedisStreamShardProvisioningPlan.forShardCount(
+                    streamPrefix = group.streamPrefix,
+                    consumerGroup = group.consumerGroup,
+                    shardCount = migration.toShardCount,
+                ),
+            )
+        }
 
         migration.state = MigrationState.ACTIVE
         migration.updatedAt = now
@@ -2140,7 +2150,8 @@ class CoordinatorService(
     }
 
     /**
-     * Completes resharding after no live member still owns or revokes removed shards.
+     * Completes resharding after no live member still owns or revokes removed shards and every Redis
+     * consumer group on removed stream shards has drained lag and pending entries.
      */
     private fun completeMigrationDrainIfReady(
         group: GroupMetadata,
@@ -2154,6 +2165,9 @@ class CoordinatorService(
         if (removedShardStillOwned) {
             return false
         }
+        if (!removedShardConsumerGroupsDrained(group.streamPrefix, migration)) {
+            return false
+        }
 
         migration.state = MigrationState.DEPRECATED
         migration.updatedAt = now
@@ -2161,6 +2175,24 @@ class CoordinatorService(
         bumpMetadata(group, now, bumpGroupEpoch = false)
         reconcile(group, now)
         return true
+    }
+
+    /**
+     * Checks every Redis consumer group attached to removed stream shards, not only the coordinator
+     * group currently advancing. Scale-in is safe only after all groups report zero pending and zero
+     * known lag for those physical stream keys.
+     */
+    private fun removedShardConsumerGroupsDrained(streamPrefix: String, migration: Migration): Boolean {
+        if (migration.toShardCount >= migration.fromShardCount || !redisCommands.isConfigured()) {
+            return true
+        }
+
+        return (migration.toShardCount until migration.fromShardCount).all { shardIndex ->
+            val streamKey = RedisStreamShardKeys.forShard(streamPrefix, shardIndex).value
+            redisCommands.xInfoGroups(streamKey).all { groupInfo ->
+                (groupInfo.pending ?: 0L) == 0L && groupInfo.lag != null && groupInfo.lag == 0L
+            }
+        }
     }
 
     /**
@@ -2538,7 +2570,7 @@ class CoordinatorService(
      * Converts the current shard layout into metadata consumed by producer-side routers.
      */
     private fun GroupMetadata.toProducerRoutingResponse(): ProducerRoutingResponse {
-        val activeShardKeys = streamShardKeys()
+        val activeShardKeys = if (shardCount > 0) streamShardKeys() else emptyList()
         return ProducerRoutingResponse(
             streamPrefix = streamPrefix,
             consumerGroup = consumerGroup,

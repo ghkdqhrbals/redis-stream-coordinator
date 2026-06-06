@@ -2,12 +2,14 @@
 
 This guide explains how to run Redis Stream Coordinator as a container.
 
-## Local Coordinator With Redis Cluster
+## Local Coordinator With External Redis Cluster
 
-Start the local three-node Redis Cluster and coordinator server:
+Start the coordinator and sample pod topology against an external Redis Cluster:
 
 ```bash
-docker compose --profile coordinator up --build
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 ```
 
 Check coordinator health:
@@ -24,11 +26,7 @@ curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/health
 ```
 
-Expected response:
-
-```json
-{"status":"UP","coordinatorId":"local-coordinator","redis":"UP","loop":"UP"}
-```
+The repository intentionally does not keep a local Redis Cluster compose file. Local Docker runs should use the same Redis Cluster style as production by setting `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD`.
 
 Create a group:
 
@@ -61,22 +59,6 @@ The coordinator image uses the same Spring Boot configuration keys as the jar. I
 | `SPRING_DATA_REDIS_CLUSTER_NODES` | Comma-separated Redis Cluster seed nodes. |
 | `COORDINATOR_API_RATE_LIMIT_ENABLED` | Enables admin mutation API rate limiting. |
 | `COORDINATOR_AUDIT_SINK` | `log` or `redis`. |
-
-## Redis Cluster Redirects
-
-Redis Cluster returns node addresses in `MOVED`/`ASK` redirects. In local Docker Compose, Redis nodes advertise `127.0.0.1` so host tools such as IntelliJ and `redis-cli -c -p 7001` work. A coordinator container cannot connect to its own `127.0.0.1` for those redirects, so the compose file maps advertised addresses back to Docker service names:
-
-```yaml
-coordinator:
-  redis-cluster:
-    node-mappings:
-      - advertised-host: 127.0.0.1
-        advertised-port: 7001
-        connect-host: redis-node-1
-        connect-port: 7001
-```
-
-Production Redis Cluster should advertise addresses that coordinator containers can reach directly. Use `node-mappings` only when Redis advertises a different address than the coordinator should connect to.
 
 ## Publishing
 

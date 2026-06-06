@@ -31,10 +31,11 @@ python3 .github/scripts/test_docker_distribution.py
 
 ## Redis Integration Tests
 
-Redis integration tests는 기본 비활성화되어 있다. 먼저 local Redis Cluster를 실행한다.
+Redis integration tests는 기본 비활성화되어 있다. 외부 Redis Cluster 정보를 먼저 설정한다.
 
 ```bash
-docker compose up -d
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 ```
 
 그 다음:
@@ -44,39 +45,6 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
   --tests '*RedisCoordinatorStateStoreIntegrationTest' \
   --tests '*RedisStreamProvisioningIntegrationTest'
 ```
-
-## Local End-To-End Smoke
-
-기본 compose volume을 건드리지 않고 E2E Redis Cluster를 띄울 때:
-
-```bash
-docker compose -f compose.e2e.yaml -p rsc-e2e up -d
-```
-
-Coordinator 실행:
-
-```bash
-COORDINATOR_STORE_TYPE=redis \
-COORDINATOR_STREAMS_PROVISIONING_ENABLED=true \
-SPRING_DATA_REDIS_CLUSTER_NODES=localhost:7101,localhost:7102,localhost:7103 \
-./gradlew :coordinator-server:bootRun
-```
-
-Sample consumer pod 두 개 실행:
-
-```bash
-SERVER_PORT=18081 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
-  ./gradlew :samples:consumer-pod:bootRun
-
-SERVER_PORT=18082 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
-  ./gradlew :samples:consumer-pod:bootRun
-```
-
-Sample endpoints:
-
-* `GET /sample/status`
-* `GET /sample/events`
-* `POST /sample/publish`
 
 ## Docker Pod Smoke
 

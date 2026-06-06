@@ -31,10 +31,11 @@ python3 .github/scripts/test_docker_distribution.py
 
 ## Redis Integration Tests
 
-Redis integration tests are disabled by default. Start the local Redis Cluster first:
+Redis integration tests are disabled by default. They require an external Redis Cluster:
 
 ```bash
-docker compose up -d
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 ```
 
 Then run:
@@ -44,50 +45,6 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
   --tests '*RedisCoordinatorStateStoreIntegrationTest' \
   --tests '*RedisStreamProvisioningIntegrationTest'
 ```
-
-## Local End-To-End Smoke
-
-Use the no-persistence E2E Redis Cluster when you want to run the coordinator and sample consumer pods locally without touching the default Compose volumes:
-
-```bash
-docker compose -f compose.e2e.yaml -p rsc-e2e up -d
-```
-
-Run the coordinator against the E2E cluster:
-
-```bash
-COORDINATOR_STORE_TYPE=redis \
-COORDINATOR_STREAMS_PROVISIONING_ENABLED=true \
-SPRING_DATA_REDIS_CLUSTER_NODES=localhost:7101,localhost:7102,localhost:7103 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_ADVERTISED_PORT=7101 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_CONNECT_HOST=127.0.0.1 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_CONNECT_PORT=7101 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_1_ADVERTISED_PORT=7102 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_1_CONNECT_HOST=127.0.0.1 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_1_CONNECT_PORT=7102 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_ADVERTISED_PORT=7103 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_CONNECT_HOST=127.0.0.1 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_CONNECT_PORT=7103 \
-./gradlew :coordinator-server:bootRun
-```
-
-Create a group, then run two sample consumer pods:
-
-```bash
-SERVER_PORT=18081 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
-REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
-  ./gradlew :samples:consumer-pod:bootRun
-
-SERVER_PORT=18082 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
-REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
-  ./gradlew :samples:consumer-pod:bootRun
-```
-
-The sample exposes:
-
-* `GET /sample/status`
-* `GET /sample/events`
-* `POST /sample/publish`
 
 ## Docker Pod Smoke
 
