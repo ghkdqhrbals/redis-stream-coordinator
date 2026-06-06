@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - CoordinatorAdminExceptionHttpIntegrationTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>CoordinatorAdminExceptionHttpIntegrationTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/io.github.ghkdqhrbals.redisstreamcoordinator.html">io.github.ghkdqhrbals.redisstreamcoordinator</a> &gt; CoordinatorAdminExceptionHttpIntegrationTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">3</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.129s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a href="#">Tests</a>
+</li>
+<li>
+<a href="#">Standard output</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">admin create stream validation errors use coordinator error response()</td>
+<td class="success">0.020s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">consumer concurrency is not exposed as an admin endpoint()</td>
+<td class="success">0.013s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">create stream returns conflict when Redis shard key already exists for prefix()</td>
+<td class="success">0.096s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>2026-06-06T16:27:03.462Z  INFO 2774 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest
+2026-06-06T16:27:03.466Z  INFO 2774 --- [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplication for test class io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.6)
+
+2026-06-06T16:27:03.511Z  INFO 2774 --- [    Test worker] dinatorAdminExceptionHttpIntegrationTest : Starting CoordinatorAdminExceptionHttpIntegrationTest using Java 24.0.2 with PID 2774 (started by runner in /home/runner/work/redis-stream-coordinator/redis-stream-coordinator/coordinator-server)
+2026-06-06T16:27:03.512Z  INFO 2774 --- [    Test worker] dinatorAdminExceptionHttpIntegrationTest : No active profile set, falling back to 1 default profile: &quot;default&quot;
+2026-06-06T16:27:03.764Z  INFO 2774 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-06T16:27:03.765Z  INFO 2774 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-06-06T16:27:03.773Z  INFO 2774 --- [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 7 ms. Found 0 Redis repository interfaces.
+2026-06-06T16:27:04.106Z  INFO 2774 --- [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-06-06T16:27:04.129Z  INFO 2774 --- [    Test worker] dinatorAdminExceptionHttpIntegrationTest : Started CoordinatorAdminExceptionHttpIntegrationTest in 0.649 seconds (process running for 8.261)
+2026-06-06T16:27:04.130Z  WARN 2774 --- [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-06-06T16:27:04.139Z  INFO 2774 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-06T16:27:04.139Z  INFO 2774 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-06T16:27:04.140Z  INFO 2774 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-06T16:27:04.221Z  INFO 2774 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_STREAM outcome=FAILED status=409 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=occupied-prefix consumerGroup= reshardingId= method=POST path=/coord/v1/streams/occupied-prefix route=/coord/v1/streams/{streamPrefix} queryString= durationMs=63 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+2026-06-06T16:27:04.235Z  INFO 2774 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-06T16:27:04.235Z  INFO 2774 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-06T16:27:04.236Z  INFO 2774 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-06T16:27:04.249Z  INFO 2774 --- [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-06T16:27:04.249Z  INFO 2774 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-06T16:27:04.250Z  INFO 2774 --- [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-06T16:27:04.265Z  INFO 2774 --- [    Test worker] redis-stream-coordinator.audit           : audit action=CREATE_STREAM outcome=FAILED status=400 principal=admin requestedBy= reason= requestId= coordinatorId=local-coordinator streamPrefix=invalid-body consumerGroup= reshardingId= method=POST path=/coord/v1/streams/invalid-body route=/coord/v1/streams/{streamPrefix} queryString= durationMs=14 roles=ADMIN,MEMBER,MONITOR,READ,WRITE requestSummary={} requestBodySha256=
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 8.14.5</a> at Jun 6, 2026, 4:27:13 PM</p>
+</div>
+</div>
+</body>
+</html>
