@@ -1,0 +1,2675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coordinator Test Report</title>
+<style>
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-soft: #f9fafb;
+  --text: #172033;
+  --muted: #667085;
+  --line: #d8dee9;
+  --accent: #3155d4;
+  --accent-soft: #eef2ff;
+  --pass: #16803d;
+  --pass-soft: #ecfdf3;
+  --fail: #b42318;
+  --fail-soft: #fef3f2;
+  --skip: #946200;
+  --skip-soft: #fffaeb;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.page-shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 22px 16px;
+  border-right: 1px solid var(--line);
+  background: #111827;
+  color: #fff;
+  overflow-y: auto;
+}
+.product { font-size: 12px; color: #c7d2fe; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.sidebar-title { margin: 6px 0 18px; font-size: 20px; font-weight: 750; }
+nav { display: grid; gap: 4px; }
+nav a {
+  color: #e5e7eb;
+  text-decoration: none;
+  padding: 7px 8px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+nav a:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+nav .suite-link { padding-left: 16px; color: #cbd5e1; font-size: 12px; }
+main { width: min(100%, 1180px); padding: 28px; }
+.hero {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+h1, h2 { margin: 0; line-height: 1.2; }
+h1 { font-size: 28px; }
+h2 { font-size: 20px; }
+.lede { margin: 8px 0 0; color: var(--muted); max-width: 820px; }
+.result {
+  display: inline-block;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.result.success { color: var(--pass); background: var(--pass-soft); }
+.result.failed { color: var(--fail); background: var(--fail-soft); }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.button {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.button.secondary { background: var(--accent-soft); color: var(--accent); }
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+.summary-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 13px;
+}
+.summary-card span { display: block; color: var(--muted); font-size: 12px; }
+.summary-card strong { display: block; margin-top: 4px; font-size: 22px; }
+.summary-card.pass strong { color: var(--pass); }
+.summary-card.fail strong { color: var(--fail); }
+.summary-card.skip strong { color: var(--skip); }
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 24px 0 10px;
+}
+.section-heading p { margin: 0; color: var(--muted); }
+details {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 10px 0;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+summary {
+  cursor: pointer;
+  padding: 11px 13px;
+  font-weight: 700;
+  list-style-position: outside;
+}
+.suite > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-soft);
+}
+.group-level-1 > summary { background: var(--panel-soft); }
+.group-level-2 { margin-left: 14px; }
+.group-level-3 { margin-left: 28px; }
+.suite-body, .nested-groups { padding: 0 12px 12px; }
+.muted { color: var(--muted); margin: 8px 0 10px; }
+.suite-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.suite-dot.passed { background: var(--pass); }
+.suite-dot.failed { background: var(--fail); }
+.suite-dot.skipped { background: var(--skip); }
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.badge.pass { color: var(--pass); border-color: #abefc6; background: var(--pass-soft); }
+.badge.fail { color: var(--fail); border-color: #fecdca; background: var(--fail-soft); }
+.badge.skip { color: var(--skip); border-color: #fedf89; background: var(--skip-soft); }
+.case-list { display: grid; gap: 8px; margin: 10px 0 12px; }
+.case-card {
+  margin: 0;
+  border-radius: 7px;
+  box-shadow: none;
+}
+.case-card.failed, .case-card.error { border-color: #fecdca; }
+.case-summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+}
+.status {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 68px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.status.passed { color: var(--pass); background: var(--pass-soft); }
+.status.failed, .status.error { color: var(--fail); background: var(--fail-soft); }
+.status.skipped { color: var(--skip); background: var(--skip-soft); }
+.case-name { overflow-wrap: anywhere; }
+.case-time { color: var(--muted); font-size: 12px; }
+.case-body { padding: 0 12px 12px; border-top: 1px solid var(--line); }
+.case-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+.case-meta div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  padding: 8px;
+}
+dt { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.failure-detail {
+  box-shadow: none;
+  background: #0b1020;
+  border-color: #1f2937;
+}
+.failure-detail > summary { color: #e5e7eb; background: #111827; }
+pre {
+  margin: 0;
+  max-height: 460px;
+  overflow: auto;
+  padding: 12px;
+  background: #0b1020;
+  color: #d1d5db;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.empty {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+@media (max-width: 900px) {
+  .page-shell { display: block; }
+  .sidebar { position: static; height: auto; }
+  main { padding: 16px; }
+}
+@media (max-width: 720px) {
+  .section-heading { display: block; }
+  .group-level-2, .group-level-3 { margin-left: 0; }
+  .case-summary { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page-shell">
+<aside class="sidebar">
+<div class="product">Redis Stream Coordinator</div>
+<div class="sidebar-title">Test execution</div>
+<nav aria-label="Test report navigation">
+<a href="#overview">Overview</a>
+<a href="#suites">Suites</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatoraclaudithttpintegrationtest">Coordinator Acl Audit Http Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatoradminexceptionhttpintegrationtest">Coordinator Admin Exception Http Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorauditlogsinktest">Coordinator Audit Log Sink Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorauthenticatedmemberhttpintegrationtest">Coordinator Authenticated Member Http Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorconsumptionprogresstest">Coordinator Consumption Progress Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatordockerconfigurationtest">Coordinator Docker Configuration Test</a>
+<a class="suite-link" href="#suite-graceful-leave">Graceful leave</a>
+<a class="suite-link" href="#suite-member-expired">Member expired</a>
+<a class="suite-link" href="#suite-member-join">Member join</a>
+<a class="suite-link" href="#suite-new-stream-topic-creation">New stream topic creation</a>
+<a class="suite-link" href="#suite-partition-upscaling">Partition upscaling</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorhttpintegrationtest">Coordinator Http Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatormetricstest">Coordinator Metrics Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatoropenapioperationidcontracttest">Coordinator Open Api Operation Id Contract Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorprotocoldefaultstest">Coordinator Protocol Defaults Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorprovisioningfailureintegrationtest">Coordinator Provisioning Failure Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorratelimithttpintegrationtest">Coordinator Rate Limit Http Integration Test</a>
+<a class="suite-link" href="#suite-assignment-algorithm-scenarios">Assignment algorithm scenarios</a>
+<a class="suite-link" href="#suite-heartbeat-reconciliation-component-scenarios">Heartbeat reconciliation component scenarios</a>
+<a class="suite-link" href="#suite-member-expiration-rebalance-workflow">Member expiration rebalance workflow</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorrediscommandstest">Coordinator Redis Commands Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorservicetest">Coordinator Service Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorstatemutextest">Coordinator State Mutex Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorstatestoretest">Coordinator State Store Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-criticalsectionaspecttest">Critical Section Aspect Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-grafanadashboardcontracttest">Grafana Dashboard Contract Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-rediscoordinatormetadataschematest">Redis Coordinator Metadata Schema Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-rediscoordinatorstatestoreintegrationtest">Redis Coordinator State Store Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamcoordinatorapplicationtest">Redis Stream Coordinator Application Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamprovisioningintegrationtest">Redis Stream Provisioning Integration Test</a>
+<a class="suite-link" href="#suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamshardkeystest">Redis Stream Shard Keys Test</a>
+</nav>
+</aside>
+<main>
+<header id="overview" class="hero">
+<div class="result success">Passed</div>
+<h1>Coordinator Test Report</h1>
+<p class="lede">Expandable suites, scenario groups, individual test results, and failure detail in one static report.</p>
+<div class="hero-actions">
+<a class="button" href="gradle/index.html">Open raw Gradle test report</a>
+</div>
+</header>
+<section class="summary-grid" aria-label="Test summary">
+<div class="summary-card"><span>Total tests</span><strong>184</strong></div>
+<div class="summary-card pass"><span>Passed</span><strong>177</strong></div>
+<div class="summary-card fail"><span>Failed</span><strong>0</strong></div>
+<div class="summary-card fail"><span>Errored</span><strong>0</strong></div>
+<div class="summary-card skip"><span>Skipped</span><strong>7</strong></div>
+<div class="summary-card"><span>Total time</span><strong>5.494s</strong></div>
+</section>
+<section id="suites" class="suite-list" aria-label="Test suites">
+<div class="section-heading"><h2>Suites</h2><p>Click a suite, scenario group, or test case to inspect nested results.</p></div>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatoraclaudithttpintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Acl Audit Http Integration Test</span><span class="badge">7 total</span> <span class="badge pass">7 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest · 1.418s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">7 total</span> <span class="badge pass">7 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">acl allows write role to read monitoring and mutate admin endpoints()</span>
+<span class="case-time">0.961s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.961s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">acl keeps legacy admin and monitor roles as aliases()</span>
+<span class="case-time">0.017s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.017s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">acl allows read role monitoring reads but rejects admin mutations()</span>
+<span class="case-time">0.009s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.009s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">acl allows read role on read only stream endpoints()</span>
+<span class="case-time">0.061s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.061s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">acl allows member heartbeat but rejects monitoring reads()</span>
+<span class="case-time">0.309s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.309s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">audit log captures delete group mutation()</span>
+<span class="case-time">0.025s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.025s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">audit log captures successful admin scale request()</span>
+<span class="case-time">0.028s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAclAuditHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.028s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatoradminexceptionhttpintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Admin Exception Http Integration Test</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest · 0.083s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">create stream returns conflict when Redis shard key already exists for prefix()</span>
+<span class="case-time">0.051s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.051s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">consumer concurrency is not exposed as an admin endpoint()</span>
+<span class="case-time">0.011s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.011s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">admin create stream validation errors use coordinator error response()</span>
+<span class="case-time">0.017s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAdminExceptionHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.017s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorauditlogsinktest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Audit Log Sink Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuditLogSinkTest · 0.737s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis audit sink appends group-scoped event and trims retained entries()</span>
+<span class="case-time">0.737s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuditLogSinkTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuditLogSinkTest</dd></div><div><dt>Duration</dt><dd>0.737s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorauthenticatedmemberhttpintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Authenticated Member Http Integration Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest · 0.072s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">member api requires basic auth when enabled()</span>
+<span class="case-time">0.072s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorAuthenticatedMemberHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.072s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorconsumptionprogresstest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Consumption Progress Test</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorConsumptionProgressTest · 0.007s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator fences progress reports for unassigned shards()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorConsumptionProgressTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorConsumptionProgressTest</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator stores consumer reported shard progress()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorConsumptionProgressTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorConsumptionProgressTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatordockerconfigurationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Docker Configuration Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorDockerConfigurationTest · 0.006s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">docker compose coordinator settings bind to coordinator properties()</span>
+<span class="case-time">0.006s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorDockerConfigurationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorDockerConfigurationTest</dd></div><div><dt>Duration</dt><dd>0.006s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-graceful-leave" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Graceful leave</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Graceful leave · 0.006s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">last member leave makes group empty and clears targets()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$GracefulLeave</dd></div><div><dt>Suite</dt><dd>Graceful leave</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">leaving member releases targets and survivor owns every shard()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$GracefulLeave</dd></div><div><dt>Suite</dt><dd>Graceful leave</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-member-expired" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Member expired</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member expired · 0.003s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">expired member rejoin ignores stale ownership report()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberExpired</dd></div><div><dt>Suite</dt><dd>Member expired</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">expired owner is reassigned and stale heartbeat is fenced()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberExpired</dd></div><div><dt>Suite</dt><dd>Member expired</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-member-join" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Member join</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member join · 0.006s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">first member receives every initial shard()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberJoin</dd></div><div><dt>Suite</dt><dd>Member join</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">new member waits for previous owner revoke before receiving moved shard()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberJoin</dd></div><div><dt>Suite</dt><dd>Member join</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">three member join creates balanced target assignment without duplicate owners()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$MemberJoin</dd></div><div><dt>Suite</dt><dd>Member join</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-new-stream-topic-creation" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>New stream topic creation</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="suite-body">
+<p class="muted">New stream topic creation · 0.005s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">3 total</span> <span class="badge pass">3 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">same shard count scale does not provision a new stream topic version()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$NewStreamTopicCreation</dd></div><div><dt>Suite</dt><dd>New stream topic creation</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group creation provisions initial stream topic shards()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$NewStreamTopicCreation</dd></div><div><dt>Suite</dt><dd>New stream topic creation</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">upscaling provisions next stream topic shards after preparing migration()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$NewStreamTopicCreation</dd></div><div><dt>Suite</dt><dd>New stream topic creation</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-partition-upscaling" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Partition upscaling</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Partition upscaling · 0.008s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale updates shard count and assigns target shards()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$PartitionUpscaling</dd></div><div><dt>Suite</dt><dd>Partition upscaling</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale updates producer routing metadata()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorGroupedWorkflowTest$PartitionUpscaling</dd></div><div><dt>Suite</dt><dd>Partition upscaling</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorhttpintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Http Integration Test</span><span class="badge">15 total</span> <span class="badge pass">15 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest · 1.373s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">15 total</span> <span class="badge pass">15 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">login rejects invalid credentials()</span>
+<span class="case-time">0.020s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.020s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api creates group and accepts heartbeat()</span>
+<span class="case-time">0.065s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.065s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">monitoring console is exposed without triggering api basic auth()</span>
+<span class="case-time">0.036s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.036s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">basic auth scheme is parsed case insensitively()</span>
+<span class="case-time">0.008s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.008s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">login issues seven day bearer token for coordinator api calls()</span>
+<span class="case-time">0.042s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.042s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api handles graceful leave and monitoring shows empty group()</span>
+<span class="case-time">0.021s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.021s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">monitoring exposes coordination version compatibility lifecycle()</span>
+<span class="case-time">0.048s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.048s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api scales group and refreshes producer routing metadata()</span>
+<span class="case-time">0.032s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.032s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">admin api validates create group body()</span>
+<span class="case-time">0.014s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.014s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">openapi docs and swagger ui are exposed for interactive tests()</span>
+<span class="case-time">0.996s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.996s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">monitoring session verifies credentials without reading coordinator state()</span>
+<span class="case-time">0.009s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.009s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http api returns producer routing metadata()</span>
+<span class="case-time">0.011s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.011s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">member api allows heartbeat without auth by default()</span>
+<span class="case-time">0.013s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.013s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">http stream scale to zero updates every registered consumer group routing()</span>
+<span class="case-time">0.034s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.034s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">admin api requires basic auth()</span>
+<span class="case-time">0.006s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.006s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatormetricstest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Metrics Test</span><span class="badge">8 total</span> <span class="badge pass">8 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest · 0.031s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">8 total</span> <span class="badge pass">8 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator records API request latency metrics()</span>
+<span class="case-time">0.017s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.017s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator records producer routing metrics()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator exports unknown Redis lag as zero in Prometheus gauge()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator exports stream shard offset and lag metrics()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator records state conflict retry metrics()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator records heartbeat group state and expiry metrics()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator records scale migration and rebalance metrics()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator exports consumer shard progress metrics()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorMetricsTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatoropenapioperationidcontracttest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Open Api Operation Id Contract Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorOpenApiOperationIdContractTest · 0.013s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">openapi operation IDs and controller annotations stay in sync()</span>
+<span class="case-time">0.013s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorOpenApiOperationIdContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorOpenApiOperationIdContractTest</dd></div><div><dt>Duration</dt><dd>0.013s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorprotocoldefaultstest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Protocol Defaults Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProtocolDefaultsTest · 0.000s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator defaults come from shared coordination protocol()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProtocolDefaultsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProtocolDefaultsTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorprovisioningfailureintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Provisioning Failure Integration Test</span><span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest · 0.060s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">4 total</span> <span class="badge pass">4 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">mocked losing create race does not provision rejected shard plan()</span>
+<span class="case-time">0.055s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.055s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">mocked provisioning failure during create does not publish group metadata()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">mocked provisioning failure during scale keeps retryable preparing migration metadata()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">mocked save conflict during scale does not provision until preparing state is committed()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorProvisioningFailureIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorratelimithttpintegrationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Rate Limit Http Integration Test</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRateLimitHttpIntegrationTest · 0.064s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">rate limit does not block monitoring reads or member heartbeats()</span>
+<span class="case-time">0.052s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRateLimitHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRateLimitHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.052s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">rate limit rejects repeated admin mutations for same caller and group()</span>
+<span class="case-time">0.011s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRateLimitHttpIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRateLimitHttpIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.011s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-assignment-algorithm-scenarios" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Assignment algorithm scenarios</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Assignment algorithm scenarios · 0.009s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redistribution keeps survivor sticky shards while balancing expired owner shards()</span>
+<span class="case-time">0.009s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$AssignmentAlgorithmScenarios</dd></div><div><dt>Suite</dt><dd>Assignment algorithm scenarios</dd></div><div><dt>Duration</dt><dd>0.009s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-heartbeat-reconciliation-component-scenarios" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Heartbeat reconciliation component scenarios</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Heartbeat reconciliation component scenarios · 0.005s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">new member receives pending shards until previous owner reports released ownership()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$HeartbeatReconciliationComponentScenarios</dd></div><div><dt>Suite</dt><dd>Heartbeat reconciliation component scenarios</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">one second coordinator ticks enter rebalancing when a silent member lease expires()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$HeartbeatReconciliationComponentScenarios</dd></div><div><dt>Suite</dt><dd>Heartbeat reconciliation component scenarios</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-member-expiration-rebalance-workflow" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Member expiration rebalance workflow</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">Member expiration rebalance workflow · 0.009s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator tick expires silent member and survivors converge through heartbeat responses()</span>
+<span class="case-time">0.009s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRebalanceStateMachineFlowTest$MemberExpirationRebalanceWorkflow</dd></div><div><dt>Suite</dt><dd>Member expiration rebalance workflow</dd></div><div><dt>Duration</dt><dd>0.009s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorrediscommandstest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Redis Commands Test</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRedisCommandsTest · 0.774s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">memory usage routes stream key as the cluster key()</span>
+<span class="case-time">0.770s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRedisCommandsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRedisCommandsTest</dd></div><div><dt>Duration</dt><dd>0.770s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">cluster slot owners resolve stream slots to master nodes()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRedisCommandsTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorRedisCommandsTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorservicetest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator Service Test</span><span class="badge">80 total</span> <span class="badge pass">80 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest · 0.274s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">80 total</span> <span class="badge pass">80 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana shard rows expose produced and consumed rates after repeated observations()</span>
+<span class="case-time">0.012s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.012s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana group rows aggregate produced and consumed rates()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">health degrades when redis is required and unavailable()</span>
+<span class="case-time">0.014s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.014s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">rebalance timeout fences stuck owner()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">new logical members rebalance shards by member count()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">health refreshes redis status asynchronously and reuses cache within configured ttl()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">metadata sync does not wait for empty leaving members()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects active member epoch reset()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration scale updates shard count()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana shard offset reads can run in parallel()</span>
+<span class="case-time">0.052s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.052s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">terminal members are pruned after stale member retention()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">unknown member can rejoin with zero epoch and receive assignment()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana messages can jump to the last page for a single shard()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">delete group rejects live members unless forced()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">admin mutations are blocked while metadata sync is in progress()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">monitoring current assignments ignore expired members()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">assignment waits for previous owner revoke()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">health skips redis ping when redis features are disabled()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana shard rows expose target owners separately from acknowledged current owners()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">producer routing returns shard routing metadata()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana overview scans multiple groups in parallel()</span>
+<span class="case-time">0.029s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.029s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration rollback restores previous version()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale rejects negative target shard count()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">logical members receive even shard assignments()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects epoch reset after ownership was acknowledged even when report is empty()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana message search finds a record id across every shard()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership expires owner and reassigns shards()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat returns unknown member for missing group()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">health does not wait for a slow redis ping beyond configured timeout()</span>
+<span class="case-time">0.022s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.022s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">expired member leave heartbeat stays fenced()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">metadata sync waits in revoke pending until draining member releases and peers acknowledge()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">monitoring live owner rows exclude expired members with stale current assignments()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">member split join advances assignment epochs()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordinator tick expires silent members without waiting for another heartbeat()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana offset cache reuses shard reads across overview panels()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">metadata sync does not expose new target shards as immediately assigned()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale to zero waits when Redis cannot compute removed shard lag()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects client advanced member epoch()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration rollback rejects unknown id()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat fences member that reports shard owned by another active member()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana shard rows can scan all groups for overview dashboards()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">assignment first member gets readable shards()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects unsupported negative member epoch()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">duplicate terminal revoke report after release does not fence member()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana option APIs expose current sharded stream selections from metadata()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">metadata sync ignores stale revoke reports from discarded higher version()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">failover resumes pending revoke()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">rebalance timeout keeps timely owner active()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale to zero drains and removes every shard()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">initial join heartbeat replay returns current assignment without changing epochs()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">higher metadata version does not bypass fenced member state()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects member id mismatch()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat with higher metadata version requests sync to current redis metadata()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat rejects unknown member leave()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana messages can page backward through a single shard more than once()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership rejoin restores expired member()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat fences member that reports pending shard ownership before revoke completes()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership fences expired owner stale epoch()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat fences stale member epoch()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">steady heartbeat replay does not bump metadata or assignment epochs()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">heartbeat accepts previously granted ownership after target changes before ack()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">delete group removes inactive metadata()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream scale updates every consumer group and assignments arrive on heartbeat()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group creation provisions initial shard plan()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">create stream validates invalid stream prefix before storing metadata()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana messages can jump to the last page across all shards()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana offset cache is not invalidated by heartbeat metadata changes()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">migration scale lets live consumers revoke old assignments without fencing()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale in migration completes after removed shards are drained()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership rejoin restores gracefully left member()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">coordination version is accepted only inside module support range()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">metadata sync serializes concurrent stale revoke reports from multiple members()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group rejects duplicate create()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream scale to zero updates every consumer group routing metadata()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">additional group create under managed prefix does not reject existing coordinator shard keys()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">monitoring read does not acquire critical section or write refreshed state()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">first group create rejects pre-existing Redis stream prefix keys()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale in waits for every Redis consumer group on removed shards to drain()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">membership ignores stale ownership on rejoin()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">scale provisions target shard plan after preparing migration state is committed()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorServiceTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorstatemutextest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator State Mutex Test</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateMutexTest · 0.004s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis state mutex returns service unavailable when mutex cannot be acquired()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateMutexTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateMutexTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis state mutex allows only one critical section at a time()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateMutexTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateMutexTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-coordinatorstatestoretest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Coordinator State Store Test</span><span class="badge">6 total</span> <span class="badge pass">6 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest · 0.285s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">6 total</span> <span class="badge pass">6 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">memory store creates saves and lists groups()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis keys keep group metadata in one hash slot()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">memory store survives coordinator replacement()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">jdbc store persists group metadata and rejects stale writes()</span>
+<span class="case-time">0.253s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.253s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis store rejects put if legacy group value key already exists()</span>
+<span class="case-time">0.015s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.015s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis store reads and migrates legacy group value key()</span>
+<span class="case-time">0.012s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CoordinatorStateStoreTest</dd></div><div><dt>Duration</dt><dd>0.012s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-criticalsectionaspecttest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Critical Section Aspect Test</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.CriticalSectionAspectTest · 0.122s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">2 total</span> <span class="badge pass">2 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">critical section rejects new work after coordinator starts terminating()</span>
+<span class="case-time">0.119s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CriticalSectionAspectTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CriticalSectionAspectTest</dd></div><div><dt>Duration</dt><dd>0.119s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">critical section annotation applies local monitor and coordinator mutex()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CriticalSectionAspectTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.CriticalSectionAspectTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-grafanadashboardcontracttest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Grafana Dashboard Contract Test</span><span class="badge">11 total</span> <span class="badge pass">11 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest · 0.020s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">11 total</span> <span class="badge pass">11 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream messages panel wires bounded pagination controls()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream messages tables expose resizable columns()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">admin console exposes shard scaling without producer stress controls()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">public dashboard is compatible with external sharing()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream sharding overview groups consumer groups under each stream()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">import dashboards expose datasource and coordinator URL inputs()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">api dashboard latency panels use recent window instead of sticky full-range maxima()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">html graphics datasource calls are grafana subpath safe()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream messages panel shows time shard offset and fields columns()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">overview dashboard keeps group and owner columns operator friendly()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">grafana gauge queries carry previous values across dashboard range()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.GrafanaDashboardContractTest</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-rediscoordinatormetadataschematest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Redis Coordinator Metadata Schema Test</span><span class="badge">5 total</span> <span class="badge pass">5 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest · 0.092s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">5 total</span> <span class="badge pass">5 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis metadata parser accepts current and legacy v1 metadata()</span>
+<span class="case-time">0.058s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Duration</dt><dd>0.058s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis metadata parser upgrades legacy coordinator managed shard layout metadata()</span>
+<span class="case-time">0.018s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Duration</dt><dd>0.018s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis metadata parser accepts legacy migration id fields()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis metadata parser ignores removed legacy fields()</span>
+<span class="case-time">0.004s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Duration</dt><dd>0.004s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">redis metadata parser rejects unsupported future schema()</span>
+<span class="case-time">0.003s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorMetadataSchemaTest</dd></div><div><dt>Duration</dt><dd>0.003s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-rediscoordinatorstatestoreintegrationtest" class="suite">
+<summary><span class="suite-dot skipped" aria-label="skipped"></span><span>Redis Coordinator State Store Integration Test</span><span class="badge">3 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">3 skipped</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest · 0.001s</p>
+<details class="group-level-1">
+<summary><span>Skipped</span><span class="badge">3 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">3 skipped</span></summary>
+<div class="case-list">
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">redis store rejects stale snapshot writes()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">redis stream provisioning creates consumer groups for created and scaled shard versions()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">redis store writes one metadata hash key()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisCoordinatorStateStoreIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamcoordinatorapplicationtest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Redis Stream Coordinator Application Test</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest · 0.002s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">1 total</span> <span class="badge pass">1 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">spring context loads()</span>
+<span class="case-time">0.002s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamCoordinatorApplicationTest</dd></div><div><dt>Duration</dt><dd>0.002s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamprovisioningintegrationtest" class="suite">
+<summary><span class="suite-dot skipped" aria-label="skipped"></span><span>Redis Stream Provisioning Integration Test</span><span class="badge">4 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">4 skipped</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest · 0.001s</p>
+<details class="group-level-1">
+<summary><span>Skipped</span><span class="badge">4 total</span> <span class="badge pass">0 passed</span> <span class="badge skip">4 skipped</span></summary>
+<div class="case-list">
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">stream provisioner is idempotent for existing Redis consumer groups()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">coordinator provisions Redis consumer groups on create and scale()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">stream provisioner retry succeeds after partial Redis failure leaves existing groups()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card skipped">
+<summary class="case-summary">
+<span class="status skipped">skipped</span>
+<span class="case-name">monitoring exposes shard offsets lag and paged stream messages()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamProvisioningIntegrationTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+<details id="suite-io-github-ghkdqhrbals-redisstreamcoordinator-redisstreamshardkeystest" class="suite">
+<summary><span class="suite-dot passed" aria-label="passed"></span><span>Redis Stream Shard Keys Test</span><span class="badge">6 total</span> <span class="badge pass">6 passed</span></summary>
+<div class="suite-body">
+<p class="muted">io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest · 0.004s</p>
+<details class="group-level-1">
+<summary><span>Passed</span><span class="badge">6 total</span> <span class="badge pass">6 passed</span></summary>
+<div class="case-list">
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">hash slot matches Redis Cluster hash tag behavior()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream key pattern uses placeholders for producer routing()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">provisioning plan binds consumer group and shard keys()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream shard key helper validates Redis Cluster unsafe metadata()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">group metadata creates stream shard keys for configured shard count()</span>
+<span class="case-time">0.000s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.000s</dd></div></dl>
+
+</div>
+</details>
+<details class="case-card passed">
+<summary class="case-summary">
+<span class="status passed">passed</span>
+<span class="case-name">stream shard keys avoid hash tags and distribute across equal master ranges()</span>
+<span class="case-time">0.001s</span>
+</summary>
+<div class="case-body">
+<dl class="case-meta"><div><dt>Class</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Suite</dt><dd>io.github.ghkdqhrbals.redisstreamcoordinator.RedisStreamShardKeysTest</dd></div><div><dt>Duration</dt><dd>0.001s</dd></div></dl>
+
+</div>
+</details>
+</div>
+</details>
+</div>
+</details>
+</section>
+</main>
+</div>
+</body>
+</html>
