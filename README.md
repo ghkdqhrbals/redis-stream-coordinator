@@ -195,6 +195,8 @@ During Spring bean initialization, both managed consumers and producer routing c
 
 * [Published Design Docs](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html)
 * [Published Design Docs (Korean)](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html?tl=ko)
+* [Published Edge Case Q&A](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/docs/prd/14-edge-case-qna.html)
+* [Published Edge Case Q&A (Korean)](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/docs/prd/14-edge-case-qna.html?tl=ko)
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)

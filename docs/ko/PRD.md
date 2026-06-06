@@ -19,7 +19,8 @@ Redis Stream Coordinator는 Kafka KIP-848의 coordinator-managed rebalance 개�
 11. [Versioning and Compatibility Policy](prd/11-versioning-compatibility.md)
 12. [Failure Modes and Edge Cases](prd/12-failure-modes-edge-cases.md)
 13. [Terraform and GitOps Governance](prd/13-terraform-governance.md)
-14. [Scalar API Reference](../api.html)
+14. [Edge Case Q&A](prd/14-edge-case-qna.md)
+15. [Scalar API Reference](../api.html)
 
 ## 왜 이 프로젝트가 필요한가
 
