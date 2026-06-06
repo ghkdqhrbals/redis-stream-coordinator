@@ -146,6 +146,7 @@ Scale-in does not move messages from removed shard streams. Removed shards enter
 * Producers refresh routing metadata and stop writing new records to removed shard indexes.
 * Consumers keep processing records that already exist on removed shard streams.
 * The coordinator must not mark removed shards deprecated while any live member still owns or revokes them.
+* If every live member expires during scale-in, there is no heartbeat target that can acknowledge revoke. The coordinator skips the consumer-level revoke wait and advances to Redis-level drain checks.
 * The coordinator must also inspect Redis `XINFO GROUPS` for every removed physical stream shard and wait until every Redis consumer group attached to that stream reports `pending=0` and known `lag=0`.
 * If Redis reports `lag=null` for any group on a removed shard, drain completion is not proven and scale-in remains in `DRAINING`.
 

@@ -76,7 +76,7 @@ Consumer 모듈은 heartbeat, assignment, revoke, fencing, optional Redis Stream
 
 * Routing determinism은 같은 producer-routing protocol, 같은 `shardCount`, 같은 partition key 안에서만 보장한다.
 * Shard scale-out/in은 routing domain을 바꾼다. 같은 partition key라도 shard count 변경 전후에는 서로 다른 shard index로 route될 수 있다.
-* `targetShardCount=0`은 지원되는 full-drain scale-in이다. Coordinator가 target count를 기록하면 producer routing은 빈 shard set을 반환하고, 제거 대상 shard stream은 해당 stream을 consume하는 모든 Redis consumer group이 `pending=0`과 known `lag=0`을 보고한 뒤에만 retired 된다.
+* `targetShardCount=0`을 포함한 모든 scale-in은 Redis-level drain 증거로 finalize된다. Live member가 모두 expire되어 revoke ack를 보낼 consumer가 없으면 coordinator는 consumer-level revoke를 생략하고, 제거 대상 shard stream을 consume하는 모든 Redis consumer group이 `pending=0`과 known `lag=0`을 보고한 뒤에만 retired 처리한다.
 * 기본 처리 모델은 at-least-once이다. 같은 business event가 여러 번 전달되거나 여러 번 처리 시도될 수 있다.
 * 단일 처리 또는 단일 side effect 반영은 보장하지 않는다. 여러 비즈니스 side effect를 Redis Stream ACK와 함께 원자적으로 commit할 수 없기 때문이다.
 * 중복 side effect 방지는 application domain의 idempotency, deduplication, unique constraint, compensation 정책으로 처리해야 한다.

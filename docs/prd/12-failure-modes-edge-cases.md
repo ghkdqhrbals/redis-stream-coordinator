@@ -159,6 +159,7 @@ Failure subcases:
 | A reports `REVOKED` but coordinator dies before writing metadata | A retries `REVOKED`. B remains pending |
 | A reports `REVOKED`, coordinator commits metadata, response is lost | Next heartbeat confirms the released state. B can be assigned from committed metadata |
 | A dies while draining | Coordinator expires A after member lease TTL or rebalance timeout and then allows reassignment. Duplicate processing is possible and remains at-least-once |
+| Every live member expires during scale-in | There is no heartbeat target that can acknowledge revoke. Coordinator advances the migration to Redis-level drain checks and completes only when every Redis group on removed shards reports `pending=0` and known `lag=0` |
 | A restarts after DRAIN without local revoking memory | A rejoins with `memberEpoch=0`. Coordinator validates the rejoin against Redis-recorded target/current state and either keeps it fenced or requires full reconciliation |
 
 Recorded state by write boundary:

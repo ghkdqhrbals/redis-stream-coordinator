@@ -146,6 +146,7 @@ Scale-in은 제거 대상 shard stream의 메시지를 다른 shard로 이동하
 * Producer는 routing metadata를 갱신하고 제거 대상 shard index로 새 record를 쓰지 않는다.
 * Consumer는 제거 대상 shard stream에 이미 존재하는 record를 계속 처리한다.
 * Coordinator는 live member가 제거 대상 shard를 아직 소유하거나 revoke 중이면 removed shard를 deprecated 처리하면 안 된다.
+* Scale-in 도중 live member가 모두 expire되면 revoke ack를 보낼 heartbeat 대상이 없다. 이 경우 coordinator는 consumer-level revoke wait를 생략하고 Redis-level drain check로 진행한다.
 * Coordinator는 제거 대상 physical stream shard마다 Redis `XINFO GROUPS`를 조회하고, 해당 stream을 consume하는 모든 Redis consumer group이 `pending=0`과 known `lag=0`을 보고할 때까지 기다려야 한다.
 * Redis가 제거 대상 shard의 어떤 group에 대해 `lag=null`을 반환하면 drain 완료가 증명되지 않은 상태이므로 scale-in은 `DRAINING`에 머문다.
 

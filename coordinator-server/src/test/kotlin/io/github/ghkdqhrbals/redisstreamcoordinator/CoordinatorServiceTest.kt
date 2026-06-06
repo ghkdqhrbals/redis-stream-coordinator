@@ -2426,6 +2426,101 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `scale in completes through Redis drain checks after all live members expire`() {
+        val redis = FakeOffsetRedisCommands()
+        val service = service(clock = clock, redisCommands = redis)
+        service.createGroup("expired-scale-in", "orders-consumer", createGroupRequest(initialShardCount = 3))
+        redis.setShardGroups(
+            "expired-scale-in:1",
+            RedisStreamGroupInfo("orders-consumer", consumers = 0, pending = 0, lastDeliveredId = "10-0", entriesRead = 10, lag = 0),
+            RedisStreamGroupInfo("analytics-consumer", consumers = 0, pending = 0, lastDeliveredId = "10-0", entriesRead = 10, lag = 0),
+        )
+        redis.setShardGroups(
+            "expired-scale-in:2",
+            RedisStreamGroupInfo("orders-consumer", consumers = 0, pending = 0, lastDeliveredId = "10-0", entriesRead = 10, lag = 0),
+            RedisStreamGroupInfo("analytics-consumer", consumers = 0, pending = 0, lastDeliveredId = "10-0", entriesRead = 10, lag = 0),
+        )
+
+        val joined = service.heartbeat("expired-scale-in", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "expired-scale-in",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = joined.memberEpoch, ownedShards = joined.assignment.assignedShards),
+        )
+        val migration = service.scaleGroup(
+            "expired-scale-in",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 1, requestedBy = "test", reason = "scale in while idle"),
+        )
+
+        clock.advance(Duration.ofSeconds(16))
+        service.tick()
+
+        val completedGroup = service.getGroup("expired-scale-in", "orders-consumer")
+        val completedMigration = service.getMigration("expired-scale-in", "orders-consumer", migration.reshardingId)
+
+        assertEquals(GroupState.EMPTY, completedGroup.state)
+        assertEquals(null, completedGroup.activeMigration)
+        assertEquals(MigrationState.DEPRECATED, completedMigration.state)
+
+        val scaleUp = service.scaleGroup(
+            "expired-scale-in",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "scale back up after idle drain"),
+        )
+        assertEquals(3, scaleUp.toShardCount)
+    }
+
+    @Test
+    fun `scale in with no live members waits when Redis cannot prove removed shard lag`() {
+        val redis = FakeOffsetRedisCommands()
+        val service = service(clock = clock, redisCommands = redis)
+        service.createGroup("expired-scale-in-unknown-lag", "orders-consumer", createGroupRequest(initialShardCount = 3))
+        redis.setShardGroups(
+            "expired-scale-in-unknown-lag:1",
+            RedisStreamGroupInfo("orders-consumer", consumers = 0, pending = 0, lastDeliveredId = "10-0", entriesRead = null, lag = null),
+        )
+        redis.setShardGroups(
+            "expired-scale-in-unknown-lag:2",
+            RedisStreamGroupInfo("orders-consumer", consumers = 0, pending = 0, lastDeliveredId = "10-0", entriesRead = 10, lag = 0),
+        )
+
+        val joined = service.heartbeat("expired-scale-in-unknown-lag", "orders-consumer", "member-a", heartbeat("member-a", memberEpoch = 0))
+        service.heartbeat(
+            "expired-scale-in-unknown-lag",
+            "orders-consumer",
+            "member-a",
+            heartbeat("member-a", memberEpoch = joined.memberEpoch, ownedShards = joined.assignment.assignedShards),
+        )
+        val migration = service.scaleGroup(
+            "expired-scale-in-unknown-lag",
+            "orders-consumer",
+            ScaleGroupRequest(targetShardCount = 1, requestedBy = "test", reason = "scale in while idle"),
+        )
+
+        clock.advance(Duration.ofSeconds(16))
+        service.tick()
+
+        assertEquals(
+            MigrationState.DRAINING,
+            service.getMigration("expired-scale-in-unknown-lag", "orders-consumer", migration.reshardingId).state,
+        )
+        assertTrue(service.getGroup("expired-scale-in-unknown-lag", "orders-consumer").activeMigration != null)
+
+        redis.setShardGroups(
+            "expired-scale-in-unknown-lag:1",
+            RedisStreamGroupInfo("orders-consumer", consumers = 0, pending = 0, lastDeliveredId = "10-0", entriesRead = 10, lag = 0),
+        )
+        service.tick()
+
+        assertEquals(
+            MigrationState.DEPRECATED,
+            service.getMigration("expired-scale-in-unknown-lag", "orders-consumer", migration.reshardingId).state,
+        )
+    }
+
+    @Test
     fun `scale to zero drains and removes every shard`() {
         val redis = FakeOffsetRedisCommands()
         val service = service(clock = clock, redisCommands = redis)

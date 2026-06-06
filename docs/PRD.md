@@ -77,7 +77,7 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 
 * Routing determinism is guaranteed only for the same routing protocol, `shardCount`, and partition key.
 * Shard scale-out/in changes the routing domain. The same partition key can route to different shard indexes between old and new shard counts.
-* `targetShardCount=0` is a supported full-drain scale-in. Producer routing returns an empty shard set after the coordinator records the target count, and removed shard streams are retired only after every Redis consumer group on those streams reports `pending=0` and known `lag=0`.
+* Every scale-in, including `targetShardCount=0`, is finalized by Redis-level drain evidence. If all live members expire before they can acknowledge revoke, the coordinator skips consumer-level revoke and retires removed shard streams only after every Redis consumer group on those streams reports `pending=0` and known `lag=0`.
 * The baseline processing model is at-least-once.
 * Single processing and exactly-once side effects are not guaranteed.
 * Applications must handle duplicate side effects through domain-level idempotency, deduplication, unique constraints, or compensation.

@@ -2128,6 +2128,8 @@ class CoordinatorService(
 
     /**
      * Starts draining removed shards once all live members converged on the target assignment.
+     * If every member expired during scale-in, there is no heartbeat target that can acknowledge
+     * revoke; the coordinator skips consumer-level revoke and relies on Redis drain checks.
      */
     private fun startMigrationDrainIfReady(
         group: GroupMetadata,
@@ -2135,17 +2137,23 @@ class CoordinatorService(
         now: Instant,
     ): Boolean {
         val liveMembers = group.liveMembers()
-        if (liveMembers.isEmpty() || group.state != GroupState.STABLE) {
-            return false
-        }
-        if (!liveMembers.all { member -> member.currentAssignment == group.targetAssignments[member.memberId].orEmpty() }) {
-            return false
+        val noLiveScaleIn = liveMembers.isEmpty() && migration.toShardCount < migration.fromShardCount
+        if (!noLiveScaleIn) {
+            if (liveMembers.isEmpty() || group.state != GroupState.STABLE) {
+                return false
+            }
+            if (!liveMembers.all { member -> member.currentAssignment == group.targetAssignments[member.memberId].orEmpty() }) {
+                return false
+            }
         }
 
         migration.state = MigrationState.DRAINING
         migration.updatedAt = now
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
+        if (noLiveScaleIn) {
+            completeMigrationDrainIfReady(group, migration, now)
+        }
         return true
     }
 
