@@ -1,6 +1,6 @@
 # 구현 상태
 
-마지막 업데이트: 2026-06-01
+마지막 업데이트: 2026-06-07
 
 ## 요약
 
@@ -20,7 +20,6 @@
 * [x] Group metadata 조회 API
 * [x] Producer routing metadata API
 * [x] Shard scale API
-* [x] Consumer concurrency update API
 * [x] Resharding 조회와 rollback API
 * [x] Member heartbeat API
 * [x] Health, group, member, assignment, resharding monitoring API
@@ -45,6 +44,7 @@
 * [x] Shard count 변경 기반 resharding
 * [x] Active migration 중 제거 대상 shard drain
 * [x] Drain 완료 후 shard handoff
+* [x] Live member가 모두 expire된 scale-in에서 Redis `XINFO GROUPS` drain check로 migration 완료
 * [x] Active resharding rollback
 
 ### Redis Integration

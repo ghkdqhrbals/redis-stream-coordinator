@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-06-01
+Last updated: 2026-06-07
 
 ## Snapshot
 
@@ -18,7 +18,7 @@ Overall status:
 | --- | --- | --- |
 | Project foundation | Done | Gradle Kotlin DSL, Gradle Wrapper `8.14.5`, Spring Boot `4.0.6`, Kotlin `2.2.21`, Java toolchain `24`, Foojay resolver. |
 | Coordinator API | Done | Admin, member heartbeat, producer routing, migration, rollback, and monitoring endpoints are implemented. |
-| Rebalance semantics | Done for MVP | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, stale ownership fencing, rebalance timeout, migration drain, and monitoring refresh conflict retry are implemented. |
+| Rebalance semantics | Done for MVP | Sticky assignment, revoke-before-assign, member join/rejoin/leave/expiry, stale ownership fencing, rebalance timeout, scale-in Redis drain checks, and monitoring refresh conflict retry are implemented. |
 | Redis state store | Done | Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua metadata-hash updates. |
 | Redis Stream shard provisioning | Done | Optional stream/consumer-group provisioning is implemented and gated by config. Idempotent retry and partial failure behavior are covered. |
 | Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
@@ -59,7 +59,6 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Group metadata read API.
 * [x] Producer routing metadata API.
 * [x] Shard scale API.
-* [x] Consumer concurrency update API.
 * [x] Migration lookup API.
 * [x] Migration rollback API.
 * [x] Member heartbeat API.
@@ -86,13 +85,13 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Scale migration with updated shard count.
 * [x] Old/new readable shard set during active migration.
 * [x] Automatic migration drain and `DEPRECATED` transition.
+* [x] Scale-in completion through Redis `XINFO GROUPS` drain checks when every live member expires before revoke acknowledgement.
 * [x] Active migration rollback.
 * [x] Monitoring/read API operational refresh retry on Redis store CAS conflict.
 
 ### Redis Integration
 
-* [x] Three-node local Redis Cluster Docker Compose.
-* [x] Lettuce node address mapping for host-to-Docker cluster redirects.
+* [x] External Redis Cluster Docker Compose profiles for sample pods and stress smoke tests.
 * [x] Redis health check in coordinator health response when Redis is required by active configuration.
 * [x] `CoordinatorStateStore` abstraction.
 * [x] In-memory state store.
@@ -124,7 +123,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Optional member heartbeat authentication.
 * [x] Role ACL with `ADMIN`, `MONITOR`, and `MEMBER`.
 * [x] Optional per-caller/group admin mutation rate limiting with `Retry-After` response.
-* [x] Structured admin audit logs for create, scale, consumer concurrency update, and rollback.
+* [x] Structured admin audit logs for create, delete, scale, and rollback.
 * [x] Optional Redis-backed group-scoped admin audit log.
 * [x] Built-in monitoring console that signs in with coordinator Basic Auth and reads monitoring APIs.
 * [x] Coordinator Micrometer metrics:
@@ -243,7 +242,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * Member expiration through heartbeat and event loop tick.
 * Rebalance timeout fencing.
 * Stale ownership fencing for premature pending ownership and foreign active-owner shard reports.
-* Scale migration, producer routing refresh, rollback, and migration drain completion.
+* Scale migration, producer routing refresh, rollback, migration drain completion, and no-live-member scale-in drain completion.
 * Redis single-key metadata store and stale snapshot rejection.
 * Stream shard key validation and Redis Cluster slot distribution.
 * Stream provisioning success, idempotent retry, and failure ordering.

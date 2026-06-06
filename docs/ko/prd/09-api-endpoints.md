@@ -223,7 +223,9 @@ POST /coord/v1/streams/{streamPrefix}/scale
 
 Stream prefix의 shard scale-out/in을 시작한다. Consumer group은 이 요청 path에 포함하지 않는다. 해당 stream을 읽는 모든 consumer group은 다음 heartbeat에서 변경된 shard set을 보고 각자 assignment를 재계산한다.
 
-For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.
+Scale-in 완료는 heartbeat만으로 판단하지 않는다. 제거 대상 shard에 live owner가 있으면 coordinator는 heartbeat revoke progress를 기다린다. Live member가 모두 expire되면 Redis-level drain check로 진행하고, 제거 대상 shard의 모든 Redis consumer group이 `pending=0`과 known `lag=0`을 보고할 때만 완료한다.
+
+Duplicate-sensitive workload는 이 endpoint 호출 전에 producer를 멈추고 in-flight publish retry를 drain해야 한다.
 
 Request body:
 

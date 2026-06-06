@@ -39,7 +39,7 @@ sequenceDiagram
 
 ### Coordinator API
 
-* create, scale, consumer concurrency update, rollback, heartbeat request를 직접 받는다.
+* create, scale, rollback, heartbeat request를 직접 받는다.
 * API path의 `{streamPrefix, consumerGroup}`으로 대상 group을 결정한다.
 * member나 producer local YAML에서 stream/group/shard count desired state를 수집하지 않는다.
 

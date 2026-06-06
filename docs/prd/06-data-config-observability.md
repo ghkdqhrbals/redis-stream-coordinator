@@ -34,7 +34,7 @@ Coordinator YAML should contain infrastructure and operational defaults only:
 * mutex behavior,
 * event-loop interval,
 * member lease timeout,
-* default shard count and consumer concurrency used when Admin API requests omit values.
+* default shard count used when Admin API create requests omit a value.
 
 Coordinator YAML should not contain:
 
@@ -44,7 +44,7 @@ Coordinator YAML should not contain:
 * producer routing cache policy for applications,
 * member runtime worker tuning beyond coordinator defaults.
 
-Per-group settings are created or changed through the Admin API.
+Per-group shard count is created or changed through the Admin API. Consumer parallelism is controlled by the consumer deployment or listener configuration; the coordinator observes the resulting logical members through heartbeat.
 
 ## Example Configuration
 
@@ -93,7 +93,6 @@ coordinator:
       retry-interval-ms: 100
   defaults:
     initial-shard-count: 4
-    max-concurrency: 4
 ```
 
 ## State Mutex
@@ -107,7 +106,6 @@ Protected operations:
 * graceful leave,
 * resharding request,
 * rollback,
-* consumer concurrency update,
 * monitoring read that performs operational refresh,
 * scheduled event loop tick.
 

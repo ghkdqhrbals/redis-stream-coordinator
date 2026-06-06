@@ -261,7 +261,7 @@ Use `admin` / `password` in the coordinator Swagger Authorize dialog for protect
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed or JDBC-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, a lightweight monitoring console, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
+This repository includes the Spring Boot/Kotlin coordinator server, shared protocol core, RedisStream Spring Boot starter, sample consumer/publisher pods, external-Redis Docker Compose profiles, monitoring console, Grafana dashboard assets, and CI review/test workflows. Coordinator metadata can run in memory for tests or in Redis/JDBC for deployments.
 
 ## License
 

@@ -56,7 +56,7 @@ class GroupOperationsController(
     @Operation(
         operationId = "startGroupResharding",
         summary = "Start shard scale-out or scale-in",
-        description = "Creates a coordinator-managed resharding operation. The coordinator provisions shard stream keys and reconciles consumer ownership through heartbeat responses.",
+        description = "Creates a coordinator-managed resharding operation. The coordinator provisions shard stream keys and reconciles consumer ownership through heartbeat responses. During scale-in, if every live member expires, the coordinator skips consumer-level revoke wait and completes only after Redis reports removed shard consumer groups are drained.",
         responses = [
             ApiResponse(responseCode = "202", description = "Resharding was accepted."),
             ApiResponse(responseCode = "409", description = "Another migration is already active."),

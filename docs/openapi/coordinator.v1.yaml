@@ -201,6 +201,8 @@ paths:
         Changes the physical shard count for every coordinator group registered under the stream prefix.
         Consumer groups are intentionally not part of this path. Each affected group receives the new
         assignment plan on the next consumer heartbeat and reconciles ownership independently.
+        During scale-in, removed shard streams are retired only after live owners release them or expire
+        and every Redis consumer group on removed shards reports pending=0 and known lag=0.
       requestBody:
         required: true
         content:
@@ -233,7 +235,12 @@ paths:
       tags: [Resharding]
       operationId: startGroupResharding
       summary: Compatibility: scale one consumer group.
-      description: Compatibility endpoint for a single consumer group. Operators should prefer POST /coord/v1/streams/{streamPrefix}/scale so the stream shard count changes consistently across registered groups.
+      description: |
+        Compatibility endpoint for a single consumer group. Operators should prefer
+        POST /coord/v1/streams/{streamPrefix}/scale so the stream shard count changes consistently
+        across registered groups. During scale-in, if every live member expires, the coordinator skips
+        consumer-level revoke wait and completes only after Redis reports removed shard consumer groups
+        are drained.
       requestBody:
         required: true
         content:
@@ -832,7 +839,7 @@ components:
         targetShardCount:
           type: integer
           minimum: 0
-          description: Target physical shard count. Zero drains and removes every shard.
+          description: Target physical shard count. Zero drains and removes every shard. Scale-in completes only after live owners release or expire and Redis reports removed shard consumer groups are drained.
         requestedBy:
           type: string
         reason:
@@ -847,7 +854,7 @@ components:
         targetShardCount:
           type: integer
           minimum: 0
-          description: Target physical shard count. Zero drains and removes every shard.
+          description: Target physical shard count. Zero drains and removes every shard. Scale-in completes only after live owners release or expire and Redis reports removed shard consumer groups are drained.
         requestedBy:
           type: string
         reason:

@@ -75,7 +75,7 @@
 * regex topic subscription and server-side topic metadata resolution.
 * Kafka static membership semantics such as temporary leave with instance id replacement.
 * Kafka offset commit/fetch APIs and topic-id based offset handling.
-* Kafka group dynamic config API. Redis Stream Coordinator uses its own Admin API for create, shard scale, consumer concurrency update, and rollback.
+* Kafka group dynamic config API. Redis Stream Coordinator uses its own Admin API for create, shard scale, and rollback. Consumer parallelism is controlled by deployment/listener configuration and reported through heartbeat.
 
 ## Residual Gaps To Decide
 

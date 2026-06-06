@@ -113,17 +113,15 @@ coordinator:
   defaults:
     # create group 요청에서 initialShardCount가 없을 때 사용할 기본 shard count이다.
     initial-shard-count: 1
-    # create/update 요청에서 maxConcurrency가 없을 때 member별로 내려줄 기본 consumer worker 수이다.
-    consumer-max-concurrency: 1
 ```
 
-Shard count와 consumer `maxConcurrency`의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 `defaults`는 요청값이 생략됐을 때만 쓰이며, stream/group별 개별 설정은 Admin API로 저장한다. Kafka coordinator처럼 coordinator server config에는 shard count나 consumer concurrency min/max를 두지 않는다.
+Shard count의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 `defaults`는 요청값이 생략됐을 때만 쓰인다. Consumer 병렬성은 consumer deployment 또는 listener configuration이 결정하고, coordinator는 heartbeat로 들어오는 logical member 수를 관찰한다.
 
 ## Coordinator State Serialization
 
 Redis-backed coordinator는 Redis mutex와 `storeRevision` compare-and-set을 state serialization boundary로 사용한다.
 
-* create, heartbeat, scale, rollback, consumer concurrency update, monitoring read-time operational refresh, scheduled tick은 Redis mutex 안에서 group metadata hash를 읽고 갱신한다.
+* create, heartbeat, scale, rollback, monitoring read-time operational refresh, scheduled tick은 Redis mutex 안에서 group metadata hash를 읽고 갱신한다.
 * critical section 순서는 `acquire Redis mutex -> read latest metadata hash -> validate/process/reconcile -> save with storeRevision CAS -> release mutex`이다.
 * 여러 coordinator pod가 같은 Redis store를 보더라도 같은 group update는 mutex 또는 `storeRevision` CAS로 직렬화된다.
 * event loop tick은 다른 instance가 먼저 같은 group을 update하면 reload하거나 skip하고 다음 tick에서 이어간다.
@@ -163,7 +161,7 @@ Token 서명에는 `coordinator.api.token-secret`을 사용한다. 운영 배포
 
 ## API Rate Limiting
 
-`coordinator.api.rate-limit.enabled=true`이면 create, scale, consumer concurrency update, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 `{streamPrefix, consumerGroup}` 조합이다.
+`coordinator.api.rate-limit.enabled=true`이면 create, scale, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 `{streamPrefix, consumerGroup}` 조합이다.
 
 Rate limit 초과 시 coordinator는 `429 Too Many Requests`와 `Retry-After` header를 반환한다. Monitoring read API와 member heartbeat API는 이 limit에 포함하지 않는다. 현재 구현은 coordinator instance local limiter이므로, 여러 coordinator instance를 운영할 경우 global rate limit은 외부 gateway나 load balancer에서 보강한다.
 
@@ -258,7 +256,7 @@ Structured log fields:
 * `requestedBy`
 * `reshardingId`
 
-Admin audit event는 create, delete, scale, consumer concurrency update, rollback 같은 control-plane mutation마다 남긴다. 기본 sink는 structured application log이다. `coordinator.audit.sink=redis`이면 coordinator는 JSON audit event를 다음 group-scoped key에 쓴다.
+Admin audit event는 create, delete, scale, rollback 같은 control-plane mutation마다 남긴다. 기본 sink는 structured application log이다. `coordinator.audit.sink=redis`이면 coordinator는 JSON audit event를 다음 group-scoped key에 쓴다.
 
 ```text
 redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit

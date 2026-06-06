@@ -208,6 +208,8 @@ POST /coord/v1/streams/{streamPrefix}/scale
 
 Starts shard scale-out or scale-in for the stream prefix. Consumer group is intentionally not part of this request. Every registered consumer group for the stream observes the changed shard set on the next heartbeat and reconciles assignment independently.
 
+Scale-in completion is not based only on heartbeat. If removed shards still have live owners, the coordinator waits for revoke progress through heartbeat. If every live member has expired, the coordinator advances to Redis-level drain checks and completes only when every Redis consumer group on removed shards reports `pending=0` and known `lag=0`.
+
 For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across shards.
 
 Request body:

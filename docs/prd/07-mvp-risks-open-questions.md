@@ -53,7 +53,7 @@ Costs:
 
 Benefits:
 
-* Shard count, consumer concurrency, and resharding mutations use one path.
+* Shard count and resharding mutations use one path.
 * Member startup YAML cannot accidentally mutate group metadata.
 * Operators can audit every metadata mutation.
 

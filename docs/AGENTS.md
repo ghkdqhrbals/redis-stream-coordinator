@@ -4,9 +4,8 @@
 
 ## 작업 원칙
 
-* `PRD.md`는 entrypoint와 lazy loading index 역할만 한다.
+* `PRD.md`는 entrypoint와 설계 문서 index 역할을 한다.
 * 상세 설계는 `prd/*.md`에 주제별로 나누어 둔다.
-* 기존 `redis-stream-sharding/`은 coordinatorless 설계이다. 이 폴더는 중앙 Group Coordinator를 두는 대안 설계로 관리한다.
 * KIP-848의 개념을 그대로 복사하지 말고 Redis Stream 제약에 맞게 번역한다.
 * 구현이 확정되지 않은 항목은 `Open Questions` 또는 `Decision Needed`로 둔다.
 
@@ -39,5 +38,3 @@
 ## 참고 설계
 
 * KIP-848: <https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol>
-* 작성자 정리 글: <https://ghkdqhrbals.github.io/portfolios/docs/Java/51/>
-* coordinatorless 대안 설계: [`../redis-stream-sharding/PRD.md`](../redis-stream-sharding/PRD.md)
