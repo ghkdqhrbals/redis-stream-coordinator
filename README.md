@@ -32,6 +32,7 @@ The project does not provide a single-processing guarantee. Real applications of
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
 * `redisstream-core`: shared coordination protocol contract, version metadata, and versioned timing defaults used by both the coordinator server and support modules.
 * `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
+* `clients/python`: sync-first Python producer/consumer package published as `redisstream-coordinator` and imported as `redisstream`.
 * `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
 * `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
 
@@ -191,6 +192,40 @@ redisStreamPublisher.publish(
 
 During Spring bean initialization, both managed consumers and producer routing caches validate coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`. If the coordinator group does not exist or has no active shards, application startup fails immediately instead of waiting for the first heartbeat or publish call.
 
+## Python Integration
+
+The Python client is sync-first and lives under `clients/python`.
+
+```bash
+pip install redisstream-coordinator
+```
+
+```python
+from redisstream import RedisStreamCoordinator
+
+app = RedisStreamCoordinator(
+    coordinator_base_url="http://localhost:8080",
+    redis_url="redis://localhost:6379",
+)
+
+@app.stream_listener(
+    stream_prefix="orders",
+    group_id="orders-consumer",
+    concurrency=4,
+    poll_batch_size=10,
+)
+def consume(message):
+    # Run business processing first, then explicitly commit the Redis Stream record.
+    message.ack()
+
+publisher = app.publisher("orders", "orders-consumer")
+publisher.publish("order-123", {"eventId": "evt-1", "payload": "..."})
+
+app.start()
+```
+
+Python listener concurrency follows the JVM starter contract: `concurrency = 4` creates four logical coordinator members with independent heartbeat state and Redis consumer names. Producer routing uses the same Murmur3 32-bit routing algorithm and `XADD NOMKSTREAM` stale-route protection as the JVM starter. Processing remains at-least-once.
+
 ## Documentation
 
 * [Published Design Docs](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html)
@@ -200,7 +235,10 @@ During Spring bean initialization, both managed consumers and producer routing c
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
+* [Release 0.1.0](docs/releases/0.1.0.md)
+* [Release 0.1.0 (Korean)](docs/ko/releases/0.1.0.md)
 * [Terraform and GitOps Governance](docs/prd/13-terraform-governance.md)
+* [Python Client Library](docs/prd/15-python-client.md)
 * [Terraform Shard Management Module](terraform/README.md)
 * [OpenAPI Spec](docs/openapi/coordinator.v1.yaml)
 * [Docker Guide](docs/docker.md)

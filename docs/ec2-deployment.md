@@ -14,6 +14,105 @@ The EC2 environment runs:
 
 Do not repoint `api.ghkdqhrbals.org` to Redis Stream Coordinator.
 
+## TLS and Nginx Routing
+
+The EC2 host must serve three public hostnames with three independent TLS certificates:
+
+| Public host | Certificate name | Backend |
+| --- | --- | --- |
+| `coordinator.ghkdqhrbals.org` | `coordinator.ghkdqhrbals.org` | `http://127.0.0.1:18080` or `http://rsc-coordinator:8080` |
+| `monitor.ghkdqhrbals.org` | `monitor.ghkdqhrbals.org` | `http://127.0.0.1:3001` or `http://rsc-grafana:3000` |
+| `api.ghkdqhrbals.org` | `api.ghkdqhrbals.org` | BuddyStuddy backend |
+
+All three DNS records should point to the EC2 Elastic IP. Do not use one certificate that only covers a different hostname; browsers and curl will reject it with a hostname mismatch.
+
+Issue or repair each certificate separately:
+
+```bash
+sudo certbot certonly --nginx \
+  --cert-name coordinator.ghkdqhrbals.org \
+  -d coordinator.ghkdqhrbals.org
+
+sudo certbot certonly --nginx \
+  --cert-name monitor.ghkdqhrbals.org \
+  -d monitor.ghkdqhrbals.org
+
+sudo certbot certonly --nginx \
+  --cert-name api.ghkdqhrbals.org \
+  -d api.ghkdqhrbals.org
+```
+
+Use one `server` block per hostname so SNI selects the matching certificate:
+
+```nginx
+server {
+    listen 80;
+    server_name coordinator.ghkdqhrbals.org monitor.ghkdqhrbals.org api.ghkdqhrbals.org;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name coordinator.ghkdqhrbals.org;
+
+    ssl_certificate /etc/letsencrypt/live/coordinator.ghkdqhrbals.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/coordinator.ghkdqhrbals.org/privkey.pem;
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://127.0.0.1:18080;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name monitor.ghkdqhrbals.org;
+
+    ssl_certificate /etc/letsencrypt/live/monitor.ghkdqhrbals.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/monitor.ghkdqhrbals.org/privkey.pem;
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://127.0.0.1:3001;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.ghkdqhrbals.org;
+
+    ssl_certificate /etc/letsencrypt/live/api.ghkdqhrbals.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.ghkdqhrbals.org/privkey.pem;
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://127.0.0.1:<buddystuddy-backend-port>;
+    }
+}
+```
+
+After editing nginx:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot renew --dry-run
+```
+
+Check certificate hostname matching:
+
+```bash
+curl -fsS -I https://coordinator.ghkdqhrbals.org/console
+curl -fsS -I https://monitor.ghkdqhrbals.org/
+curl -fsS -I https://api.ghkdqhrbals.org/
+```
+
 ## Rules
 
 * Deploy only committed source.
