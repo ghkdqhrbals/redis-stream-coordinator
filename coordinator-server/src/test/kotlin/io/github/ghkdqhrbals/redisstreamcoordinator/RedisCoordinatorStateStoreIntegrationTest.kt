@@ -187,7 +187,6 @@ class RedisCoordinatorStateStoreIntegrationTest {
             state = MemberState.ACTIVE,
             memberEpoch = 1,
             metadataVersion = 1,
-            assignedMaxConcurrency = 4,
             runtimeMaxConcurrency = 4,
             activeConsumerWorkers = 0,
             currentAssignment = emptySet(),

@@ -65,6 +65,8 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.info.title").value("Redis Stream Coordinator API"))
             .andExpect(jsonPath("$.components.securitySchemes.basicAuth.type").value("http"))
             .andExpect(jsonPath("$.components.securitySchemes.basicAuth.scheme").value("basic"))
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
 
         mockMvc.perform(get("/swagger-ui.html"))
             .andExpect(status().is3xxRedirection)
@@ -97,6 +99,52 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.authenticated").value(true))
             .andExpect(jsonPath("$.username").value("admin"))
+    }
+
+    @Test
+    fun `login issues seven day bearer token for coordinator api calls`() {
+        val loginResult = mockMvc.perform(
+            post("/coord/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"username":"admin","password":"password"}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.tokenType").value("Bearer"))
+            .andExpect(jsonPath("$.expiresInSeconds").value(604800))
+            .andExpect(jsonPath("$.roles[0]").value("ADMIN"))
+            .andReturn()
+
+        val accessToken = objectMapper.readTree(loginResult.response.contentAsString)
+            .get("accessToken")
+            .asString()
+
+        mockMvc.perform(
+            get("/coord/v1/monitoring/session")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.authenticated").value(true))
+            .andExpect(jsonPath("$.username").value("admin"))
+            .andExpect(jsonPath("$.roles").isArray)
+
+        mockMvc.perform(
+            post("/coord/v1/streams/token-auth/groups/orders-consumer")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createGroupRequest(initialShardCount = 2))),
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.streamPrefix").value("token-auth"))
+    }
+
+    @Test
+    fun `login rejects invalid credentials`() {
+        mockMvc.perform(
+            post("/coord/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"username":"admin","password":"wrong"}"""),
+        )
+            .andExpect(status().isUnauthorized)
     }
 
     @Test
@@ -242,6 +290,62 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.migrations.length()").value(1))
             .andExpect(jsonPath("$.migrations[0].reshardingId").exists())
             .andExpect(jsonPath("$.activeReshardingId").exists())
+    }
+
+    @Test
+    fun `http stream scale to zero updates every registered consumer group routing`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/http-stream-zero/groups/orders-consumer")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createGroupRequest(initialShardCount = 2))),
+        )
+            .andExpect(status().isCreated)
+        mockMvc.perform(
+            post("/coord/v1/streams/http-stream-zero/groups/analytics-consumer")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createGroupRequest(initialShardCount = 2))),
+        )
+            .andExpect(status().isCreated)
+
+        mockMvc.perform(
+            post("/coord/v1/streams/http-stream-zero/scale")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    objectMapper.writeValueAsString(
+                        ScaleStreamRequest(
+                            targetShardCount = 0,
+                            requestedBy = "test",
+                            reason = "retire stream",
+                        ),
+                    ),
+                ),
+        )
+            .andExpect(status().isAccepted)
+            .andExpect(jsonPath("$.streamPrefix").value("http-stream-zero"))
+            .andExpect(jsonPath("$.targetShardCount").value(0))
+            .andExpect(jsonPath("$.affectedConsumerGroups.length()").value(2))
+            .andExpect(jsonPath("$.migrations.length()").value(2))
+            .andExpect(jsonPath("$.migrations[0].toShardCount").value(0))
+            .andExpect(jsonPath("$.migrations[1].toShardCount").value(0))
+
+        mockMvc.perform(
+            get("/coord/v1/streams/http-stream-zero/groups/orders-consumer/producer-routing")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.shardCount").value(0))
+            .andExpect(jsonPath("$.shards.length()").value(0))
+
+        mockMvc.perform(
+            get("/coord/v1/streams/http-stream-zero/groups/analytics-consumer/producer-routing")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.shardCount").value(0))
+            .andExpect(jsonPath("$.shards.length()").value(0))
     }
 
     @Test

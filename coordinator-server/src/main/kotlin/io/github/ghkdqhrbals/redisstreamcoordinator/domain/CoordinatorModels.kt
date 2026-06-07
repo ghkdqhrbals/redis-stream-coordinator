@@ -96,23 +96,11 @@ data class ShardId(
         compareValuesBy(this, other, ShardId::shardIndex)
 }
 
-@Schema(description = "Server-side policy that caps consumer worker capacity per member name.")
-data class ConsumerConcurrencyPolicy(
-    @field:Min(1)
-    @field:Schema(description = "Default maximum consumer workers allowed for one member.", example = "4")
-    val defaultMaxConcurrency: Int,
-    @field:Schema(description = "Optional member-name specific worker limits.")
-    val memberOverrides: Map<String, Int> = emptyMap(),
-)
-
 @Schema(description = "Request body for creating coordinator-owned group metadata.")
 data class CreateGroupRequest(
     @field:Min(1)
     @field:Schema(description = "Initial physical shard stream count. Omitted value uses coordinator defaults.", example = "20")
     val initialShardCount: Int? = null,
-    @field:Valid
-    @field:Schema(description = "Optional initial server-side consumer concurrency policy.")
-    val consumerConcurrencyPolicy: ConsumerConcurrencyPolicy? = null,
     @field:NotBlank
     @field:Schema(description = "Operator or automation identity requesting the change.", example = "platform-admin")
     val requestedBy: String,
@@ -163,12 +151,9 @@ data class DeleteGroupRequest(
 
 @Schema(description = "Request body for changing physical shard count.")
 data class ScaleGroupRequest(
-    @field:Min(1)
-    @field:Schema(description = "Target physical shard stream count.", example = "40")
+    @field:Min(0)
+    @field:Schema(description = "Target physical shard stream count. Zero drains and removes all shards.", example = "40")
     val targetShardCount: Int,
-    @field:Valid
-    @field:Schema(description = "Optional concurrency policy update applied with the resharding request.")
-    val consumerConcurrencyPolicy: ConsumerConcurrencyPolicy? = null,
     @field:NotBlank
     @field:Schema(description = "Operator or automation identity requesting resharding.", example = "platform-admin")
     val requestedBy: String,
@@ -181,8 +166,8 @@ data class ScaleGroupRequest(
 
 @Schema(description = "Request body for changing a stream's physical shard count across all registered consumer groups.")
 data class ScaleStreamRequest(
-    @field:Min(1)
-    @field:Schema(description = "Target physical shard stream count.", example = "40")
+    @field:Min(0)
+    @field:Schema(description = "Target physical shard stream count. Zero drains and removes all shards.", example = "40")
     val targetShardCount: Int,
     @field:NotBlank
     @field:Schema(description = "Operator or automation identity requesting resharding.", example = "platform-admin")
@@ -212,21 +197,6 @@ data class StreamScaleResponse(
     val affectedConsumerGroups: List<String>,
     @field:Schema(description = "Per-consumer-group resharding results. Consumer groups converge on heartbeat.")
     val migrations: List<Migration>,
-)
-
-@Schema(description = "Request body for changing server-side consumer worker limits.")
-data class UpdateConsumerConcurrencyRequest(
-    @field:Min(1)
-    @field:Schema(description = "Default maximum consumer workers allowed for each member.", example = "4")
-    val defaultMaxConcurrency: Int,
-    @field:Schema(description = "Optional member-name specific worker limits.")
-    val memberOverrides: Map<String, Int> = emptyMap(),
-    @field:NotBlank
-    @field:Schema(description = "Operator or automation identity requesting the update.", example = "platform-admin")
-    val requestedBy: String,
-    @field:NotBlank
-    @field:Schema(description = "Reason for changing consumer worker limits.", example = "cap slow consumer load")
-    val reason: String,
 )
 
 @Schema(description = "Request body for rolling back an active resharding operation.")
@@ -335,8 +305,6 @@ data class HeartbeatResponse(
     val assignmentEpoch: Long,
     @field:Schema(description = "Current coordinator metadata version.", example = "7")
     val metadataVersion: Long,
-    @field:Schema(description = "Server-side worker limit assigned to this member.", example = "1")
-    val assignedMaxConcurrency: Int,
     @field:Schema(description = "Assigned and pending shard view for this member.")
     val assignment: AssignmentView,
 )
@@ -371,8 +339,6 @@ data class MemberMetadata(
     var memberEpoch: Long,
     @field:Schema(description = "Metadata version observed by this member.", example = "7")
     var metadataVersion: Long,
-    @field:Schema(description = "Server-side worker limit assigned to this member.", example = "1")
-    var assignedMaxConcurrency: Int,
     @field:Schema(description = "Runtime worker capacity reported by the member.", example = "1")
     var runtimeMaxConcurrency: Int,
     @field:Schema(description = "Currently busy local workers reported by the member.", example = "0")
@@ -416,7 +382,6 @@ data class GroupMetadata(
     var assignmentEpoch: Long,
     var state: GroupState,
     var shardCount: Int,
-    var consumerConcurrencyPolicy: ConsumerConcurrencyPolicy,
     val members: MutableMap<String, MemberMetadata> = linkedMapOf(),
     var targetAssignments: MutableMap<String, MutableSet<ShardId>> = linkedMapOf(),
     var migrations: MutableMap<String, Migration> = linkedMapOf(),
@@ -444,24 +409,12 @@ data class GroupResponse(
     val metadataVersion: Long,
     @field:Schema(description = "Current physical shard count.", example = "20")
     val shardCount: Int,
-    @field:Schema(description = "Server-side consumer concurrency policy.")
-    val consumerConcurrencyPolicy: ConsumerConcurrencyPolicy,
     @field:Schema(description = "Active resharding operation, if any.")
     val activeMigration: Migration?,
     @field:Schema(description = "Target shard count per member id.")
     val targetAssignmentSummary: Map<String, Int>,
     @field:Schema(description = "Current owned shard count per member id.")
     val currentAssignmentSummary: Map<String, Int>,
-)
-
-@Schema(description = "Response after updating the server-side consumer concurrency policy.")
-data class ConsumerConcurrencyResponse(
-    val streamPrefix: String,
-    val consumerGroup: String,
-    val metadataVersion: Long,
-    val groupEpoch: Long,
-    val consumerConcurrencyPolicy: ConsumerConcurrencyPolicy,
-    val affectedMembers: List<String>,
 )
 
 @Schema(description = "One physical shard route used by producers.")
@@ -509,6 +462,28 @@ data class MonitoringSessionResponse(
     val username: String?,
     @field:Schema(description = "Configured API roles for this principal.", example = "[\"READ\", \"WRITE\"]")
     val roles: List<String> = emptyList(),
+)
+
+@Schema(description = "Login request for issuing a coordinator API token.")
+data class LoginRequest(
+    @field:Schema(description = "Coordinator API username.", example = "admin")
+    val username: String = "",
+    @field:Schema(description = "Coordinator API password.", example = "password")
+    val password: String = "",
+)
+
+@Schema(description = "Bearer token response for coordinator API calls.")
+data class LoginResponse(
+    @field:Schema(description = "Signed bearer token. Send this as Authorization: Bearer <token>.")
+    val accessToken: String,
+    @field:Schema(description = "Token type.", example = "Bearer")
+    val tokenType: String,
+    @field:Schema(description = "Token expiration timestamp.")
+    val expiresAt: Instant,
+    @field:Schema(description = "Seconds until token expiration.", example = "604800")
+    val expiresInSeconds: Long,
+    @field:Schema(description = "Roles granted to this token.", example = "[\"READ\", \"WRITE\", \"ADMIN\"]")
+    val roles: List<String>,
 )
 
 @Schema(description = "List of coordinator groups.")
@@ -608,6 +583,10 @@ data class StreamMessageRecord(
     val recordId: String,
     val fields: Map<String, String>,
     val payload: String?,
+    @field:Schema(description = "Epoch milliseconds decoded from the Redis Stream record id.")
+    val recordTimestampMs: Long? = redisStreamRecordTimestampMs(recordId),
+    @field:Schema(description = "Record timestamp decoded from the Redis Stream record id.")
+    val recordTime: Instant? = recordTimestampMs?.let(Instant::ofEpochMilli),
 )
 @Schema(description = "Cursor-based Redis Stream message page for one shard.")
 data class StreamMessagesPageResponse(
@@ -659,7 +638,6 @@ data class GrafanaMemberRow(
     val metadataVersion: Long,
     val currentShardCount: Int,
     val revokingShardCount: Int,
-    val assignedMaxConcurrency: Int,
     val runtimeMaxConcurrency: Int,
     val activeConsumerWorkers: Int,
     val lastHeartbeatAt: Instant,
@@ -734,6 +712,15 @@ data class GrafanaMessageRow(
     val pageLimit: Int,
     val pageNextCursor: String?,
     val pageTotalMessages: Long,
+    @field:Schema(description = "Epoch milliseconds decoded from the Redis Stream record id.")
+    val recordTimestampMs: Long? = redisStreamRecordTimestampMs(recordId),
+    @field:Schema(description = "Record timestamp decoded from the Redis Stream record id.")
+    val recordTime: Instant? = recordTimestampMs?.let(Instant::ofEpochMilli),
 )
+
+fun redisStreamRecordTimestampMs(recordId: String): Long? =
+    recordId.substringBefore('-', missingDelimiterValue = "")
+        .takeIf { it.isNotBlank() }
+        ?.toLongOrNull()
 
 fun newReshardingId(): String = "reshard-${UUID.randomUUID()}"

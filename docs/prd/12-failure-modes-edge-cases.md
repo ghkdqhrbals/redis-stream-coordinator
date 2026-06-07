@@ -159,6 +159,7 @@ Failure subcases:
 | A reports `REVOKED` but coordinator dies before writing metadata | A retries `REVOKED`. B remains pending |
 | A reports `REVOKED`, coordinator commits metadata, response is lost | Next heartbeat confirms the released state. B can be assigned from committed metadata |
 | A dies while draining | Coordinator expires A after member lease TTL or rebalance timeout and then allows reassignment. Duplicate processing is possible and remains at-least-once |
+| Every live member expires during scale-in | There is no heartbeat target that can acknowledge revoke. Coordinator advances the migration to Redis-level drain checks and completes only when every Redis group on removed shards reports `pending=0` and known `lag=0` |
 | A restarts after DRAIN without local revoking memory | A rejoins with `memberEpoch=0`. Coordinator validates the rejoin against Redis-recorded target/current state and either keeps it fenced or requires full reconciliation |
 
 Recorded state by write boundary:
@@ -230,6 +231,7 @@ The new coordinator does not resume old stack frames. It resumes from Redis-reco
 | --- | --- | --- | --- |
 | New consumer joins | Unnecessary full rebalance | Register member, issue epoch, recalculate sticky target assignment only as needed | Apply assigned and pending shards from heartbeat response |
 | Existing consumer rejoins with `memberEpoch=0` | Stale ownership report | Treat as rejoin and validate ownership against target/current assignment | Stop shards not returned by coordinator |
+| Coordinator returns `UNKNOWN_MEMBER_ID` | Consumer keeps sending stale epoch and never becomes assignable | Reject the stale heartbeat without accepting ownership; accept the same member later only as `memberEpoch=0` rejoin | Clear ownership/revoking state, send full heartbeat with `memberEpoch=0`, then start only assigned shards |
 | Consumer reports unassigned owned shard | Split ownership | Reject or fence the stale report | Stop reads and rejoin |
 | Graceful leave | Shard can be reassigned too early | Mark `LEAVING`, keep shards pending for new owner until release | Stop reads, drain, report `REVOKED` |
 | Crash without leave | Shards stay owned until timeout | Expire after member lease TTL and recalculate assignment | Returning process rejoins with `memberEpoch=0` |

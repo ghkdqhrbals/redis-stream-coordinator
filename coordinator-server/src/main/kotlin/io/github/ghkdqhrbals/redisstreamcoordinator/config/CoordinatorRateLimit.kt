@@ -1,6 +1,7 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.config
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.security.AuthRequestAttributes
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
@@ -18,7 +19,7 @@ class AdminMutationRateLimitInterceptor(
 ) : HandlerInterceptor {
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
         val target = request.adminMutationTarget() ?: return true
-        val principal = request.getAttribute(AUTH_PRINCIPAL_ATTRIBUTE) as? String ?: "unknown"
+        val principal = request.getAttribute(AuthRequestAttributes.PRINCIPAL) as? String ?: "unknown"
         val decision = limiter.tryAcquire(
             key = "$principal:${target.streamPrefix}:${target.consumerGroup}",
             maxPermits = properties.adminMutationsPerMinute,

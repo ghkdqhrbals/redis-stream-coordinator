@@ -197,7 +197,6 @@ class CoordinatorStateStoreTest {
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
             shardCount = 4,
-            consumerConcurrencyPolicy = ConsumerConcurrencyPolicy(defaultMaxConcurrency = 4),
             createdAt = Instant.now(clock),
             updatedAt = Instant.now(clock),
         )

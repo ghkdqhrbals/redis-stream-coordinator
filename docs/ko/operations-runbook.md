@@ -50,7 +50,7 @@ curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
 4. `X-Request-Id`, request body의 `requestedBy`, `reason`을 반드시 넣는다.
 5. Apply 후 coordinator audit log와 monitoring API를 확인한다.
 
-Terraform은 group existence, shard count, consumer concurrency policy 같은 desired state를 관리한다. Heartbeat, current assignment, revoke progress, offset, pending entry, message payload 같은 runtime state는 Terraform 관리 대상이 아니다.
+Terraform은 group existence, shard count 같은 desired state를 관리한다. Consumer runtime concurrency, heartbeat, current assignment, revoke progress, offset, pending entry, message payload 같은 runtime state는 Terraform 관리 대상이 아니다.
 
 Terraform이 caller여도 coordinator audit log는 필수이다. 실제 API request, outcome, status, principal, roles, request id, request body fingerprint, client address, duration, stream prefix, consumer group, operation reason을 coordinator가 남긴다.
 

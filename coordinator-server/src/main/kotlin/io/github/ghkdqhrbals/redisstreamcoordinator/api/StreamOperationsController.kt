@@ -36,7 +36,7 @@ class StreamOperationsController(
         description = "Creates the initial shard layout for a sharded Redis Stream prefix. The official create path only requires streamPrefix; consumer groups reconcile through their own runtime configuration and heartbeat flow.",
         responses = [
             ApiResponse(responseCode = "201", description = "Stream shard layout was created."),
-            ApiResponse(responseCode = "409", description = "The stream prefix already has coordinator metadata."),
+            ApiResponse(responseCode = "409", description = "The stream prefix already has coordinator metadata or Redis Stream keys."),
             ApiResponse(responseCode = "503", description = "Redis or stream provisioning is unavailable."),
         ],
     )
@@ -54,7 +54,7 @@ class StreamOperationsController(
     @Operation(
         operationId = "scaleStreamShards",
         summary = "Start shard scale-out or scale-in",
-        description = "Changes the shard count for the stream prefix. Consumer groups do not appear in the request path; each registered group observes the new shard set on heartbeat and reconciles assignment independently.",
+        description = "Changes the shard count for the stream prefix. Consumer groups do not appear in the request path; each registered group observes the new shard set on heartbeat and reconciles assignment independently. During scale-in, removed shard streams are retired only after live owners release them or expire and Redis reports drained consumer groups.",
         responses = [
             ApiResponse(responseCode = "202", description = "Stream shard scale was accepted for affected consumer groups."),
             ApiResponse(responseCode = "404", description = "No coordinator groups exist for the stream prefix."),

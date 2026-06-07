@@ -13,14 +13,13 @@ Included:
 * member scale-out/scale-in sequence
 * idle member expiration and cleanup
 * group epoch, assignment epoch, member epoch
-* Coordinator Admin API consumer concurrency update
 * server-side sticky partition assignment
 * target assignment store
 * current assignment reporting
 * revoke before assign dependency handling
 * resharding
 * coordinator/member metrics
-* coordinator Docker image path and local Compose deployment
+* coordinator Docker image path and external-Redis Compose profiles
 * open source contribution, testing, security, release, and operations documentation
 
 Excluded:
@@ -30,7 +29,7 @@ Excluded:
 * Redis Stream message processing, handler execution, retry, DLQ
 * pending recovery and idempotency marker implementation
 * multiple concurrent migrations per stream prefix
-* admin UI
+* hosted admin control plane
 * hot shard auto split
 * Redis Cluster resharding automation
 * single-processing guarantees
@@ -56,7 +55,7 @@ Costs:
 
 Benefits:
 
-* shard count, consumer concurrency, migration mutation 경로가 하나로 고정된다.
+* shard count와 migration mutation 경로가 하나로 고정된다.
 * member application YAML이 group metadata의 source of truth가 되지 않는다.
 * 운영자가 API와 Redis metadata에서 group 상태를 일관되게 확인할 수 있다.
 
@@ -121,5 +120,5 @@ Excluded scope:
 * MVP access control: Basic Auth `admin/password`
 * MVP rebalance style: coordinator-driven incremental reconciliation
 * MVP shard count source of truth: Coordinator Admin API로 생성/변경된 coordinator metadata
-* MVP consumer `maxConcurrency` source of truth: Coordinator Admin API로 변경된 consumer concurrency policy
+* MVP consumer concurrency source of truth: consumer deployment 또는 listener configuration. coordinator는 heartbeat로 들어온 logical member를 관찰한다.
 * MVP coordinator deployment artifact: Java 24 Docker image plus Spring Boot jar

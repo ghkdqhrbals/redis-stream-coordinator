@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Redis Stream Coordinator Admin</title>
+    <link rel="stylesheet" href="/console/styles.css">
+</head>
+<body>
+<main class="access-shell">
+    <section class="access-header">
+        <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true">RC</div>
+            <div>
+                <h1>Admin Operations</h1>
+                <p>Stream metadata and shard scaling controls</p>
+            </div>
+        </div>
+        <div class="admin-header-actions">
+            <a class="ghost-link" href="/console">Monitoring</a>
+            <a class="ghost-link" href="/console/messages.html">Messages</a>
+        </div>
+    </section>
+
+    <section class="access-grid admin-grid">
+        <article class="access-card">
+            <h2>Session</h2>
+            <form id="adminLoginForm" class="access-login-form">
+                <label>
+                    Username
+                    <input id="adminUsername" autocomplete="username">
+                </label>
+                <label>
+                    Password
+                    <input id="adminPassword" type="password" autocomplete="current-password">
+                </label>
+                <button type="submit">Sign in</button>
+            </form>
+            <dl class="access-session">
+                <div>
+                    <dt>Username</dt>
+                    <dd id="adminSessionUsername">-</dd>
+                </div>
+                <div>
+                    <dt>Roles</dt>
+                    <dd id="adminSessionRoles">-</dd>
+                </div>
+            </dl>
+            <p id="adminError" class="form-error" role="alert"></p>
+        </article>
+
+        <article class="access-card">
+            <h2>Selected Group</h2>
+            <label class="admin-label">
+                Stream / Consumer Group
+                <select id="adminGroupSelect"></select>
+            </label>
+            <button id="adminRefreshGroups" class="ghost-button" type="button">Refresh groups</button>
+            <dl class="access-session admin-current-state">
+                <div>
+                    <dt>Shard count</dt>
+                    <dd id="adminCurrentShardCount">-</dd>
+                </div>
+                <div>
+                    <dt>Consumer parallelism</dt>
+                    <dd>Configured in consumer pods</dd>
+                </div>
+            </dl>
+        </article>
+
+        <article class="access-card">
+            <h2>Create Stream</h2>
+            <form id="adminCreateStreamForm" class="admin-form">
+                <label>
+                    Stream prefix
+                    <input id="adminCreateStreamPrefix" placeholder="create-order">
+                </label>
+                <label>
+                    Initial shards
+                    <input id="adminCreateShardCount" type="number" min="1" value="20">
+                </label>
+                <button type="submit">Create stream</button>
+            </form>
+            <p class="admin-note">Creates stream-level shard metadata. Runtime consumer groups join through their configured group name.</p>
+        </article>
+
+        <article class="access-card">
+            <h2>Shard Scale</h2>
+            <form id="adminScaleForm" class="admin-form">
+                <label>
+                    Target shard count
+                    <input id="adminTargetShardCount" type="number" min="1" value="20">
+                </label>
+                <label>
+                    Reason
+                    <input id="adminScaleReason" value="operator shard scale">
+                </label>
+                <button type="submit">Apply shard scale</button>
+            </form>
+            <div class="admin-button-row">
+                <button id="adminScaleOut" class="ghost-button" type="button">+1 shard</button>
+                <button id="adminScaleIn" class="ghost-button" type="button">-1 shard</button>
+            </div>
+            <p class="admin-note">Scale-in starts a resharding flow. Producers refresh routing after write failures or cache refresh, and consumers drain revoked shards before removed shards are retired.</p>
+        </article>
+
+        <article class="access-card wide">
+            <h2>Operation Result</h2>
+            <pre id="adminResult" class="config-block"><code>No operation executed.</code></pre>
+        </article>
+    </section>
+</main>
+<script src="/console/admin.js"></script>
+</body>
+</html>

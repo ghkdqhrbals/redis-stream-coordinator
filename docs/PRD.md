@@ -19,7 +19,9 @@ The reason for this module is practical: Redis Stream is useful as a lightweight
 11. [Versioning and Compatibility Policy](prd/11-versioning-compatibility.md)
 12. [Failure Modes and Edge Cases](prd/12-failure-modes-edge-cases.md)
 13. [Terraform and GitOps Governance](prd/13-terraform-governance.md)
-14. [Scalar API Reference](../api.html)
+14. [Edge Case Q&A](prd/14-edge-case-qna.md)
+15. [Python Client Library](prd/15-python-client.md)
+16. [Scalar API Reference](../api.html)
 
 ## Why This Exists
 
@@ -50,7 +52,7 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Change shard count only through the Coordinator Admin API.
 * Treat bean-based `runtimeMaxConcurrency` as local worker capacity for one coordinator member, not as shard count and not as listener member count.
 * Keep coordinator YAML limited to Redis connectivity, security, event-loop defaults, and operational defaults.
-* Store per-group shard count and consumer concurrency policy in coordinator metadata.
+* Store per-group shard count in coordinator metadata. Consumer parallelism is controlled by consumer deployment/listener configuration.
 * Store each group aggregate in one Redis metadata key and use store revision CAS for updates.
 * If a consumer reports a higher metadata version than Redis currently stores, the coordinator repeatedly sends `SYNC_METADATA` until the consumer heartbeats with the current Redis metadata version.
 * During metadata correction, consumers drain removed shards and receive `REVOKE_PENDING` until conflicting previous owners are released; only `OK` permits starting newly assigned shards.
@@ -71,12 +73,14 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.
 * Spring Boot applications can integrate by adding the starter and using `@StreamListener`, implementing `CoordinatorShardLifecycle`, or using the built-in Redis Stream polling handler.
 * Annotation listener concurrency creates independent coordinator members, so `concurrency = 4` joins as four member IDs rather than one member with four local shard pollers.
+* Python applications can integrate with the sync-first `redisstream-coordinator` package while sharing the same heartbeat, assignment, routing, and Redis command semantics as the JVM starter.
 * Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.
 
 ## Guarantee Boundaries
 
 * Routing determinism is guaranteed only for the same routing protocol, `shardCount`, and partition key.
 * Shard scale-out/in changes the routing domain. The same partition key can route to different shard indexes between old and new shard counts.
+* Every scale-in, including `targetShardCount=0`, is finalized by Redis-level drain evidence. If all live members expire before they can acknowledge revoke, the coordinator skips consumer-level revoke and retires removed shard streams only after every Redis consumer group on those streams reports `pending=0` and known `lag=0`.
 * The baseline processing model is at-least-once.
 * Single processing and exactly-once side effects are not guaranteed.
 * Applications must handle duplicate side effects through domain-level idempotency, deduplication, unique constraints, or compensation.

@@ -12,6 +12,11 @@ enum class CoordinatorError(
     val defaultMessage: String,
 ) {
     GROUP_ALREADY_EXISTS(HttpStatus.CONFLICT, "GROUP_ALREADY_EXISTS", "Group already exists"),
+    STREAM_PREFIX_ALREADY_EXISTS(
+        HttpStatus.CONFLICT,
+        "STREAM_PREFIX_ALREADY_EXISTS",
+        "Stream prefix already exists",
+    ),
     GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUP_NOT_FOUND", "Group not found"),
     STREAM_NOT_FOUND(HttpStatus.NOT_FOUND, "STREAM_NOT_FOUND", "Stream not found"),
     GROUP_HAS_ACTIVE_MEMBERS(
@@ -86,6 +91,16 @@ class CoordinatorExceptionHandler {
                 CoordinatorError.INVALID_REQUEST.status.name,
                 CoordinatorError.INVALID_REQUEST.code,
                 error.bindingResult.fieldErrors.joinToString("; ") { "${it.field}: ${it.defaultMessage}" },
+            ),
+        )
+
+    @ExceptionHandler(IllegalArgumentException::class)
+    fun illegalArgumentException(error: IllegalArgumentException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(CoordinatorError.INVALID_REQUEST.status).body(
+            ErrorResponse(
+                CoordinatorError.INVALID_REQUEST.status.name,
+                CoordinatorError.INVALID_REQUEST.code,
+                error.message ?: CoordinatorError.INVALID_REQUEST.defaultMessage,
             ),
         )
 }

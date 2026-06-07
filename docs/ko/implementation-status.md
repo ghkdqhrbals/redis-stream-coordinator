@@ -1,6 +1,6 @@
 # 구현 상태
 
-마지막 업데이트: 2026-06-01
+마지막 업데이트: 2026-06-07
 
 ## 요약
 
@@ -20,7 +20,6 @@
 * [x] Group metadata 조회 API
 * [x] Producer routing metadata API
 * [x] Shard scale API
-* [x] Consumer concurrency update API
 * [x] Resharding 조회와 rollback API
 * [x] Member heartbeat API
 * [x] Health, group, member, assignment, resharding monitoring API
@@ -38,19 +37,19 @@
 * [x] Graceful leave
 * [x] Member lease expiry와 fencing
 * [x] Unauthorized `ownedShards` / invalid `revokingShards` 보고에 대한 stale ownership fencing
-* [x] Server-side consumer concurrency policy를 반영한 sticky assignment
+* [x] Live logical member 수 기준 sticky assignment
 * [x] `assignedShards`와 `pendingShards` 분리
 * [x] Revoke-before-assign handoff
 * [x] Rebalance timeout fencing
 * [x] Shard count 변경 기반 resharding
 * [x] Active migration 중 제거 대상 shard drain
 * [x] Drain 완료 후 shard handoff
+* [x] Live member가 모두 expire된 scale-in에서 Redis `XINFO GROUPS` drain check로 migration 완료
 * [x] Active resharding rollback
 
 ### Redis Integration
 
-* [x] Local three-node Redis Cluster Docker Compose
-* [x] Host-to-Docker Redis Cluster redirect를 위한 Lettuce node address mapping
+* [x] 외부 Redis Cluster를 바라보는 Docker pod/stress compose
 * [x] Memory state store
 * [x] Redis state store
 * [x] Redis group별 단일 metadata hash key
@@ -130,7 +129,8 @@ docker build -t redis-stream-coordinator/coordinator-server:jvm-ci .
 Redis integration tests:
 
 ```bash
-docker compose up -d
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
   --tests '*RedisCoordinatorStateStoreIntegrationTest' \
   --tests '*RedisStreamProvisioningIntegrationTest'

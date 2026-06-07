@@ -34,7 +34,7 @@ Coordinator YAML should contain infrastructure and operational defaults only:
 * mutex behavior,
 * event-loop interval,
 * member lease timeout,
-* default shard count and consumer concurrency used when Admin API requests omit values.
+* default shard count used when Admin API create requests omit a value.
 
 Coordinator YAML should not contain:
 
@@ -44,7 +44,7 @@ Coordinator YAML should not contain:
 * producer routing cache policy for applications,
 * member runtime worker tuning beyond coordinator defaults.
 
-Per-group settings are created or changed through the Admin API.
+Per-group shard count is created or changed through the Admin API. Consumer parallelism is controlled by the consumer deployment or listener configuration; the coordinator observes the resulting logical members through heartbeat.
 
 ## Example Configuration
 
@@ -93,7 +93,6 @@ coordinator:
       retry-interval-ms: 100
   defaults:
     initial-shard-count: 4
-    max-concurrency: 4
 ```
 
 ## State Mutex
@@ -107,7 +106,6 @@ Protected operations:
 * graceful leave,
 * resharding request,
 * rollback,
-* consumer concurrency update,
 * monitoring read that performs operational refresh,
 * scheduled event loop tick.
 
@@ -145,7 +143,9 @@ The JDBC table stores the same aggregate metadata JSON used by the Redis store. 
 
 ## ACL
 
-The MVP security model uses Basic Auth.
+The coordinator issues signed Bearer tokens through `POST /coord/v1/auth/login`. Operators authenticate once with a configured username/password, receive a token that expires after seven days by default, and send subsequent API calls with `Authorization: Bearer <token>`. Basic Auth remains accepted for compatibility and for bootstrap tooling, but operator examples should prefer login plus Bearer token so passwords do not appear on every request.
+
+Token signing uses `coordinator.api.token-secret`. Production deployments should set this explicitly and rotate it through the platform secret manager. If it is omitted, the coordinator falls back to the default admin credential material for local development only.
 
 Roles:
 

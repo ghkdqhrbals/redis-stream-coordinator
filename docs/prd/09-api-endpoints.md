@@ -27,7 +27,7 @@ Common headers:
 ```http
 Content-Type: application/json
 Accept: application/json
-Authorization: Basic <base64(admin:password)>
+Authorization: Bearer <token-from-POST-/coord/v1/auth/login>
 X-Request-Id: <caller-generated-id>
 ```
 
@@ -85,7 +85,6 @@ Common status codes:
 | Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Delete inactive group metadata. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing` | Read producer routing metadata. | no |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/scale` | Start stream-wide shard scale-out or scale-in. | yes |
-| Admin | `PATCH` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` | Update server-side consumer concurrency policy. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | Read one migration. | no |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | Request migration rollback. | yes |
 | Member | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat` | Report liveness/ownership and receive assignment. | yes |
@@ -209,18 +208,20 @@ POST /coord/v1/streams/{streamPrefix}/scale
 
 Starts shard scale-out or scale-in for the stream prefix. Consumer group is intentionally not part of this request. Every registered consumer group for the stream observes the changed shard set on the next heartbeat and reconciles assignment independently.
 
+Scale-in completion is not based only on heartbeat. If removed shards still have live owners, the coordinator waits for revoke progress through heartbeat. If every live member has expired, the coordinator advances to Redis-level drain checks and completes only when every Redis consumer group on removed shards reports `pending=0` and known `lag=0`.
+
 For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across shards.
 
 Request body:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `targetShardCount` | yes | New shard count. Must be positive and different from the current active shard count. |
+| `targetShardCount` | yes | New shard count. Must be zero or positive and different from the current active shard count. `0` drains and removes every shard. |
 | `requestedBy` | yes | Operator or automation identity for audit. |
 | `reason` | yes | Human-readable change reason. |
 | `deprecatedAfter` | no | Operational hint for rollback/drain timing. |
 
-Stream-level scale does not accept `consumerConcurrencyPolicy`. Consumer concurrency is a group runtime policy and remains managed through the group-scoped consumer concurrency endpoint.
+Stream-level scale only changes shard count. Consume parallelism is configured by consumer applications, for example through `@StreamListener(concurrency = N)`. The coordinator observes the resulting logical members through heartbeat and must not expose an admin endpoint that changes consumer runtime parallelism.
 
 Compatibility note: `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale` remains available during the current implementation phase, but stream-scoped scale is the official operator-facing path.
 
@@ -239,34 +240,6 @@ Conflict behavior:
 
 * If another migration is active, the coordinator returns `409 Conflict` with `ACTIVE_MIGRATION_EXISTS`.
 * If provisioning fails, the coordinator returns `503 Service Unavailable` with `REDIS_STREAM_PROVISIONING_FAILED`.
-
-### Update Consumer Concurrency
-
-```http
-PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
-```
-
-Updates the server-side consumer worker capacity policy. This does not change shard count.
-
-Request body:
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `defaultMaxConcurrency` | yes | Default worker limit for members without override. |
-| `memberOverrides` | no | Optional per-member-name worker limit override. |
-| `requestedBy` | yes | Operator or automation identity for audit. |
-| `reason` | yes | Human-readable change reason. |
-
-Response: `200 OK` with `ConsumerConcurrencyResponse`.
-
-Important response fields:
-
-| Field | Meaning |
-| --- | --- |
-| `metadataVersion` | Updated metadata version. |
-| `groupEpoch` | Current group epoch after policy update. |
-| `consumerConcurrencyPolicy` | Stored policy. |
-| `affectedMembers` | Members whose assigned max concurrency changed. |
 
 ### Get Migration
 
@@ -317,7 +290,7 @@ Request body:
 | `protocolVersion` | yes | Coordinator-module coordination version. |
 | `requestId` | yes | Request trace and retry id. |
 | `memberId` | yes | Must match the path parameter. |
-| `memberName` | no | Stable logical member name used for policy overrides. |
+| `memberName` | no | Stable logical member name for monitoring and diagnostics. |
 | `memberEpoch` | yes | `0` means join/rejoin, `-1` means graceful leave, positive means active member epoch. |
 | `metadataVersion` | yes | Member local metadata version. |
 | `runtimeConsumerCapacity.runtimeMaxConcurrency` | yes | Process-local maximum consumer workers. |
@@ -340,7 +313,6 @@ Important response fields:
 | `groupEpoch` | Latest group epoch. |
 | `assignmentEpoch` | Latest assignment epoch. |
 | `metadataVersion` | Latest coordinator metadata version. |
-| `assignedMaxConcurrency` | Server-side worker limit assigned to this member. |
 | `assignment.assignedShards` | Shards the member may read immediately for `OK`; for `SYNC_METADATA` and `REVOKE_PENDING`, shards the member may keep if it is already reading them. |
 | `assignment.pendingShards` | Target shards blocked by revoke-before-assign. |
 | `assignment.metadataVersion` | Metadata version tied to this assignment. |

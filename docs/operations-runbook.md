@@ -4,10 +4,24 @@ This runbook covers the coordinator control plane. Application message handling,
 
 ## Health Checks
 
+Issue an operator token. Tokens expire after seven days by default.
+
+```bash
+read -rsp 'Coordinator password: ' RSC_PASSWORD
+echo
+RSC_TOKEN="$(
+  curl -sS -H 'Content-Type: application/json' \
+    -X POST http://localhost:8080/coord/v1/auth/login \
+    -d "{\"username\":\"admin\",\"password\":\"${RSC_PASSWORD}\"}" |
+  jq -r '.accessToken'
+)"
+unset RSC_PASSWORD
+```
+
 Coordinator health:
 
 ```bash
-curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/health
 ```
 
@@ -24,21 +38,21 @@ Interpretation:
 List groups:
 
 ```bash
-curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/groups
 ```
 
 Inspect assignments:
 
 ```bash
-curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/streams/orders/groups/orders-consumer/assignments
 ```
 
 Inspect migrations:
 
 ```bash
-curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/streams/orders/groups/orders-consumer/migrations
 ```
 
@@ -54,7 +68,7 @@ Recommended pattern:
 4. Send `X-Request-Id` and request body fields `requestedBy` and `reason`.
 5. Verify coordinator audit logs and monitoring APIs after apply.
 
-Terraform manages desired state such as group existence, shard count, and consumer concurrency policy. It does not manage runtime state such as heartbeats, current assignments, revoke progress, offsets, pending entries, or message payloads.
+Terraform manages desired state such as group existence and shard count. It does not manage consumer runtime concurrency, heartbeats, current assignments, revoke progress, offsets, pending entries, or message payloads.
 
 Coordinator audit remains required even when Terraform is the caller. It records the actual API request, outcome, status, principal, roles, request id, request body fingerprint, client address, duration, stream prefix, consumer group, and operation reason.
 

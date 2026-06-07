@@ -24,6 +24,72 @@ class GrafanaDashboardContractTest {
     }
 
     @Test
+    fun `stream messages panel shows time shard offset and fields columns`() {
+        val dashboard = readDashboard("redis-stream-coordinator-stream-detail.json")
+        val importDashboard = readImportDashboard("redis-stream-coordinator-stream-detail.json")
+
+        listOf(dashboard, importDashboard).forEach { content ->
+            val timeIndex = content.indexOf("<th>Time")
+            val shardIndex = content.indexOf("<th>Shard")
+            val offsetIndex = content.indexOf("""<th class=\"rsc-message-offset\">Offset""")
+            val fieldsIndex = content.indexOf("<th>Fields")
+
+            assertTrue(timeIndex >= 0)
+            assertTrue(timeIndex < shardIndex)
+            assertTrue(shardIndex < offsetIndex)
+            assertTrue(offsetIndex < fieldsIndex)
+            assertTrue(content.contains("function formatRecordTime(row)"))
+            assertTrue(content.contains("row.recordTime || row.recordTimestampMs"))
+            assertTrue(content.contains("""rsc-message-time"""))
+            assertTrue(!content.contains("<th>Payload</th>"))
+            assertTrue(!content.contains("""rsc-message-payload"""))
+        }
+    }
+
+    @Test
+    fun `stream messages tables expose resizable columns`() {
+        val dashboard = readDashboard("redis-stream-coordinator-stream-detail.json")
+        val importDashboard = readImportDashboard("redis-stream-coordinator-stream-detail.json")
+        val indexHtml = readStaticConsole("index.html")
+        val messagesHtml = readStaticConsole("messages.html")
+        val appJs = readStaticConsole("app.js")
+        val resizeJs = readStaticConsole("table-resize.js")
+
+        listOf(dashboard, importDashboard).forEach { content ->
+            assertTrue(content.contains("""data-role": "message-table""") || content.contains("""data-role=\"message-table\""""))
+            assertTrue(content.contains("rsc-message-resize-handle"))
+            assertTrue(content.contains("function bindColumnResize()"))
+            assertTrue(content.contains("redisStreamCoordinator.grafana.messageTableWidths"))
+        }
+        listOf(indexHtml, messagesHtml).forEach { content ->
+            assertTrue(content.contains("resizable-message-table"))
+            assertTrue(content.contains("column-resize-handle"))
+            assertTrue(content.contains("""/console/table-resize.js"""))
+        }
+        assertTrue(appJs.contains("window.initResizableTables"))
+        assertTrue(resizeJs.contains("function initResizableTables"))
+        assertTrue(resizeJs.contains("redisStreamCoordinator.console.tableWidths."))
+    }
+
+    @Test
+    fun `admin console exposes shard scaling without producer stress controls`() {
+        val adminHtml = readStaticConsole("admin.html")
+        val adminJs = readStaticConsole("admin.js")
+        val indexHtml = readStaticConsole("index.html")
+
+        assertTrue(indexHtml.contains("""href="/console/admin.html""""))
+        assertTrue(adminHtml.contains("Apply shard scale"))
+        assertTrue(adminHtml.contains("Create stream"))
+        assertTrue(!adminJs.contains("/consumer-concurrency"))
+        assertTrue(!adminHtml.contains("Update concurrency policy"))
+        assertTrue(!adminHtml.contains("Producer Stress"))
+        assertTrue(!adminHtml.contains("Produce stress messages"))
+        assertTrue(!adminJs.contains("/sample/stress"))
+        assertTrue(!adminJs.contains("handleStressProduce"))
+        assertTrue(adminJs.contains("/scale"))
+    }
+
+    @Test
     fun `overview dashboard keeps group and owner columns operator friendly`() {
         val dashboard = readDashboard("redis-stream-coordinator.json")
         val titleIndex = dashboard.indexOf(""""title": "Coordinator Groups Table"""")
@@ -136,6 +202,7 @@ class GrafanaDashboardContractTest {
             "redis-stream-coordinator.json",
             "redis-stream-coordinator-stream-detail.json",
             "redis-stream-coordinator-api.json",
+            "redis-stream-coordinator-public.json",
         ).forEach { fileName ->
             val dashboard = readImportDashboard(fileName)
 
@@ -150,6 +217,28 @@ class GrafanaDashboardContractTest {
             assertTrue(!dashboard.contains(""""uid": "rsc-coordinator-api""""), "$fileName should not pin the local Coordinator API datasource")
             assertTrue(!dashboard.contains(""""uid": "rsc-prometheus""""), "$fileName should not pin the local Prometheus datasource")
         }
+    }
+
+    @Test
+    fun `public dashboard is compatible with external sharing`() {
+        val dashboard = readDashboard("redis-stream-coordinator-public.json")
+        val importDashboard = readImportDashboard("redis-stream-coordinator-public.json")
+
+        assertTrue(dashboard.contains(""""uid": "redis-stream-coordinator-public""""))
+        assertTrue(dashboard.contains(""""title": "Redis Stream Coordinator Public Overview""""))
+        assertTrue(dashboard.contains(""""title": "Stream Groups""""))
+        assertTrue(dashboard.contains(""""title": "Shard Inventory""""))
+        assertTrue(!dashboard.contains("gapit-htmlgraphics-panel"))
+        assertTrue(!dashboard.contains("htmlGraphics"))
+        assertTrue(!dashboard.contains("onInit"))
+        assertTrue(!dashboard.contains("fetch("))
+        assertTrue(!importDashboard.contains("gapit-htmlgraphics-panel"))
+        assertTrue(!importDashboard.contains(""""id": "gapit-htmlgraphics-panel""""))
+        assertTrue(importDashboard.contains(""""parser": "backend""""))
+        assertTrue(importDashboard.contains("""${'$'}{DS_RSC_PROMETHEUS}"""))
+        assertTrue(importDashboard.contains("""${'$'}{DS_RSC_COORDINATOR_API}"""))
+        assertTrue(importDashboard.contains("""${'$'}{COORDINATOR_API_URL}/coord/v1/monitoring/grafana/groups"""))
+        assertTrue(importDashboard.contains("""${'$'}{COORDINATOR_API_URL}/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup="""))
     }
 
     private fun readDashboard(fileName: String): String {
@@ -169,6 +258,16 @@ class GrafanaDashboardContractTest {
         )
         val path = candidates.firstOrNull(Files::exists)
             ?: error("Import dashboard file not found: $fileName")
+        return Files.readString(path)
+    }
+
+    private fun readStaticConsole(fileName: String): String {
+        val candidates = listOf(
+            Path.of("coordinator-server", "src", "main", "resources", "static", "console", fileName),
+            Path.of("..", "coordinator-server", "src", "main", "resources", "static", "console", fileName),
+        )
+        val path = candidates.firstOrNull(Files::exists)
+            ?: error("Static console file not found: $fileName")
         return Files.readString(path)
     }
 }

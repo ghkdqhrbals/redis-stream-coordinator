@@ -53,7 +53,7 @@ Costs:
 
 Benefits:
 
-* Shard count, consumer concurrency, and resharding mutations use one path.
+* Shard count and resharding mutations use one path.
 * Member startup YAML cannot accidentally mutate group metadata.
 * Operators can audit every metadata mutation.
 
@@ -101,6 +101,6 @@ Costs:
 * MVP assignment strategy: sticky partition assignment.
 * MVP processing guarantee: at-least-once.
 * MVP shard count source of truth: coordinator metadata created or changed through Admin API.
-* MVP consumer `maxConcurrency` source of truth: coordinator consumer concurrency policy.
+* MVP consumer concurrency source of truth: consumer deployment or listener configuration. The coordinator observes resulting logical members through heartbeat.
 * MVP coordination safety: Redis metadata key, Redis mutex, and store revision compare-and-set.
 * MVP metrics ownership: coordinator metrics only for shared ownership/routing/progress state.

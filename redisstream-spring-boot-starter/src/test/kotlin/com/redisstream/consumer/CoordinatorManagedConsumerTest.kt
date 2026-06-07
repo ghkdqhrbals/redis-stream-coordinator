@@ -18,7 +18,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 1,
                 assignmentEpoch = 1,
                 metadataVersion = 2,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(
                     assignedShards = setOf(CoordinatorShard(0), CoordinatorShard(1)),
                     pendingShards = emptySet(),
@@ -48,7 +47,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 1,
                 assignmentEpoch = 1,
                 metadataVersion = 2,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(0), CoordinatorShard(1)), emptySet(), 2),
             ),
             HeartbeatResponse(
@@ -60,7 +58,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 2,
                 assignmentEpoch = 2,
                 metadataVersion = 3,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
         )
@@ -87,7 +84,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 1,
                 assignmentEpoch = 1,
                 metadataVersion = 2,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(revokedShard, CoordinatorShard(1)), emptySet(), 2),
             ),
             HeartbeatResponse(
@@ -99,7 +95,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 2,
                 assignmentEpoch = 2,
                 metadataVersion = 3,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
             HeartbeatResponse(
@@ -111,7 +106,6 @@ class CoordinatorManagedConsumerTest {
                 groupEpoch = 2,
                 assignmentEpoch = 2,
                 metadataVersion = 3,
-                assignedMaxConcurrency = 4,
                 assignment = AssignmentView(setOf(CoordinatorShard(1)), emptySet(), 3),
             ),
         )
@@ -378,6 +372,72 @@ class CoordinatorManagedConsumerTest {
     }
 
     @Test
+    fun `unknown member response resets local state and next heartbeat rejoins`() {
+        val assigned = setOf(CoordinatorShard(0))
+        val client = ScriptedCoordinatorClient(
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(assigned, emptySet(), 2),
+            ),
+            heartbeatResponse(
+                status = HeartbeatStatus.UNKNOWN_MEMBER_ID,
+                memberEpoch = 1,
+                assignment = AssignmentView(emptySet(), emptySet(), 2),
+            ),
+            heartbeatResponse(
+                memberEpoch = 2,
+                assignment = AssignmentView(assigned, emptySet(), 3),
+            ),
+        )
+        val lifecycle = RecordingShardLifecycle()
+        val consumer = CoordinatorManagedConsumer(properties(), client, lifecycle)
+
+        consumer.pollOnce()
+        consumer.pollOnce()
+        consumer.pollOnce()
+
+        assertEquals(1, lifecycle.fencedCount)
+        assertEquals(listOf(assigned, assigned), lifecycle.assigned)
+        assertEquals(0, client.requests[2].memberEpoch)
+        assertEquals(0, client.requests[2].metadataVersion)
+        assertEquals(emptySet(), client.requests[2].ownedShards)
+        assertEquals(emptyList(), client.requests[2].revokingShards)
+    }
+
+    @Test
+    fun `unknown member reset survives fenced callback failure`() {
+        val assigned = setOf(CoordinatorShard(0))
+        val client = ScriptedCoordinatorClient(
+            heartbeatResponse(
+                memberEpoch = 1,
+                assignment = AssignmentView(assigned, emptySet(), 2),
+            ),
+            heartbeatResponse(
+                status = HeartbeatStatus.UNKNOWN_MEMBER_ID,
+                memberEpoch = 1,
+                assignment = AssignmentView(emptySet(), emptySet(), 2),
+            ),
+            heartbeatResponse(
+                memberEpoch = 2,
+                assignment = AssignmentView(assigned, emptySet(), 3),
+            ),
+        )
+        val lifecycle = FailingFencedLifecycle()
+        val consumer = CoordinatorManagedConsumer(properties(), client, lifecycle)
+
+        consumer.pollOnce()
+        assertFailsWith<IllegalStateException> {
+            consumer.pollOnce()
+        }
+        consumer.pollOnce()
+
+        assertEquals(0, client.requests[2].memberEpoch)
+        assertEquals(0, client.requests[2].metadataVersion)
+        assertEquals(emptySet(), client.requests[2].ownedShards)
+        assertEquals(emptyList(), client.requests[2].revokingShards)
+    }
+
+    @Test
     fun `stop sends graceful leave heartbeat with revoked shards`() {
         val assigned = setOf(CoordinatorShard(0), CoordinatorShard(1))
         val client = ScriptedCoordinatorClient(
@@ -491,7 +551,6 @@ class CoordinatorManagedConsumerTest {
             groupEpoch = assignment.metadataVersion,
             assignmentEpoch = assignment.metadataVersion,
             metadataVersion = assignment.metadataVersion,
-            assignedMaxConcurrency = 4,
             assignment = assignment,
         )
 
@@ -547,6 +606,15 @@ private class CapacityReportingShardLifecycle(
 
     override fun runtimeCapacity(context: CoordinatorConsumerContext): RuntimeConsumerCapacity =
         capacity
+}
+
+private class FailingFencedLifecycle : CoordinatorShardLifecycle {
+    override fun onAssigned(shards: Set<CoordinatorShard>, context: CoordinatorConsumerContext) {
+    }
+
+    override fun onFenced(context: CoordinatorConsumerContext) {
+        error("fenced callback failed")
+    }
 }
 
 private class ProgressReportingShardLifecycle(

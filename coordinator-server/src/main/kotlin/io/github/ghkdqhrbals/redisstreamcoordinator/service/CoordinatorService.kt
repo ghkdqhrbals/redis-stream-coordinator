@@ -25,6 +25,7 @@ import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -75,7 +76,7 @@ private data class MonitoringOffsetCacheKey(
 )
 
 private data class MonitoringOffsetCacheEntry(
-    val metadataVersion: Long,
+    val shardCount: Int,
     val expiresAt: Instant,
     val offsets: StreamShardOffsetsResponse,
 )
@@ -118,16 +119,18 @@ class CoordinatorService(
     private val shardRateSnapshots = ConcurrentHashMap<ShardRateKey, ShardRateSnapshot>()
     private val monitoringOffsetCache = ConcurrentHashMap<MonitoringOffsetCacheKey, MonitoringOffsetCacheEntry>()
     private val monitoringOffsetLocks = ConcurrentHashMap<MonitoringOffsetCacheKey, Any>()
+    private val monitoringOffsetRefreshInFlight = ConcurrentHashMap<MonitoringOffsetCacheKey, AtomicBoolean>()
     private val redisHealthRefreshInFlight = AtomicBoolean(false)
     @Volatile
     private var redisHealthCache: RedisHealthCacheEntry? = null
-    private val monitoringExecutor = Executors.newFixedThreadPool(
-        properties.monitoring.shardQueryParallelism.coerceAtLeast(1),
-    ) { runnable ->
-        Thread(runnable, "redis-stream-coordinator-monitoring").apply {
-            isDaemon = true
-        }
-    }
+    private val monitoringGroupPermits = Semaphore(properties.monitoring.groupQueryParallelism.coerceAtLeast(1))
+    private val monitoringShardPermits = Semaphore(properties.monitoring.shardQueryParallelism.coerceAtLeast(1))
+    private val monitoringGroupExecutor = Executors.newThreadPerTaskExecutor(
+        Thread.ofVirtual().name("redis-stream-coordinator-monitoring-group-", 0).factory(),
+    )
+    private val monitoringExecutor = Executors.newThreadPerTaskExecutor(
+        Thread.ofVirtual().name("redis-stream-coordinator-monitoring-", 0).factory(),
+    )
 
     /**
      * Creates a coordinator group and provisions the initial stream shards.
@@ -143,7 +146,10 @@ class CoordinatorService(
     fun createStream(streamPrefix: String, request: CreateStreamRequest): StreamCreateResponse {
         val existingGroups = stateStore.list().filter { it.streamPrefix == streamPrefix }
         if (existingGroups.isNotEmpty()) {
-            throw CoordinatorException(CoordinatorError.GROUP_ALREADY_EXISTS)
+            throw CoordinatorException(
+                CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
+                "Stream prefix '$streamPrefix' is already managed by coordinator metadata",
+            )
         }
         val response = createGroupOnce(streamPrefix, defaultStreamConsumerGroup(streamPrefix), request.toGroupRequest())
         return StreamCreateResponse(
@@ -164,8 +170,9 @@ class CoordinatorService(
 
         val now = Instant.now(clock)
         val shardCount = request.initialShardCount ?: properties.defaults.initialShardCount
-        val policy = request.consumerConcurrencyPolicy
-            ?: ConsumerConcurrencyPolicy(properties.defaults.consumerMaxConcurrency)
+        if (stateStore.list().none { it.streamPrefix == streamPrefix }) {
+            requireStreamPrefixNotAlreadyMaterialized(streamPrefix, shardCount)
+        }
         val group = GroupMetadata(
             streamPrefix = streamPrefix,
             consumerGroup = consumerGroup,
@@ -174,7 +181,6 @@ class CoordinatorService(
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
             shardCount = shardCount,
-            consumerConcurrencyPolicy = policy,
             createdAt = now,
             updatedAt = now,
         )
@@ -193,6 +199,21 @@ class CoordinatorService(
         }
         recordGroupState(group)
         return group.toResponse()
+    }
+
+    private fun requireStreamPrefixNotAlreadyMaterialized(streamPrefix: String, shardCount: Int) {
+        if (!properties.streams.provisioningEnabled || !redisCommands.isConfigured()) {
+            return
+        }
+
+        val existingKeys = (listOf(streamPrefix) + RedisStreamShardKeys.forShardCount(streamPrefix, shardCount).map { it.value })
+            .filter(redisCommands::hasKey)
+        if (existingKeys.isNotEmpty()) {
+            throw CoordinatorException(
+                CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
+                "Stream prefix '$streamPrefix' already has Redis key(s): ${existingKeys.joinToString(", ")}",
+            )
+        }
     }
 
     private fun defaultStreamConsumerGroup(streamPrefix: String): String =
@@ -231,7 +252,9 @@ class CoordinatorService(
     fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse {
         try {
             val group = requireGroup(streamPrefix, consumerGroup)
-            streamProvisioner.provision(group.streamShardProvisioningPlan())
+            if (group.shardCount > 0) {
+                streamProvisioner.provision(group.streamShardProvisioningPlan())
+            }
             recordGroupState(group)
             val response = group.toProducerRoutingResponse()
             metrics.recordProducerRouting(streamPrefix, consumerGroup, "SUCCESS")
@@ -323,6 +346,12 @@ class CoordinatorService(
      * Builds the PREPARING resharding record before provisioning or activating new stream shards.
      */
     private fun scaleGroupOnce(streamPrefix: String, consumerGroup: String, request: ScaleGroupRequest): Migration {
+        if (request.targetShardCount < 0) {
+            throw CoordinatorException(
+                CoordinatorError.INVALID_REQUEST,
+                "targetShardCount must be zero or positive",
+            )
+        }
         val group = requireGroup(streamPrefix, consumerGroup)
         requireNoMetadataCorrection(group)
         val now = Instant.now(clock)
@@ -377,85 +406,25 @@ class CoordinatorService(
         now: Instant,
     ): Migration {
         // Commit PREPARING first; conflict retries must not create Redis shards without matching coordinator state.
-        streamProvisioner.provision(
-            RedisStreamShardProvisioningPlan.forShardCount(
-                streamPrefix = group.streamPrefix,
-                consumerGroup = group.consumerGroup,
-                shardCount = migration.toShardCount,
-            ),
-        )
+        if (migration.toShardCount > 0) {
+            streamProvisioner.provision(
+                RedisStreamShardProvisioningPlan.forShardCount(
+                    streamPrefix = group.streamPrefix,
+                    consumerGroup = group.consumerGroup,
+                    shardCount = migration.toShardCount,
+                ),
+            )
+        }
 
         migration.state = MigrationState.ACTIVE
         migration.updatedAt = now
         group.shardCount = migration.toShardCount
-        request.consumerConcurrencyPolicy?.let { group.consumerConcurrencyPolicy = it }
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
         enforceRebalanceTimeouts(group, now)
         stateStore.save(group.key(), group)
         recordGroupState(group)
         return migration
-    }
-
-    /**
-     * Updates member concurrency weights and triggers reassignment when effective capacity changes.
-     */
-    @CriticalSection(operation = "update-consumer-concurrency")
-    fun updateConsumerConcurrency(
-        streamPrefix: String,
-        consumerGroup: String,
-        request: UpdateConsumerConcurrencyRequest,
-    ): ConsumerConcurrencyResponse {
-        try {
-            val response = withStateConflictRetry("update-consumer-concurrency") {
-                updateConsumerConcurrencyOnce(streamPrefix, consumerGroup, request)
-            }
-            metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "SUCCESS")
-            return response
-        } catch (error: RuntimeException) {
-            metrics.recordConsumerConcurrencyUpdate(streamPrefix, consumerGroup, "ERROR")
-            throw error
-        }
-    }
-
-    /**
-     * Applies a concurrency policy update inside the already-held state mutex.
-     */
-    private fun updateConsumerConcurrencyOnce(
-        streamPrefix: String,
-        consumerGroup: String,
-        request: UpdateConsumerConcurrencyRequest,
-    ): ConsumerConcurrencyResponse {
-        val group = requireGroup(streamPrefix, consumerGroup)
-        requireNoMetadataCorrection(group)
-        val nextPolicy = ConsumerConcurrencyPolicy(request.defaultMaxConcurrency, request.memberOverrides)
-        if (group.consumerConcurrencyPolicy != nextPolicy) {
-            val now = Instant.now(clock)
-            val previousTargetAssignments = group.targetAssignmentSnapshot()
-            group.consumerConcurrencyPolicy = nextPolicy
-            group.members.values.forEach { it.assignedMaxConcurrency = group.assignedMaxConcurrency(it.memberName) }
-            reconcile(group, now)
-            if (group.targetAssignmentSnapshot() != previousTargetAssignments) {
-                bumpMetadata(group, now, bumpGroupEpoch = true)
-                reconcile(group, now)
-            } else {
-                bumpMetadata(group, now, bumpGroupEpoch = false)
-            }
-            enforceRebalanceTimeouts(group, now)
-            stateStore.save(group.key(), group)
-        }
-        recordGroupState(group)
-
-        return ConsumerConcurrencyResponse(
-            streamPrefix = streamPrefix,
-            consumerGroup = consumerGroup,
-            metadataVersion = group.metadataVersion,
-            groupEpoch = group.groupEpoch,
-            consumerConcurrencyPolicy = group.consumerConcurrencyPolicy,
-            affectedMembers = group.members.values
-                .filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
-                .map { it.memberId },
-        )
     }
 
     /**
@@ -631,7 +600,6 @@ class CoordinatorService(
         member.activeConsumerWorkers =
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
-        member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
         member.rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis()
         member.currentAssignment = if (member.state == MemberState.LEAVING) emptySet() else ownershipReport.ownedShards
         if (member.state == MemberState.LEAVING) {
@@ -680,7 +648,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = member.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -813,11 +780,9 @@ class CoordinatorService(
         private const val MESSAGE_LAST_PAGE_CURSOR = "__rsc_last__"
         private const val MESSAGE_TAIL_PAGE_CURSOR_PREFIX = "__rsc_tail__:"
 
-        private val healthExecutor = Executors.newCachedThreadPool { runnable ->
-            Thread(runnable, "redis-stream-coordinator-health").apply {
-                isDaemon = true
-            }
-        }
+        private val healthExecutor = Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("redis-stream-coordinator-health-", 0).factory(),
+        )
     }
 
     /**
@@ -1009,7 +974,6 @@ class CoordinatorService(
                         metadataVersion = member.metadataVersion,
                         currentShardCount = member.currentAssignment.size,
                         revokingShardCount = member.revoking.size,
-                        assignedMaxConcurrency = member.assignedMaxConcurrency,
                         runtimeMaxConcurrency = member.runtimeMaxConcurrency,
                         activeConsumerWorkers = member.activeConsumerWorkers,
                         lastHeartbeatAt = member.lastHeartbeatAt,
@@ -1022,10 +986,21 @@ class CoordinatorService(
     /**
      * Returns flat shard offset rows for Grafana REST data-source panels.
      */
-    fun grafanaShards(streamPrefix: String, consumerGroup: String): List<GrafanaShardRow> =
-        monitoringGroups(streamPrefix, consumerGroup).flatMap { group ->
-            group.toGrafanaShardRows()
+    fun grafanaShards(streamPrefix: String, consumerGroup: String): List<GrafanaShardRow> {
+        val groups = monitoringGroups(streamPrefix, consumerGroup)
+        if (groups.size <= 1) {
+            return groups.flatMap { it.toGrafanaShardRows() }
         }
+        return groups.map { group ->
+            CompletableFuture.supplyAsync({
+                monitoringGroupPermits.withPermit {
+                    group.toGrafanaShardRows()
+                }
+            }, monitoringGroupExecutor)
+        }.flatMap { future ->
+            future.get()
+        }
+    }
 
     /**
      * Returns flat target/current/revoking assignment rows for Grafana REST data-source panels.
@@ -1714,7 +1689,6 @@ class CoordinatorService(
             state = MemberState.STARTING,
             memberEpoch = nextEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = group.assignedMaxConcurrency(memberName),
             runtimeMaxConcurrency = request.runtimeConsumerCapacity.runtimeMaxConcurrency,
             activeConsumerWorkers = 0,
             currentAssignment = emptySet(),
@@ -1788,7 +1762,6 @@ class CoordinatorService(
         member.activeConsumerWorkers =
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
-        member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
         member.rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis()
         member.lastHeartbeatAt = now
         member.memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl)
@@ -1807,7 +1780,6 @@ class CoordinatorService(
         member.activeConsumerWorkers =
             (request.runtimeConsumerCapacity.runtimeMaxConcurrency - request.runtimeConsumerCapacity.availableConcurrency)
                 .coerceAtLeast(0)
-        member.assignedMaxConcurrency = group.assignedMaxConcurrency(member.memberName)
         member.rebalanceTimeoutMs = properties.rebalanceTimeout.toMillis()
         member.lastHeartbeatAt = now
         member.memberLeaseExpiresAt = now.plus(properties.memberLeaseTtl)
@@ -1942,7 +1914,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = existing.assignedMaxConcurrency,
             assignment = AssignmentView(emptySet(), emptySet(), group.metadataVersion),
         )
 
@@ -1970,7 +1941,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = existing.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -1999,7 +1969,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = existing.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -2031,7 +2000,6 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignedMaxConcurrency = member.assignedMaxConcurrency,
             assignment = AssignmentView(
                 assignedShards = assigned,
                 pendingShards = pending,
@@ -2055,7 +2023,6 @@ class CoordinatorService(
             groupEpoch = 0,
             assignmentEpoch = 0,
             metadataVersion = 0,
-            assignedMaxConcurrency = 0,
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
@@ -2161,6 +2128,8 @@ class CoordinatorService(
 
     /**
      * Starts draining removed shards once all live members converged on the target assignment.
+     * If every member expired during scale-in, there is no heartbeat target that can acknowledge
+     * revoke; the coordinator skips consumer-level revoke and relies on Redis drain checks.
      */
     private fun startMigrationDrainIfReady(
         group: GroupMetadata,
@@ -2168,22 +2137,29 @@ class CoordinatorService(
         now: Instant,
     ): Boolean {
         val liveMembers = group.liveMembers()
-        if (liveMembers.isEmpty() || group.state != GroupState.STABLE) {
-            return false
-        }
-        if (!liveMembers.all { member -> member.currentAssignment == group.targetAssignments[member.memberId].orEmpty() }) {
-            return false
+        val noLiveScaleIn = liveMembers.isEmpty() && migration.toShardCount < migration.fromShardCount
+        if (!noLiveScaleIn) {
+            if (liveMembers.isEmpty() || group.state != GroupState.STABLE) {
+                return false
+            }
+            if (!liveMembers.all { member -> member.currentAssignment == group.targetAssignments[member.memberId].orEmpty() }) {
+                return false
+            }
         }
 
         migration.state = MigrationState.DRAINING
         migration.updatedAt = now
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
+        if (noLiveScaleIn) {
+            completeMigrationDrainIfReady(group, migration, now)
+        }
         return true
     }
 
     /**
-     * Completes resharding after no live member still owns or revokes removed shards.
+     * Completes resharding after no live member still owns or revokes removed shards and every Redis
+     * consumer group on removed stream shards has drained lag and pending entries.
      */
     private fun completeMigrationDrainIfReady(
         group: GroupMetadata,
@@ -2197,6 +2173,9 @@ class CoordinatorService(
         if (removedShardStillOwned) {
             return false
         }
+        if (!removedShardConsumerGroupsDrained(group.streamPrefix, migration)) {
+            return false
+        }
 
         migration.state = MigrationState.DEPRECATED
         migration.updatedAt = now
@@ -2204,6 +2183,24 @@ class CoordinatorService(
         bumpMetadata(group, now, bumpGroupEpoch = false)
         reconcile(group, now)
         return true
+    }
+
+    /**
+     * Checks every Redis consumer group attached to removed stream shards, not only the coordinator
+     * group currently advancing. Scale-in is safe only after all groups report zero pending and zero
+     * known lag for those physical stream keys.
+     */
+    private fun removedShardConsumerGroupsDrained(streamPrefix: String, migration: Migration): Boolean {
+        if (migration.toShardCount >= migration.fromShardCount || !redisCommands.isConfigured()) {
+            return true
+        }
+
+        return (migration.toShardCount until migration.fromShardCount).all { shardIndex ->
+            val streamKey = RedisStreamShardKeys.forShard(streamPrefix, shardIndex).value
+            redisCommands.xInfoGroups(streamKey).all { groupInfo ->
+                (groupInfo.pending ?: 0L) == 0L && groupInfo.lag != null && groupInfo.lag == 0L
+            }
+        }
     }
 
     /**
@@ -2274,36 +2271,32 @@ class CoordinatorService(
 
         unassigned.sorted().forEach { shard ->
             val owner = liveMembers.minWith(compareBy<MemberMetadata> {
-                result.getValue(it.memberId).size.toDouble() / group.memberWeight(it)
+                result.getValue(it.memberId).size
             }.thenBy { it.memberId })
             result.getValue(owner.memberId).add(shard)
         }
 
-        balanceExistingAssignments(
-            result,
-            liveMembers.associate { it.memberId to group.memberWeight(it) },
-        )
+        balanceExistingAssignments(result)
 
         return result
     }
 
     /**
-     * Moves shards from overloaded members only when the weighted load spread improves.
+     * Moves shards from overloaded members only when the shard-count spread improves.
      */
     private fun balanceExistingAssignments(
         assignments: MutableMap<String, MutableSet<ShardId>>,
-        memberWeights: Map<String, Int>,
     ) {
         if (assignments.size <= 1) return
 
         while (true) {
-            val currentSpread = assignmentSpread(assignments, memberWeights)
-            val mostLoaded = assignments.maxWith(weightedLoadComparator(memberWeights).thenByDescending { it.key })
-            val leastLoaded = assignments.minWith(weightedLoadComparator(memberWeights).thenBy { it.key })
+            val currentSpread = assignmentSpread(assignments)
+            val mostLoaded = assignments.maxWith(memberLoadComparator().thenByDescending { it.key })
+            val leastLoaded = assignments.minWith(memberLoadComparator().thenBy { it.key })
             val movedShard = mostLoaded.value.sortedDescending().firstOrNull { shard ->
                 mostLoaded.value.remove(shard)
                 leastLoaded.value.add(shard)
-                val improves = assignmentSpread(assignments, memberWeights) < currentSpread
+                val improves = assignmentSpread(assignments) < currentSpread
                 leastLoaded.value.remove(shard)
                 mostLoaded.value.add(shard)
                 improves
@@ -2314,15 +2307,12 @@ class CoordinatorService(
         }
     }
 
-    private fun weightedLoadComparator(memberWeights: Map<String, Int>): Comparator<Map.Entry<String, MutableSet<ShardId>>> =
-        compareBy { entry -> entry.value.size.toDouble() / memberWeights.getValue(entry.key) }
+    private fun memberLoadComparator(): Comparator<Map.Entry<String, MutableSet<ShardId>>> =
+        compareBy { entry -> entry.value.size }
 
-    private fun assignmentSpread(
-        assignments: Map<String, Set<ShardId>>,
-        memberWeights: Map<String, Int>,
-    ): Double {
-        val loads = assignments.map { (memberId, shards) -> shards.size.toDouble() / memberWeights.getValue(memberId) }
-        return (loads.maxOrNull() ?: 0.0) - (loads.minOrNull() ?: 0.0)
+    private fun assignmentSpread(assignments: Map<String, Set<ShardId>>): Int {
+        val loads = assignments.map { (_, shards) -> shards.size }
+        return (loads.maxOrNull() ?: 0) - (loads.minOrNull() ?: 0)
     }
 
     /**
@@ -2376,13 +2366,6 @@ class CoordinatorService(
     private fun GroupMetadata.liveMembers(): List<MemberMetadata> =
         members.values.filter { it.state == MemberState.ACTIVE || it.state == MemberState.STARTING }
 
-    private fun GroupMetadata.assignedMaxConcurrency(memberName: String): Int =
-        consumerConcurrencyPolicy.memberOverrides[memberName]
-            ?: consumerConcurrencyPolicy.defaultMaxConcurrency
-
-    private fun GroupMetadata.memberWeight(member: MemberMetadata): Int =
-        assignedMaxConcurrency(member.memberName).coerceAtLeast(1)
-
     private fun MemberMetadata.isPrunable(now: Instant, retention: Duration): Boolean {
         val terminal = when (state) {
             MemberState.EXPIRED, MemberState.FENCED -> true
@@ -2423,7 +2406,6 @@ class CoordinatorService(
             assignmentEpoch = assignmentEpoch,
             metadataVersion = metadataVersion,
             shardCount = shardCount,
-            consumerConcurrencyPolicy = consumerConcurrencyPolicy,
             activeMigration = activeReshardingId?.let { migrations[it] },
             targetAssignmentSummary = targetAssignments.mapValues { it.value.size },
             currentAssignmentSummary = members.values
@@ -2475,34 +2457,36 @@ class CoordinatorService(
         val slotOwners = redisCommands.clusterSlotOwners(shardKeys.values.map { it.slot })
         val shards = shardKeys.map { (shard, shardKey) ->
             CompletableFuture.supplyAsync({
-                val streamKey = shardKey.value
-                val streamInfo = redisCommands.xInfoStream(streamKey)
-                val groupInfo = redisCommands.xInfoGroups(streamKey).firstOrNull { it.name == consumerGroup }
-                val memoryUsageBytes = redisCommands.memoryUsage(streamKey)
-                val progress = consumerProgress[shard]
-                val slotOwner = slotOwners[shardKey.slot]
-                StreamShardOffset(
-                    streamPrefix = streamPrefix,
-                    consumerGroup = consumerGroup,
-                    shard = shard,
-                    streamKey = streamKey,
-                    redisSlot = shardKey.slot,
-                    redisNodeEndpoint = slotOwner?.endpoint,
-                    redisNodeId = slotOwner?.nodeId,
-                    redisSlotRangeStart = slotOwner?.slotRangeStart,
-                    redisSlotRangeEnd = slotOwner?.slotRangeEnd,
-                    streamLength = streamInfo.length,
-                    firstRecordId = streamInfo.firstEntryId,
-                    lastRecordId = streamInfo.lastEntryId,
-                    lastGeneratedId = streamInfo.lastGeneratedId,
-                    groupLastDeliveredId = groupInfo?.lastDeliveredId,
-                    consumerLastDeliveredId = progress?.lastDeliveredId,
-                    consumerLastAckedId = progress?.lastAckedId,
-                    pendingCount = groupInfo?.pending ?: progress?.pendingCount ?: 0L,
-                    lag = groupInfo?.lag,
-                    memoryUsageBytes = memoryUsageBytes,
-                    ownerMemberIds = currentOwners[shard].orEmpty().sorted(),
-                )
+                monitoringShardPermits.withPermit {
+                    val streamKey = shardKey.value
+                    val streamInfo = redisCommands.xInfoStream(streamKey)
+                    val groupInfo = redisCommands.xInfoGroups(streamKey).firstOrNull { it.name == consumerGroup }
+                    val memoryUsageBytes = redisCommands.memoryUsage(streamKey)
+                    val progress = consumerProgress[shard]
+                    val slotOwner = slotOwners[shardKey.slot]
+                    StreamShardOffset(
+                        streamPrefix = streamPrefix,
+                        consumerGroup = consumerGroup,
+                        shard = shard,
+                        streamKey = streamKey,
+                        redisSlot = shardKey.slot,
+                        redisNodeEndpoint = slotOwner?.endpoint,
+                        redisNodeId = slotOwner?.nodeId,
+                        redisSlotRangeStart = slotOwner?.slotRangeStart,
+                        redisSlotRangeEnd = slotOwner?.slotRangeEnd,
+                        streamLength = streamInfo.length,
+                        firstRecordId = streamInfo.firstEntryId,
+                        lastRecordId = streamInfo.lastEntryId,
+                        lastGeneratedId = streamInfo.lastGeneratedId,
+                        groupLastDeliveredId = groupInfo?.lastDeliveredId,
+                        consumerLastDeliveredId = progress?.lastDeliveredId,
+                        consumerLastAckedId = progress?.lastAckedId,
+                        pendingCount = groupInfo?.pending ?: progress?.pendingCount ?: 0L,
+                        lag = groupInfo?.lag,
+                        memoryUsageBytes = memoryUsageBytes,
+                        ownerMemberIds = currentOwners[shard].orEmpty().sorted(),
+                    )
+                }
             }, monitoringExecutor)
         }.map { it.get() }
         val totalMemoryUsageBytes = shards.mapNotNull { it.memoryUsageBytes }.sum()
@@ -2526,27 +2510,64 @@ class CoordinatorService(
         val now = Instant.now(clock)
         val key = MonitoringOffsetCacheKey(streamPrefix, consumerGroup)
         val cached = monitoringOffsetCache[key]
-        if (cached != null && cached.metadataVersion == metadataVersion && now.isBefore(cached.expiresAt)) {
+        if (cached != null && cached.shardCount == shardCount) {
+            if (now.isBefore(cached.expiresAt)) {
+                return cached.offsets
+            }
+            refreshMonitoringOffsetCacheAsync(key, cacheTtl)
             return cached.offsets
         }
         val lock = monitoringOffsetLocks.computeIfAbsent(key) { Any() }
         return synchronized(lock) {
             val refreshedNow = Instant.now(clock)
             val refreshedCached = monitoringOffsetCache[key]
-            if (refreshedCached != null &&
-                refreshedCached.metadataVersion == metadataVersion &&
-                refreshedNow.isBefore(refreshedCached.expiresAt)
-            ) {
-                refreshedCached.offsets
+            if (refreshedCached != null && refreshedCached.shardCount == shardCount) {
+                if (refreshedNow.isBefore(refreshedCached.expiresAt)) {
+                    refreshedCached.offsets
+                } else {
+                    refreshMonitoringOffsetCacheAsync(key, cacheTtl)
+                    refreshedCached.offsets
+                }
             } else {
                 toStreamShardOffsets().also { offsets ->
                     monitoringOffsetCache[key] = MonitoringOffsetCacheEntry(
-                        metadataVersion = metadataVersion,
+                        shardCount = shardCount,
                         expiresAt = refreshedNow.plus(cacheTtl),
                         offsets = offsets,
                     )
                 }
             }
+        }
+    }
+
+    private fun GroupMetadata.refreshMonitoringOffsetCacheAsync(
+        key: MonitoringOffsetCacheKey,
+        cacheTtl: Duration,
+    ) {
+        val refreshFlag = monitoringOffsetRefreshInFlight.computeIfAbsent(key) { AtomicBoolean(false) }
+        if (!refreshFlag.compareAndSet(false, true)) {
+            return
+        }
+        CompletableFuture.runAsync({
+            try {
+                val offsets = toStreamShardOffsets()
+                monitoringOffsetCache[key] = MonitoringOffsetCacheEntry(
+                    shardCount = shardCount,
+                    expiresAt = Instant.now(clock).plus(cacheTtl),
+                    offsets = offsets,
+                )
+            } finally {
+                refreshFlag.set(false)
+            }
+        }, monitoringGroupExecutor)
+    }
+
+    private fun <T> Semaphore.withPermit(block: () -> T): T {
+        acquire()
+        try {
+            return block()
+        } finally {
+            release()
         }
     }
 
@@ -2557,7 +2578,7 @@ class CoordinatorService(
      * Converts the current shard layout into metadata consumed by producer-side routers.
      */
     private fun GroupMetadata.toProducerRoutingResponse(): ProducerRoutingResponse {
-        val activeShardKeys = streamShardKeys()
+        val activeShardKeys = if (shardCount > 0) streamShardKeys() else emptyList()
         return ProducerRoutingResponse(
             streamPrefix = streamPrefix,
             consumerGroup = consumerGroup,

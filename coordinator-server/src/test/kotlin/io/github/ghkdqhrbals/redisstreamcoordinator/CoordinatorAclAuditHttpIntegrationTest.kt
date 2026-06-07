@@ -3,7 +3,7 @@ package io.github.ghkdqhrbals.redisstreamcoordinator
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorAuditAction
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorAuditEvent
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorAuditLogSink
-import io.github.ghkdqhrbals.redisstreamcoordinator.config.AuditRequestCachingFilter
+import io.github.ghkdqhrbals.redisstreamcoordinator.config.audit.AuditRequestCachingFilter
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.CreateGroupRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.HeartbeatRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.RuntimeConsumerCapacity
