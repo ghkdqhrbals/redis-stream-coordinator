@@ -89,7 +89,6 @@ data class HeartbeatResponse(
     val groupEpoch: Long,
     val assignmentEpoch: Long,
     val metadataVersion: Long,
-    val assignedMaxConcurrency: Int,
     val assignment: AssignmentView,
 )
 
@@ -111,7 +110,6 @@ data class ProducerRoutingResponse(
 data class CoordinatorConsumerContext(
     val memberId: String,
     val memberName: String,
-    val assignedMaxConcurrency: Int,
     val metadataVersion: Long,
     val groupEpoch: Long,
     val assignmentEpoch: Long,

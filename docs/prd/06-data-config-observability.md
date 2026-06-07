@@ -34,7 +34,7 @@ Coordinator YAML should contain infrastructure and operational defaults only:
 * mutex behavior,
 * event-loop interval,
 * member lease timeout,
-* default shard count and consumer concurrency used when Admin API requests omit values.
+* default shard count used when Admin API create requests omit a value.
 
 Coordinator YAML should not contain:
 
@@ -44,7 +44,7 @@ Coordinator YAML should not contain:
 * producer routing cache policy for applications,
 * member runtime worker tuning beyond coordinator defaults.
 
-Per-group settings are created or changed through the Admin API.
+Per-group shard count is created or changed through the Admin API. Consumer parallelism is controlled by the consumer deployment or listener configuration; the coordinator observes the resulting logical members through heartbeat.
 
 ## Example Configuration
 
@@ -93,7 +93,6 @@ coordinator:
       retry-interval-ms: 100
   defaults:
     initial-shard-count: 4
-    max-concurrency: 4
 ```
 
 ## State Mutex
@@ -107,7 +106,6 @@ Protected operations:
 * graceful leave,
 * resharding request,
 * rollback,
-* consumer concurrency update,
 * monitoring read that performs operational refresh,
 * scheduled event loop tick.
 
@@ -145,7 +143,9 @@ The JDBC table stores the same aggregate metadata JSON used by the Redis store. 
 
 ## ACL
 
-The MVP security model uses Basic Auth.
+The coordinator issues signed Bearer tokens through `POST /coord/v1/auth/login`. Operators authenticate once with a configured username/password, receive a token that expires after seven days by default, and send subsequent API calls with `Authorization: Bearer <token>`. Basic Auth remains accepted for compatibility and for bootstrap tooling, but operator examples should prefer login plus Bearer token so passwords do not appear on every request.
+
+Token signing uses `coordinator.api.token-secret`. Production deployments should set this explicitly and rotate it through the platform secret manager. If it is omitted, the coordinator falls back to the default admin credential material for local development only.
 
 Roles:
 
@@ -206,6 +206,7 @@ Monitoring responses should include:
 * member liveness,
 * member capacity,
 * member-owned shard progress,
+* observed produced/consumed messages per second,
 * revoke progress,
 * active resharding,
 * audit metadata for recent mutations.
@@ -227,13 +228,15 @@ Coordinator metrics should cover:
 * consumer shard progress and lag where available,
 * producer routing requests by group,
 * stale producer routing refreshes,
-* stream shard length, end offset, group offset, consumer offset, pending count, and lag,
+* stream shard length, produced rate, estimated consumed rate, end offset, group offset, consumer offset, pending count, and lag,
 * store revision conflicts,
 * Redis metadata write latency,
 * mutex acquire latency and timeout count for Redis-backed development mode,
 * admin mutation count and failure count.
 
 The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at `/actuator/prometheus` when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.
+
+Grafana shard and group rows also expose observation-based `producedPerSecond` and `consumedPerSecond` values. `producedPerSecond` is calculated from Redis Stream length growth between two monitoring observations. `consumedPerSecond` is estimated as `streamLengthDelta - lagDelta`, so it requires Redis lag to be known. The first observation returns `null` because there is no prior sample.
 
 ## Alerts
 

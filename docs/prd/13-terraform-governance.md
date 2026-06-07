@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Coordinator admin APIs change the control-plane source of truth: group creation, group deletion, shard count, consumer concurrency policy, and resharding rollback. In production, these mutations should be reviewed and applied through Terraform or another GitOps workflow whenever practical.
+Coordinator admin APIs change the control-plane source of truth: group creation, group deletion, shard count, and resharding rollback. In production, these mutations should be reviewed and applied through Terraform or another GitOps workflow whenever practical.
 
 Terraform is not a replacement for runtime audit logging. It records desired state, plan output, approvals, and who merged or applied a change. The coordinator audit log records what actually reached the API at runtime, including failed requests, forbidden requests, request ids, caller identity, client address, request summary, and request body fingerprint.
 
@@ -15,7 +15,6 @@ Terraform or GitOps should manage:
 | Group existence | `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` and `DELETE /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` |
 | Initial shard count | create group request |
 | Target shard count | `POST /coord/v1/streams/{streamPrefix}/scale` |
-| Consumer concurrency policy | `PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency` |
 | Operational reason and actor metadata | mutation request body plus `X-Request-Id` |
 
 Terraform or GitOps should not manage:
@@ -23,6 +22,7 @@ Terraform or GitOps should not manage:
 | Runtime state | Reason |
 | --- | --- |
 | Member heartbeat | It is ephemeral liveness and ownership reconciliation. |
+| Consumer runtime parallelism | It belongs to consumer deployment configuration, such as `@StreamListener(concurrency = N)`, not the coordinator admin API. |
 | Current assignment reports | They are member-reported observations, not desired state. |
 | Redis Stream offsets, pending entries, and message payloads | They belong to the data plane. |
 | Revoke/drain progress | It is a live rebalance transition. |
@@ -36,9 +36,8 @@ Recommended resources:
 
 | Resource | Responsibility |
 | --- | --- |
-| `redisstreamcoordinator_group` | Own one `{streamPrefix, consumerGroup}` metadata record, initial shard count, and default consumer concurrency policy. |
+| `redisstreamcoordinator_group` | Own one `{streamPrefix, consumerGroup}` metadata record and initial shard count. |
 | `redisstreamcoordinator_group_shard_count` | Apply explicit shard count changes when a group already exists and wait for the coordinator to expose the new producer routing metadata. |
-| `redisstreamcoordinator_consumer_concurrency_policy` | Manage `defaultMaxConcurrency` and member-name overrides. |
 
 The provider should support import ids in this format:
 
@@ -124,12 +123,11 @@ GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 The provider should treat these fields as managed desired state:
 
 * group existence,
-* `shardCount`,
-* `consumerConcurrencyPolicy.defaultMaxConcurrency`,
-* `consumerConcurrencyPolicy.memberOverrides`.
+* `shardCount`.
 
 The provider should treat these fields as computed runtime state:
 
+* consumer runtime parallelism reported through heartbeat,
 * `groupEpoch`,
 * `assignmentEpoch`,
 * `metadataVersion`,
@@ -181,5 +179,7 @@ Recommended flow:
 2. Poll producer routing metadata until `shardCount` equals the requested target.
 3. Poll monitoring APIs until assignment and revoke progress are healthy.
 4. Fail the Terraform run if the coordinator reports an active incompatible resharding or unsafe delete condition.
+
+For `targetShardCount=0`, step 2 means producer routing returns `shardCount=0` and an empty shard list. Terraform must still poll monitoring state until every removed stream shard is drained for every Redis consumer group before treating the stream as retired.
 
 Duplicate-sensitive workloads must still quiesce producers before shard count changes. Terraform can orchestrate the admin mutation, but it cannot prove that all application publish retries are drained unless the application exposes that signal.

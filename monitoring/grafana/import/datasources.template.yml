@@ -1,0 +1,28 @@
+apiVersion: 1
+
+datasources:
+  - name: Redis Stream Coordinator Prometheus
+    uid: rsc-prometheus
+    type: prometheus
+    access: proxy
+    url: ${PROMETHEUS_URL}
+    isDefault: false
+    editable: true
+    jsonData:
+      timeInterval: 5s
+
+  - name: Redis Stream Coordinator API
+    uid: rsc-coordinator-api
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: ${COORDINATOR_API_URL}
+    basicAuth: true
+    basicAuthUser: ${COORDINATOR_API_USERNAME}
+    editable: true
+    jsonData:
+      auth_method: basicAuth
+      allowedHosts:
+        - ${COORDINATOR_API_URL}
+      timeoutInSeconds: 10
+    secureJsonData:
+      basicAuthPassword: ${COORDINATOR_API_PASSWORD}

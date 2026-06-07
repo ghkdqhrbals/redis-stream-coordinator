@@ -10,8 +10,12 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.bind.annotation.CrossOrigin
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
+import java.time.Duration
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
 @ConfigurationProperties("sample.publisher")
@@ -49,6 +53,22 @@ data class PublishResponse(
     val streamKey: String,
     val recordId: String,
     val shardIndex: Int,
+)
+
+data class PublishStressRequest(
+    val count: Int = 1000,
+    val parallelism: Int = 8,
+    val partitionKeyPrefix: String? = null,
+    val payloadPrefix: String? = null,
+)
+
+data class PublishStressResponse(
+    val requestedCount: Int,
+    val parallelism: Int,
+    val publishedCount: Long,
+    val failedCount: Long,
+    val elapsedMs: Long,
+    val publishedPerSecond: Double,
 )
 
 @Component
@@ -122,6 +142,7 @@ class ScheduledSamplePublisher(
 }
 
 @RestController
+@CrossOrigin
 @RequestMapping("/sample")
 class PublisherPodController(
     private val properties: PublisherPodProperties,
@@ -142,6 +163,65 @@ class PublisherPodController(
             streamKey = message.streamKey,
             recordId = message.recordId,
             shardIndex = message.route.shard.shardIndex,
+        )
+    }
+
+    @PostMapping("/stress")
+    fun stress(@RequestBody request: PublishStressRequest): PublishStressResponse {
+        val count = request.count.coerceIn(1, 100_000)
+        val parallelism = request.parallelism.coerceIn(1, 256)
+        val partitionPrefix = request.partitionKeyPrefix?.takeIf { it.isNotBlank() } ?: properties.partitionKeyPrefix
+        val payloadPrefix = request.payloadPrefix?.takeIf { it.isNotBlank() } ?: properties.payloadPrefix
+        val startedAt = Instant.now()
+        val published = AtomicLong()
+        val failed = AtomicLong()
+
+        Executors.newVirtualThreadPerTaskExecutor().use { executor ->
+            val tasks = (1..count).map { index ->
+                Callable {
+                    val partitionKey = "$partitionPrefix-stress-$index-${System.nanoTime()}"
+                    val payload = "$payloadPrefix-stress-$index"
+                    runCatching {
+                        publisher.publish(partitionKey, payload)
+                    }.onSuccess { message ->
+                        published.incrementAndGet()
+                        state.recordPublished(
+                            PublisherPodEvent(
+                                type = "stress-published",
+                                partitionKey = partitionKey,
+                                payload = payload,
+                                streamKey = message.streamKey,
+                                recordId = message.recordId,
+                                shardIndex = message.route.shard.shardIndex,
+                            ),
+                        )
+                    }.onFailure { error ->
+                        failed.incrementAndGet()
+                        state.recordFailed(
+                            PublisherPodEvent(
+                                type = "stress-publish-failed",
+                                partitionKey = partitionKey,
+                                payload = payload,
+                                error = error.message ?: error.javaClass.name,
+                            ),
+                        )
+                    }
+                }
+            }
+            tasks.chunked(parallelism).forEach { batch ->
+                executor.invokeAll(batch).forEach { it.get() }
+            }
+        }
+
+        val elapsedMs = Duration.between(startedAt, Instant.now()).toMillis().coerceAtLeast(1)
+        val perSecond = published.get().toDouble() * 1000.0 / elapsedMs.toDouble()
+        return PublishStressResponse(
+            requestedCount = count,
+            parallelism = parallelism,
+            publishedCount = published.get(),
+            failedCount = failed.get(),
+            elapsedMs = elapsedMs,
+            publishedPerSecond = perSecond,
         )
     }
 }

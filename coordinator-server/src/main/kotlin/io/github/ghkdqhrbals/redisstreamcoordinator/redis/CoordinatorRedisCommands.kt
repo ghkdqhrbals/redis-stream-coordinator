@@ -60,51 +60,51 @@ open class CoordinatorRedisCommands(
     /**
      * Returns whether both template and connection access are available for Redis-backed features.
      */
-    fun isConfigured(): Boolean =
+    open fun isConfigured(): Boolean =
         redisTemplate != null && redisConnectionFactory != null
 
     /**
      * Reads whether a Redis key exists.
      */
-    fun hasKey(key: String): Boolean =
+    open fun hasKey(key: String): Boolean =
         stringRedisTemplate().hasKey(key)
 
     /**
      * Reads a string value by key.
      */
-    fun getValue(key: String): String? =
+    open fun getValue(key: String): String? =
         stringRedisTemplate().opsForValue().get(key)
 
     /**
      * Reads a string field from a Redis hash.
      */
-    fun hashGet(key: String, field: String): String? =
+    open fun hashGet(key: String, field: String): String? =
         stringRedisTemplate().opsForHash<String, String>().get(key, field)
 
     /**
      * Adds a member to a Redis set.
      */
-    fun setAdd(key: String, value: String) {
+    open fun setAdd(key: String, value: String) {
         stringRedisTemplate().opsForSet().add(key, value)
     }
 
     /**
      * Removes a member from a Redis set.
      */
-    fun setRemove(key: String, value: String) {
+    open fun setRemove(key: String, value: String) {
         stringRedisTemplate().opsForSet().remove(key, value)
     }
 
     /**
      * Reads all members of a Redis set.
      */
-    fun setMembers(key: String): Set<String> =
+    open fun setMembers(key: String): Set<String> =
         stringRedisTemplate().opsForSet().members(key).orEmpty()
 
     /**
      * Executes a Lua script that returns a Long.
      */
-    fun executeLong(script: RedisScript<Long>, keys: List<String>, vararg args: String): Long? =
+    open fun executeLong(script: RedisScript<Long>, keys: List<String>, vararg args: String): Long? =
         stringRedisTemplate().execute(script, keys, *args)
 
     /**

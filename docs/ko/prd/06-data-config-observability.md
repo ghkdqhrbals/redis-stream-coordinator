@@ -113,17 +113,15 @@ coordinator:
   defaults:
     # create group 요청에서 initialShardCount가 없을 때 사용할 기본 shard count이다.
     initial-shard-count: 1
-    # create/update 요청에서 maxConcurrency가 없을 때 member별로 내려줄 기본 consumer worker 수이다.
-    consumer-max-concurrency: 1
 ```
 
-Shard count와 consumer `maxConcurrency`의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 `defaults`는 요청값이 생략됐을 때만 쓰이며, stream/group별 개별 설정은 Admin API로 저장한다. Kafka coordinator처럼 coordinator server config에는 shard count나 consumer concurrency min/max를 두지 않는다.
+Shard count의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 `defaults`는 요청값이 생략됐을 때만 쓰인다. Consumer 병렬성은 consumer deployment 또는 listener configuration이 결정하고, coordinator는 heartbeat로 들어오는 logical member 수를 관찰한다.
 
 ## Coordinator State Serialization
 
 Redis-backed coordinator는 Redis mutex와 `storeRevision` compare-and-set을 state serialization boundary로 사용한다.
 
-* create, heartbeat, scale, rollback, consumer concurrency update, monitoring read-time operational refresh, scheduled tick은 Redis mutex 안에서 group metadata hash를 읽고 갱신한다.
+* create, heartbeat, scale, rollback, monitoring read-time operational refresh, scheduled tick은 Redis mutex 안에서 group metadata hash를 읽고 갱신한다.
 * critical section 순서는 `acquire Redis mutex -> read latest metadata hash -> validate/process/reconcile -> save with storeRevision CAS -> release mutex`이다.
 * 여러 coordinator pod가 같은 Redis store를 보더라도 같은 group update는 mutex 또는 `storeRevision` CAS로 직렬화된다.
 * event loop tick은 다른 instance가 먼저 같은 group을 update하면 reload하거나 skip하고 다음 tick에서 이어간다.
@@ -145,7 +143,11 @@ JDBC store도 Redis store와 동일한 aggregate metadata JSON을 저장한다. 
 
 ## Access Control
 
-MVP는 Basic Auth를 사용한다. `api.users`가 비어 있으면 `admin-username` / `admin-password`가 `READ`, `WRITE`, `MEMBER` 전체 권한을 가진다.
+Coordinator는 `POST /coord/v1/auth/login`으로 signed Bearer token을 발급한다. 운영자는 설정된 username/password로 한 번 로그인해 기본 7일 만료 token을 받고, 이후 API 호출에는 `Authorization: Bearer <token>`을 보낸다. Basic Auth는 하위 호환과 bootstrap 도구를 위해 계속 허용하지만, 운영 예시는 password가 매 요청에 남지 않도록 login + Bearer token 흐름을 우선 사용한다.
+
+Token 서명에는 `coordinator.api.token-secret`을 사용한다. 운영 배포에서는 이를 반드시 platform secret manager로 명시하고 rotation해야 한다. 값이 비어 있으면 local development 용도로만 기본 admin credential material에서 fallback secret을 만든다.
+
+`api.users`가 비어 있으면 `admin-username` / `admin-password`가 `READ`, `WRITE`, `MEMBER` 전체 권한을 가진다.
 
 `api.users`가 설정되면 각 user의 role로 ACL을 평가한다.
 
@@ -159,7 +161,7 @@ MVP는 Basic Auth를 사용한다. `api.users`가 비어 있으면 `admin-userna
 
 ## API Rate Limiting
 
-`coordinator.api.rate-limit.enabled=true`이면 create, scale, consumer concurrency update, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 `{streamPrefix, consumerGroup}` 조합이다.
+`coordinator.api.rate-limit.enabled=true`이면 create, scale, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 `{streamPrefix, consumerGroup}` 조합이다.
 
 Rate limit 초과 시 coordinator는 `429 Too Many Requests`와 `Retry-After` header를 반환한다. Monitoring read API와 member heartbeat API는 이 limit에 포함하지 않는다. 현재 구현은 coordinator instance local limiter이므로, 여러 coordinator instance를 운영할 경우 global rate limit은 외부 gateway나 load balancer에서 보강한다.
 
@@ -186,6 +188,7 @@ Monitoring response에는 다음 요약만 포함한다.
 * target/current assignment summary
 * revoke progress
 * consumer-reported shard consumption progress, including stream key, shard, last delivered id, last acked id, pending count, and update time
+* 관측 기반 초당 produce/consume 수
 * active migration progress
 
 ## Metrics
@@ -199,7 +202,6 @@ Coordinator metric is the public observability surface. Consumer and producer mo
 * `redis_stream_coord_member_active`
 * `redis_stream_coord_member_heartbeat_age_seconds`
 * `redis_stream_coord_member_lease_remaining_seconds`
-* `redis_stream_coord_member_assigned_max_concurrency`
 * `redis_stream_coord_member_runtime_max_concurrency`
 * `redis_stream_coord_member_active_workers`
 * `redis_stream_coord_member_current_shards`
@@ -228,9 +230,11 @@ Coordinator metric is the public observability surface. Consumer and producer mo
 * `redis_stream_coord_consumer_shard_progress_updated_at_seconds`
 * `redis_stream_coord_consumer_shard_progress_age_seconds`
 
-Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, stream shard length, end offset, group offset, consumer offset, pending count, lag, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.
+Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, stream shard length, produced rate, estimated consumed rate, end offset, group offset, consumer offset, pending count, lag, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.
 
 The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at `/actuator/prometheus` when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.
+
+Grafana shard/group row는 `producedPerSecond`, `consumedPerSecond`도 제공한다. `producedPerSecond`는 두 번의 monitoring observation 사이 Redis Stream length 증가량으로 계산한다. `consumedPerSecond`는 `streamLengthDelta - lagDelta` 기반의 추정값이므로 Redis lag가 알려져 있을 때만 계산한다. 첫 observation은 비교 대상이 없으므로 `null`을 반환한다.
 
 ## Redis Command Template Boundary
 
@@ -252,7 +256,7 @@ Structured log fields:
 * `requestedBy`
 * `reshardingId`
 
-Admin audit event는 create, delete, scale, consumer concurrency update, rollback 같은 control-plane mutation마다 남긴다. 기본 sink는 structured application log이다. `coordinator.audit.sink=redis`이면 coordinator는 JSON audit event를 다음 group-scoped key에 쓴다.
+Admin audit event는 create, delete, scale, rollback 같은 control-plane mutation마다 남긴다. 기본 sink는 structured application log이다. `coordinator.audit.sink=redis`이면 coordinator는 JSON audit event를 다음 group-scoped key에 쓴다.
 
 ```text
 redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit

@@ -62,7 +62,6 @@ class RedisStreamShardKeysTest {
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
             shardCount = 4,
-            consumerConcurrencyPolicy = ConsumerConcurrencyPolicy(defaultMaxConcurrency = 4),
             createdAt = Instant.parse("2026-05-22T00:00:00Z"),
             updatedAt = Instant.parse("2026-05-22T00:00:00Z"),
         )

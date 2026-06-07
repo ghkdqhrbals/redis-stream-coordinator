@@ -1,0 +1,85 @@
+services:
+  stress-consumer-pod:
+    image: redis-stream-coordinator/consumer-pod:local
+    build:
+      context: .
+      args:
+        APP_TASK: :samples:consumer-pod:bootJar
+        APP_LIB_DIR: samples/consumer-pod/build/libs
+    environment:
+      SERVER_PORT: "18181"
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      COORDINATOR_BASE_URL: ${COORDINATOR_BASE_URL:-https://coordinator.ghkdqhrbals.org}
+      STREAM_PREFIX: stress-test
+      CONSUMER_GROUP_NAME: stress-workers
+      CONSUMER_MEMBER_CONCURRENCY: "5"
+      SECONDARY_STREAM_ENABLED: "false"
+      PAYMENT_LOW_STREAM_ENABLED: "false"
+      CONSUMER_REDIS_POLL_BATCH_SIZE: "10"
+      CONSUMER_REDIS_POLL_TIMEOUT_MS: "250"
+      CONSUMER_PROCESSING_DELAY: 20ms
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}
+      SPRING_DATA_REDIS_PASSWORD: ${AWS_REDIS_PASSWORD:-}
+      COORDINATOR_USERNAME: admin
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+    ports:
+      - "18181:18181"
+    tmpfs:
+      - /tmp:size=128m
+    secrets:
+      - source: redis_cluster_nodes
+        target: spring.data.redis.cluster.nodes
+        mode: 0444
+      - source: redis_password
+        target: spring.data.redis.password
+        mode: 0444
+    networks:
+      - redis-stream-stress
+
+  stress-publisher-pod:
+    image: redis-stream-coordinator/publisher-pod:local
+    build:
+      context: .
+      args:
+        APP_TASK: :samples:publisher-pod:bootJar
+        APP_LIB_DIR: samples/publisher-pod/build/libs
+    environment:
+      SERVER_PORT: "18190"
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      COORDINATOR_BASE_URL: ${COORDINATOR_BASE_URL:-https://coordinator.ghkdqhrbals.org}
+      STREAM_PREFIX: stress-test
+      CONSUMER_GROUP: stress-workers
+      COORDINATOR_USERNAME: admin
+      COORDINATOR_PASSWORD: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:-password}
+      SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}
+      SPRING_DATA_REDIS_PASSWORD: ${AWS_REDIS_PASSWORD:-}
+      PUBLISHER_AUTO_PUBLISH_ENABLED: "false"
+      PUBLISHER_PARTITION_KEY_PREFIX: stress
+      PUBLISHER_PAYLOAD_PREFIX: stress-message
+      PUBLISHER_XADD_MAX_LEN: "10000000"
+      PUBLISHER_XADD_APPROXIMATE_TRIMMING: "true"
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+    ports:
+      - "18190:18190"
+    tmpfs:
+      - /tmp:size=128m
+    secrets:
+      - source: redis_cluster_nodes
+        target: spring.data.redis.cluster.nodes
+        mode: 0444
+      - source: redis_password
+        target: spring.data.redis.password
+        mode: 0444
+    networks:
+      - redis-stream-stress
+
+networks:
+  redis-stream-stress:
+    name: redis-stream-coordinator-stress
+
+secrets:
+  redis_cluster_nodes:
+    environment: AWS_REDIS_CLUSTER_NODES
+  redis_password:
+    environment: AWS_REDIS_PASSWORD

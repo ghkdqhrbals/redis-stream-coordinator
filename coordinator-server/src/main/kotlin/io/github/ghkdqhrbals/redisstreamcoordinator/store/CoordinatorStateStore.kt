@@ -111,18 +111,23 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     private val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
 
-    override fun contains(key: GroupKey): Boolean =
-        redisCommands.hasKey(keys.forGroup(key).metadata)
+    override fun contains(key: GroupKey): Boolean {
+        val groupKeys = keys.forGroup(key)
+        return redisCommands.hasKey(groupKeys.metadata) || redisCommands.hasKey(groupKeys.group)
+    }
 
     override fun get(key: GroupKey): GroupMetadata? =
-        redisCommands.hashGet(keys.forGroup(key).metadata, METADATA_AGGREGATE_FIELD)
-            ?.let { objectMapper.readRedisGroupMetadata(it) }
+        readGroupMetadata(keys.forGroup(key))
 
     /**
      * Writes the single group metadata hash atomically when this group does not already exist.
      */
     override fun putIfAbsent(key: GroupKey, group: GroupMetadata): Boolean {
         val groupKeys = keys.forGroup(key)
+        if (redisCommands.hasKey(groupKeys.group)) {
+            migrateLegacyGroupMetadata(groupKeys)
+            return false
+        }
         val stored = writeGroupMetadata(groupKeys, group, onlyIfAbsent = true)
         if (stored) {
             redisCommands.setAdd(keys.groupsIndex, groupKeys.metadata)
@@ -157,8 +162,8 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     override fun list(): List<GroupMetadata> =
         redisCommands.setMembers(keys.groupsIndex)
-            .mapNotNull { redisCommands.hashGet(it, METADATA_AGGREGATE_FIELD) }
-            .map { objectMapper.readRedisGroupMetadata(it) }
+            .mapNotNull(::readIndexedGroupMetadata)
+            .distinctBy { it.streamPrefix to it.consumerGroup }
 
     /**
      * Atomically updates the single Redis hash that stores the canonical group metadata.
@@ -170,7 +175,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
     ): Boolean {
         group.requireSupportedRedisMetadataSchema()
         val previousRevision = group.storeRevision
-        val nextRevision = if (onlyIfAbsent) 1 else previousRevision + 1
+        val nextRevision = if (onlyIfAbsent) previousRevision.takeIf { it > 0 } ?: 1 else previousRevision + 1
         group.storeRevision = nextRevision
         val args = mutableListOf(
             if (onlyIfAbsent) "NX" else "UPSERT",
@@ -199,6 +204,35 @@ class RedisCoordinatorStateStore @Autowired constructor(
                     "Redis coordinator metadata changed before save for ${keys.metadata}; expected store revision $previousRevision",
                 )
             }
+        }
+    }
+
+    private fun readGroupMetadata(keys: RedisCoordinatorGroupKeys): GroupMetadata? =
+        redisCommands.hashGet(keys.metadata, METADATA_AGGREGATE_FIELD)
+            ?.let { objectMapper.readRedisGroupMetadata(it) }
+            ?: migrateLegacyGroupMetadata(keys)
+
+    private fun readIndexedGroupMetadata(indexMember: String): GroupMetadata? {
+        redisCommands.hashGet(indexMember, METADATA_AGGREGATE_FIELD)
+            ?.let { return objectMapper.readRedisGroupMetadata(it) }
+
+        val legacyRaw = redisCommands.getValue(indexMember) ?: return null
+        val legacyGroup = objectMapper.readRedisGroupMetadata(legacyRaw)
+        migrateLegacyGroupMetadata(keys.forGroup(GroupKey(legacyGroup.streamPrefix, legacyGroup.consumerGroup)), legacyGroup)
+        return legacyGroup
+    }
+
+    private fun migrateLegacyGroupMetadata(keys: RedisCoordinatorGroupKeys): GroupMetadata? {
+        val legacyRaw = redisCommands.getValue(keys.group) ?: return null
+        val legacyGroup = objectMapper.readRedisGroupMetadata(legacyRaw)
+        migrateLegacyGroupMetadata(keys, legacyGroup)
+        return legacyGroup
+    }
+
+    private fun migrateLegacyGroupMetadata(keys: RedisCoordinatorGroupKeys, legacyGroup: GroupMetadata) {
+        val migrated = writeGroupMetadata(keys, legacyGroup, onlyIfAbsent = true)
+        if (migrated) {
+            redisCommands.setAdd(this.keys.groupsIndex, keys.metadata)
         }
     }
 
@@ -509,11 +543,13 @@ class RedisCoordinatorStateKeys(
     fun forGroup(key: GroupKey): RedisCoordinatorGroupKeys {
         val tag = "{${key.streamPrefix}:${key.consumerGroup}}"
         return RedisCoordinatorGroupKeys(
+            group = "$prefix:$tag:group",
             metadata = "$prefix:$tag:metadata",
         )
     }
 }
 
 data class RedisCoordinatorGroupKeys(
+    val group: String,
     val metadata: String,
 )

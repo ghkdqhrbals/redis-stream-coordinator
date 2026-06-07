@@ -32,22 +32,40 @@ def test_dockerfile() -> None:
             raise AssertionError(f"Dockerfile is missing {expected!r}")
 
 
-def test_compose_coordinator_profile() -> None:
-    compose = read("compose.yaml")
+def test_compose_pod_stack() -> None:
+    compose = read("compose.pods.yaml")
     expectations = [
-        "coordinator-server:",
-        "profiles:",
-        "- coordinator",
-        "dockerfile: Dockerfile",
+        "coordinator:",
+        "redis-stream-coordinator/coordinator:local",
+        "consumer-pod-1:",
+        "consumer-pod-2:",
+        "publisher-pod:",
+        "prometheus:",
+        "grafana:",
         "COORDINATOR_STORE_TYPE: redis",
-        "SPRING_DATA_REDIS_CLUSTER_NODES: redis-node-1:7001,redis-node-2:7002,redis-node-3:7003",
-        "COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_ADVERTISED_HOST: 127.0.0.1",
-        "COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_CONNECT_HOST: redis-node-1",
-        "\"8080:8080\"",
+        "SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}",
+        "redis_cluster_nodes:",
+        "environment: AWS_REDIS_CLUSTER_NODES",
     ]
     for expected in expectations:
         if expected not in compose:
-            raise AssertionError(f"compose.yaml is missing {expected!r}")
+            raise AssertionError(f"compose.pods.yaml is missing {expected!r}")
+
+
+def test_compose_stress_stack() -> None:
+    compose = read("compose.stress.yaml")
+    expectations = [
+        "stress-consumer-pod:",
+        "stress-publisher-pod:",
+        "STREAM_PREFIX: stress-test",
+        "CONSUMER_GROUP_NAME: stress-workers",
+        "PUBLISHER_XADD_MAX_LEN: \"10000000\"",
+        "redis_cluster_nodes:",
+        "environment: AWS_REDIS_CLUSTER_NODES",
+    ]
+    for expected in expectations:
+        if expected not in compose:
+            raise AssertionError(f"compose.stress.yaml is missing {expected!r}")
 
 
 def test_workflow_permissions_and_smoke_test() -> None:
@@ -76,7 +94,8 @@ def test_docs_are_linked() -> None:
 
 def main() -> None:
     test_dockerfile()
-    test_compose_coordinator_profile()
+    test_compose_pod_stack()
+    test_compose_stress_stack()
     test_workflow_permissions_and_smoke_test()
     test_docs_are_linked()
 

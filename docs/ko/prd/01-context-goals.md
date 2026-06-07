@@ -11,7 +11,7 @@ Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을
 * member join/leave, metadata change, Coordinator Admin API로 요청된 shard count change를 group epoch 증가로 모델링한다.
 * topic partition에 해당하는 Redis Stream shard count는 Coordinator Admin API 요청으로만 생성/증감한다.
 * Annotation listener의 `concurrency = "N"`은 N개의 독립 coordinator member를 만드는 member fan-out이다. 각 member는 별도 heartbeat와 assignment state를 가진다.
-* Bean 기반 `runtimeMaxConcurrency`는 partition/shard 개수가 아니라 하나의 member 안에서 사용할 consumer worker 수이며, coordinator의 server-side consumer concurrency policy로 제한된다.
+* Bean 기반 `runtimeMaxConcurrency`는 partition/shard 개수가 아니라 하나의 member 안에서 사용할 consumer worker 수이며, coordinator assignment weight로 쓰지 않는다.
 * target assignment는 coordinator가 계산하고 assignment epoch으로 versioning한다.
 * member는 heartbeat/reconciliation loop로 target assignment에 수렴한다.
 * coordinator는 `tick-interval`마다 heartbeat가 `member-lease-ttl`을 넘긴 member를 `EXPIRED`로 표시하고 shard를 재할당한다.

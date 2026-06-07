@@ -43,6 +43,8 @@ spring:
 coordinator:
   api:
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
+    token-secret: ${REDIS_STREAM_COORDINATOR_TOKEN_SECRET:}
+    token-ttl: ${REDIS_STREAM_COORDINATOR_TOKEN_TTL:7d}
   coordination:
     state-mutex:
       ttl-ms: 30000

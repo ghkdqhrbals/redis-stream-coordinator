@@ -396,7 +396,6 @@ class RedisStreamConsumerLifecycleTest {
         CoordinatorConsumerContext(
             memberId = "member-a",
             memberName = "member-a",
-            assignedMaxConcurrency = 4,
             metadataVersion = 1,
             groupEpoch = 1,
             assignmentEpoch = 1,

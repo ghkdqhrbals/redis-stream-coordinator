@@ -104,7 +104,7 @@ Member startup does not:
 
 * submit local YAML shard count as desired state,
 * create or mutate group metadata,
-* change server-side consumer concurrency policy.
+* change consumer deployment or listener concurrency.
 
 ## Admin API Source of Truth
 
@@ -113,21 +113,20 @@ Initial group creation and shard scale-out/in happen only through the Coordinato
 Source of truth:
 
 * shard count: coordinator group metadata,
-* consumer `maxConcurrency`: coordinator consumer concurrency policy,
+* consumer `concurrency`: consumer-side logical member count created by `@StreamListener(concurrency = N)`,
 * routing metadata: coordinator producer routing endpoint.
 
 ## Create Group
 
-`initialShardCount` and `consumerConcurrencyPolicy.defaultMaxConcurrency` can be omitted. In that case the coordinator uses configured defaults.
+`initialShardCount` can be omitted. In that case the coordinator uses configured defaults.
 
 Processing order:
 
 1. Verify the group does not already exist.
 2. Validate the requested shard count.
 3. Provision shard stream keys and Redis consumer groups when provisioning is enabled.
-4. Store consumer concurrency policy.
-5. Store `shardCount` and `groupEpoch=1`.
-6. Reject duplicate create requests with `409 Conflict`.
+4. Store `shardCount` and `groupEpoch=1`.
+5. Reject duplicate create requests with `409 Conflict`.
 
 ## Scale Out / Scale In
 
@@ -137,21 +136,19 @@ The coordinator accepts the request only when:
 
 * there is no active resharding for the group,
 * `targetShardCount` differs from the current shard count,
-* `targetShardCount` is positive.
+* `targetShardCount` is zero or positive.
 
-If a consumer concurrency policy is provided with the scale request, it is stored in the same metadata update.
+Consumer parallelism is not part of scale metadata. Operators change consumer parallelism by changing the consumer deployment or listener configuration. The coordinator observes the resulting logical members through heartbeat and rebalances by live member count.
 
-## Consumer Concurrency Update
+Scale-in does not move messages from removed shard streams. Removed shards enter a drain phase:
 
-When only the local worker capacity limit changes, operators use the consumer concurrency API. This does not change shard count.
-
-Rules:
-
-* the policy is propagated through `assignedMaxConcurrency` in heartbeat responses,
-* a member cannot exceed server-side policy even if it reports a larger runtime capacity,
-* reducing concurrency does not reduce shard count,
-* if the assignment weight policy depends on `maxConcurrency`, the coordinator increments `groupEpoch` and recalculates assignment,
-* no-op updates return current policy without writing new metadata.
+* `targetShardCount=0` is a valid full drain. It removes every shard from producer routing after all removed shards drain.
+* Producers refresh routing metadata and stop writing new records to removed shard indexes.
+* Consumers keep processing records that already exist on removed shard streams.
+* The coordinator must not mark removed shards deprecated while any live member still owns or revokes them.
+* If every live member expires during scale-in, there is no heartbeat target that can acknowledge revoke. The coordinator skips the consumer-level revoke wait and advances to Redis-level drain checks.
+* The coordinator must also inspect Redis `XINFO GROUPS` for every removed physical stream shard and wait until every Redis consumer group attached to that stream reports `pending=0` and known `lag=0`.
+* If Redis reports `lag=null` for any group on a removed shard, drain completion is not proven and scale-in remains in `DRAINING`.
 
 ## Monitoring
 
@@ -160,7 +157,7 @@ Group monitoring returns:
 * group epoch,
 * assignment epoch,
 * shard count,
-* consumer concurrency policy,
+* consumer logical member count and runtime capacity,
 * active resharding,
 * target/current assignment summary,
 * member liveness,

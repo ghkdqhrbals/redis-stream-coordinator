@@ -230,9 +230,6 @@ private class CopyingContendedStateStore(
 
     private fun GroupMetadata.deepCopy(): GroupMetadata =
         copy(
-            consumerConcurrencyPolicy = consumerConcurrencyPolicy.copy(
-                memberOverrides = consumerConcurrencyPolicy.memberOverrides.toMap(),
-            ),
             members = members.mapValues { (_, member) -> member.copy() }.toMutableMap(),
             targetAssignments = targetAssignments
                 .mapValues { (_, shards) -> shards.toMutableSet() }

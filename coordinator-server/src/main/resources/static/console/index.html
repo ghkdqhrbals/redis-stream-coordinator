@@ -41,7 +41,7 @@
                     <p id="coordinatorId">Not connected</p>
                 </div>
             </div>
-            <a class="ghost-link" href="/console/access.html">Access</a>
+            <a class="ghost-link" href="/console/admin.html">Admin</a>
             <button id="logoutButton" class="ghost-button" type="button">Sign out</button>
         </header>
 
@@ -64,7 +64,7 @@
 
         <section class="side-panel group-panel">
             <div class="panel-heading">
-                <h2>Groups</h2>
+                <h2>Streams</h2>
                 <button id="refreshButton" class="ghost-button small" type="button">Refresh</button>
             </div>
             <div id="groupList" class="group-list" aria-live="polite"></div>
@@ -75,8 +75,8 @@
         <header class="topbar">
             <div>
                 <p class="eyebrow">Monitoring</p>
-                <h2 id="pageTitle">Select a group</h2>
-                <p id="pageSubtitle" class="page-subtitle">No active stream group selected.</p>
+                <h2 id="pageTitle">Redis Stream Coordinator</h2>
+                <p id="pageSubtitle" class="page-subtitle">Stream-first monitoring for sharded Redis Streams.</p>
             </div>
             <div class="toolbar">
                 <span id="lastUpdated" class="last-updated">Not refreshed</span>
@@ -92,9 +92,151 @@
             </div>
         </header>
 
-        <section id="emptyState" class="empty-state">
+        <section id="emptyState" class="empty-state hidden">
             <h3>No group selected</h3>
             <p>Choose a coordinator group from the left rail.</p>
+        </section>
+
+        <section id="consoleOverview" class="console-overview hidden" aria-live="polite">
+            <section class="signal-strip console-kpi-strip" aria-label="Global stream signals">
+                <article>
+                    <span>Coordinator</span>
+                    <strong id="globalCoordinatorSignal">-</strong>
+                    <small>current health</small>
+                </article>
+                <article>
+                    <span>Active Consumers</span>
+                    <strong id="globalActiveConsumers">-</strong>
+                    <small>active / total members</small>
+                </article>
+                <article>
+                    <span>Stream Entries</span>
+                    <strong id="globalStreamEntries">-</strong>
+                    <small>all shard streams</small>
+                </article>
+                <article>
+                    <span>Stream Memory</span>
+                    <strong id="globalStreamMemory">-</strong>
+                    <small>bytes across shards</small>
+                </article>
+                <article>
+                    <span>Total Lag</span>
+                    <strong id="globalTotalLag">-</strong>
+                    <small>known lag only</small>
+                </article>
+                <article>
+                    <span>Pending Entries</span>
+                    <strong id="globalPendingEntries">-</strong>
+                    <small>consumer-group pending</small>
+                </article>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Streams</h3>
+                        <p class="panel-subtitle">Each stream shows its consumer groups and shard health.</p>
+                    </div>
+                    <span id="overviewShardCount" class="count-label">0 shards</span>
+                </div>
+                <div id="streamOverview" class="stream-overview"></div>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Group Summary</h3>
+                        <p class="panel-subtitle">One row per consumer group, grouped by stream in the left rail.</p>
+                    </div>
+                    <span id="grafanaGroupCount" class="count-label">0 groups</span>
+                </div>
+                <div class="table-wrap">
+                    <table class="groups-table">
+                        <thead>
+                        <tr>
+                            <th>Stream</th>
+                            <th>Group</th>
+                            <th>Assigned / Shards</th>
+                            <th>Members</th>
+                            <th>Lag</th>
+                            <th>Pending</th>
+                            <th>Produced/s</th>
+                            <th>Consumed/s</th>
+                            <th>Memory</th>
+                        </tr>
+                        </thead>
+                        <tbody id="grafanaGroupsTable"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="content-panel wide">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Stream Messages</h3>
+                        <p class="panel-subtitle">Inspect recent records for the selected stream group.</p>
+                    </div>
+                    <div class="browser-controls">
+                        <select id="globalMessageStream" aria-label="Message stream"></select>
+                        <select id="globalMessageGroup" aria-label="Message consumer group"></select>
+                        <select id="globalMessageShard" aria-label="Message shard"></select>
+                        <select id="globalMessageLimit" aria-label="Message page size">
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <button id="globalMessageFirst" class="ghost-button small" type="button">|&lt;</button>
+                        <button id="globalMessagePrev" class="ghost-button small" type="button">&lt;</button>
+                        <button id="globalMessageNext" class="ghost-button small" type="button">&gt;</button>
+                        <button id="globalMessageLast" class="ghost-button small" type="button">&gt;|</button>
+                    </div>
+                </div>
+                <div class="message-browser-header">
+                    <span id="globalMessageStatus" class="muted-text">No messages loaded.</span>
+                    <button id="globalMessageRefresh" class="ghost-button small" type="button">Refresh</button>
+                </div>
+                <div class="table-wrap">
+                    <table class="message-table resizable-message-table" data-resizable-table="stream-messages">
+                        <colgroup>
+                            <col style="width: 190px">
+                            <col style="width: 90px">
+                            <col style="width: 190px">
+                            <col>
+                        </colgroup>
+                        <thead>
+                        <tr>
+                            <th>Time<span class="column-resize-handle" aria-hidden="true"></span></th>
+                            <th>Shard<span class="column-resize-handle" aria-hidden="true"></span></th>
+                            <th>Offset<span class="column-resize-handle" aria-hidden="true"></span></th>
+                            <th>Fields<span class="column-resize-handle" aria-hidden="true"></span></th>
+                        </tr>
+                        </thead>
+                        <tbody id="globalMessageRows"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="content-panel compact-panel">
+                <div class="panel-heading">
+                    <h3>API Performance</h3>
+                    <span id="apiMetricStatus" class="status-badge muted">Prometheus scrape</span>
+                </div>
+                <div id="apiMetricList" class="api-metric-list"></div>
+            </section>
+
+            <section class="content-panel compact-panel">
+                <div class="panel-heading">
+                    <h3>Grafana</h3>
+                    <span class="count-label">external</span>
+                </div>
+                <div class="export-list">
+                    <a id="grafanaOverviewLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open Overview</a>
+                    <a id="grafanaDetailLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open Stream Detail</a>
+                    <a id="grafanaApiLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open API Performance</a>
+                    <a class="ghost-link" href="https://github.com/ghkdqhrbals/redis-stream-coordinator/tree/feature/coordinator/monitoring/grafana/import" target="_blank" rel="noreferrer">Dashboard JSON</a>
+                </div>
+                <p class="admin-note">Use Grafana public dashboards for a read-only external link. Use dashboard JSON when someone should import the same dashboards into their own Grafana.</p>
+            </section>
         </section>
 
         <section id="detailView" class="dashboard-grid hidden" aria-live="polite">
@@ -227,6 +369,7 @@
     </section>
 </main>
 
+<script src="/console/table-resize.js"></script>
 <script src="/console/app.js"></script>
 </body>
 </html>

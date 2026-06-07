@@ -1,7 +1,6 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.COORDINATOR_METADATA_SCHEMA_VERSION
-import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ConsumerConcurrencyPolicy
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupState
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.Migration
@@ -36,11 +35,11 @@ class RedisCoordinatorMetadataSchemaTest {
     }
 
     @Test
-    fun `redis metadata parser ignores removed producer routing fields`() {
+    fun `redis metadata parser ignores removed legacy fields`() {
         val raw = objectMapper.writeValueAsString(groupMetadata())
         val legacyRaw = raw.replace(
-            "\"consumerConcurrencyPolicy\":",
-            "\"hashAlgorithm\":\"murmur3\",\"hashSeed\":\"default\",\"consumerConcurrencyPolicy\":",
+            "\"state\":\"EMPTY\",",
+            "\"state\":\"EMPTY\",\"hashAlgorithm\":\"murmur3\",\"hashSeed\":\"default\",\"consumerConcurrencyPolicy\":{\"defaultMaxConcurrency\":4,\"memberOverrides\":{}},",
         )
 
         assertEquals(COORDINATOR_METADATA_SCHEMA_VERSION, objectMapper.readRedisGroupMetadata(legacyRaw).schemaVersion)
@@ -105,7 +104,6 @@ class RedisCoordinatorMetadataSchemaTest {
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
             shardCount = 4,
-            consumerConcurrencyPolicy = ConsumerConcurrencyPolicy(defaultMaxConcurrency = 4),
             createdAt = Instant.parse("2026-05-24T00:00:00Z"),
             updatedAt = Instant.parse("2026-05-24T00:00:00Z"),
         )
@@ -134,10 +132,6 @@ class RedisCoordinatorMetadataSchemaTest {
                 "v1": 2,
                 "v2": 4
               },
-              "consumerConcurrencyPolicy": {
-                "defaultMaxConcurrency": 4,
-                "memberOverrides": {}
-              },
               "members": {
                 "member-a": {
                   "memberId": "member-a",
@@ -145,7 +139,6 @@ class RedisCoordinatorMetadataSchemaTest {
                   "state": "ACTIVE",
                   "memberEpoch": 3,
                   "metadataVersion": 5,
-                  "assignedMaxConcurrency": 4,
                   "runtimeMaxConcurrency": 4,
                   "activeConsumerWorkers": 1,
                   "currentAssignment": [

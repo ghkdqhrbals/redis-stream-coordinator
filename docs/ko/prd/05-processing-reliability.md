@@ -62,6 +62,8 @@ Coordinator heartbeat response의 `assignment.assignedShards`에서 기존 owned
 
 Metadata correction 중 `SYNC_METADATA`와 `REVOKE_PENDING`은 drain-only response이다. Member는 이미 소유한 shard 중 `assignment.assignedShards`에 남은 shard만 유지할 수 있고, 처음 등장한 shard는 이후 `OK` response를 받을 때까지 read를 시작하면 안 된다.
 
-Coordinator가 `FENCED_MEMBER_EPOCH`을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 `memberEpoch=0` full heartbeat로 rejoin한다.
+Coordinator가 `UNKNOWN_MEMBER_ID`, `FENCED_MEMBER_EPOCH`을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 local ownership/revoke state를 비운 뒤, 같은 `memberId`와 `memberEpoch=0` full heartbeat로 rejoin한다.
+
+Consumer module은 `UNKNOWN_MEMBER_ID` 이후 stale `ownedShards`를 계속 보고하면 안 된다. Rejoin은 empty ownership report에서 시작하며, 이후 `OK` heartbeat로 내려온 shard만 다시 read할 수 있다.
 
 Coordinator는 member가 보고한 `ownedShards`/`revokingShards`를 server-side target assignment와 이전에 수락한 current assignment 기준으로 검증한다. 아직 pending인 shard, 다른 live member가 소유 중인 shard, 또는 더 이상 허용되지 않는 shard를 owned로 보고하면 stale ownership으로 보고 fencing한다. 이미 처리된 terminal `REVOKED` duplicate report는 fencing하지 않고 무시한다.

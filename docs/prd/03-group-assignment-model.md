@@ -24,7 +24,6 @@ The coordinator owns:
 * target assignment,
 * accepted current assignment,
 * resharding state,
-* consumer concurrency policy,
 * audit and monitoring projections.
 
 Members own:
@@ -69,7 +68,6 @@ The coordinator compares both views to enforce safety:
 * member gracefully leaves,
 * member expires,
 * shard count migration changes the managed shard set,
-* consumer concurrency policy affects assignment weight,
 * rollback changes resharding state.
 
 ### Assignment Epoch
@@ -79,6 +77,8 @@ The coordinator compares both views to enforce safety:
 ### Member Epoch
 
 `memberEpoch` increments when the coordinator needs to fence stale member state or acknowledge a new member lifecycle. A member that sends a heartbeat with an old epoch can be fenced and required to rejoin.
+
+If the coordinator returns `UNKNOWN_MEMBER_ID`, the consumer must treat its local ownership as invalid. The consumer stops reads and ACKs, clears local owned and revoking shard state, and sends the next full heartbeat with the same `memberId` and `memberEpoch=0`. When the group still exists, this heartbeat is a rejoin request and the coordinator can issue a fresh member epoch and assignment.
 
 ### Store Revision
 
@@ -141,8 +141,8 @@ Shard ownership and consumer concurrency are intentionally separate:
 * a consumer member can own many shards,
 * annotation listener `concurrency` creates logical coordinator members, not local workers inside a single member,
 * bean-based `runtimeMaxConcurrency` describes local worker capacity for one member, not a hard ownership limit,
-* `assignedMaxConcurrency` caps the coordinator-approved local worker capacity reported by one member,
-* concurrency can be used as a balancing weight, but the coordinator must not require shard count to be less than or equal to member concurrency,
+* consumer parallelism is controlled by deployment/listener configuration,
+* shard assignment is balanced by live logical member count, not by reported runtime capacity,
 * when one member owns more shards than its worker count, the member must multiplex owned shards across local workers,
 * the built-in polling adapter must keep one active Redis read loop per shard at most, even when several local workers are available.
 

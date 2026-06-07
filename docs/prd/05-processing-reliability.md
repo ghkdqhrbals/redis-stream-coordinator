@@ -81,8 +81,10 @@ If the coordinator returns a fencing status or rejects stale ownership:
 
 1. stop reads and ACKs for affected shards,
 2. clear local ownership state,
-3. send a full heartbeat with `memberEpoch=0` or rejoin according to the client policy,
+3. send a full heartbeat with the same `memberId`, `memberEpoch=0`, empty `ownedShards`, and empty `revokingShards`,
 4. start only the shards returned by the coordinator after rejoin.
+
+`UNKNOWN_MEMBER_ID` follows the same client-side recovery path. It means the coordinator cannot match the member to current group metadata. The consumer module must discard local ownership and request reassignment instead of repeatedly sending the stale epoch or stale ownership report.
 
 ## Guarantee Boundary Summary
 

@@ -39,7 +39,7 @@ sequenceDiagram
 
 ### Coordinator API
 
-* create, scale, consumer concurrency update, rollback, heartbeat request를 직접 받는다.
+* create, scale, rollback, heartbeat request를 직접 받는다.
 * API path의 `{streamPrefix, consumerGroup}`으로 대상 group을 결정한다.
 * member나 producer local YAML에서 stream/group/shard count desired state를 수집하지 않는다.
 
@@ -108,7 +108,7 @@ KIP-848 mapping:
 
 * assignment는 별도 polling loop로 가져오지 않는다. 다음 heartbeat 응답이 최신 assignment이다.
 * coordinator API가 일시적으로 응답하지 못하면 member는 현재 assignment를 유지하고 다음 heartbeat에 재시도한다.
-* member가 보고한 runtime consumer capacity는 관측값이고, 실제 consumer worker 수 상한은 coordinator metadata의 server-side consumer concurrency policy가 결정한다.
+* member가 보고한 runtime consumer capacity는 관측값이며 assignment weight가 아니다. 실제 consumer worker 수는 consumer deployment 또는 listener 설정이 결정한다.
 * 첫 heartbeat, `memberEpoch=0` rejoin, error response 이후, request timeout 이후에는 full state를 보낸다. 정상 heartbeat에서는 변하지 않은 optional field를 생략할 수 있지만, MVP server는 full state request를 항상 받아야 한다.
 
 Heartbeat request 예시:
@@ -154,7 +154,6 @@ Heartbeat response 예시:
   "groupEpoch": 12,
   "assignmentEpoch": 12,
   "metadataVersion": 9,
-  "assignedMaxConcurrency": 12,
   "assignment": {
     "error": "NONE",
     "assignedShards": [
@@ -177,7 +176,7 @@ Heartbeat response 예시:
 | `memberId` | yes | path의 `{memberId}`와 같아야 한다. starter는 기본적으로 pod IP context에서 이 값을 만들고 concurrency suffix를 붙인다. coordinator는 이 id에 member epoch을 부여하고 fencing한다. |
 | `memberEpoch` | yes | `0`이면 신규 join 또는 coordinator가 이미 `EXPIRED`/`FENCED`로 판단한 member의 rejoin, `-1`이면 leave, 양수이면 coordinator가 직전 response로 발급한 epoch이다. stale 값이면 `FENCED_MEMBER_EPOCH`, coordinator가 발급하지 않은 값이면 `INVALID_REQUEST` 대상이다. |
 | `metadataVersion` | yes | member가 캐시한 group metadata version. 낮으면 response의 assignment metadata version 기준으로 갱신한다. |
-| `runtimeConsumerCapacity` | yes | member runtime이 보고하는 처리 가능 상태. `runtimeMaxConcurrency`는 process local consumer worker limit이고, coordinator의 server-side `maxConcurrency`를 올릴 수 없다. |
+| `runtimeConsumerCapacity` | yes | member runtime이 보고하는 처리 가능 상태. `runtimeMaxConcurrency`는 process local consumer worker limit이며 assignment weight가 아니다. |
 | `ownedShards` | yes | KIP-848의 `TopicPartitions`에 해당한다. member가 지금 read 가능하다고 보고하는 shard 목록이다. |
 | `revokingShards` | no | Redis-specific drain progress이다. `REVOKED` 상태와 `inFlight=0`이면 revoke ack로 처리한다. |
 | `shardProgress` | no | consumer가 coordinator metrics용으로 보고하는 Redis Stream progress이다. coordinator가 허용한 owned/revoking shard만 저장하며, 임의 shard progress는 fencing 대상이다. |
@@ -195,7 +194,6 @@ Heartbeat response 예시:
 | `groupEpoch` | yes | coordinator가 본 최신 group metadata epoch. |
 | `assignmentEpoch` | yes | target assignment가 계산된 epoch. |
 | `metadataVersion` | yes | 최신 metadata version. member cache가 낮으면 metadata를 갱신한다. |
-| `assignedMaxConcurrency` | yes | coordinator metadata가 이 member에게 허용한 consumer worker 수. partition/shard 개수가 아니며, member는 이 값보다 많은 consumer worker를 열 수 없다. |
 | `assignment` | no | member가 수렴해야 할 assignment이다. 변경이 없고 이미 수렴했다면 `null`일 수 있다. |
 | `assignment.assignedShards` | when assignment present | 즉시 read 가능한 shard 목록이다. |
 | `assignment.pendingShards` | when assignment present | target에는 있지만 이전 owner가 아직 release하지 않아 read하면 안 되는 shard 목록이다. |

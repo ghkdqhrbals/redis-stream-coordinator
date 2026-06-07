@@ -3,6 +3,7 @@ package io.github.ghkdqhrbals.redisstreamcoordinator
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.config.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.*
+import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.support.StaticListableBeanFactory
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
+import org.springframework.data.redis.core.script.RedisScript
 import tools.jackson.databind.ObjectMapper
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -115,7 +117,56 @@ class CoordinatorStateStoreTest {
         val keys = stateKeys.forGroup(GroupKey("orders", "orders-consumer"))
 
         assertEquals("redis-stream:coord::groups", stateKeys.groupsIndex)
+        assertEquals("redis-stream:coord::{orders:orders-consumer}:group", keys.group)
         assertEquals("redis-stream:coord::{orders:orders-consumer}:metadata", keys.metadata)
+    }
+
+    @Test
+    fun `redis store reads and migrates legacy group value key`() {
+        val objectMapper = ObjectMapper()
+        val redis = FakeStateStoreRedisCommands()
+        val store = RedisCoordinatorStateStore(
+            redisCommands = redis,
+            objectMapper = objectMapper,
+            properties = properties,
+        )
+        val key = GroupKey("legacy-orders", "orders-consumer")
+        val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix).forGroup(key)
+        val legacy = groupMetadata(key).also {
+            it.metadataVersion = 7
+            it.storeRevision = 4
+        }
+        redis.values[keys.group] = objectMapper.writeValueAsString(legacy)
+        redis.setAdd(RedisCoordinatorStateKeys(properties.store.keyPrefix).groupsIndex, keys.group)
+
+        assertTrue(store.contains(key))
+        val loaded = assertNotNull(store.get(key))
+
+        assertEquals(7, loaded.metadataVersion)
+        assertEquals(4, loaded.storeRevision)
+        assertEquals(7, store.list().single().metadataVersion)
+        assertEquals(objectMapper.writeValueAsString(loaded), redis.hashes.getValue(keys.metadata).getValue("aggregate"))
+        assertEquals("4", redis.hashes.getValue(keys.metadata).getValue("revision"))
+    }
+
+    @Test
+    fun `redis store rejects put if legacy group value key already exists`() {
+        val objectMapper = ObjectMapper()
+        val redis = FakeStateStoreRedisCommands()
+        val store = RedisCoordinatorStateStore(
+            redisCommands = redis,
+            objectMapper = objectMapper,
+            properties = properties,
+        )
+        val key = GroupKey("legacy-duplicate", "orders-consumer")
+        val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix).forGroup(key)
+        redis.values[keys.group] = objectMapper.writeValueAsString(groupMetadata(key))
+
+        assertFalse(store.putIfAbsent(key, groupMetadata(key).copy(metadataVersion = 99)))
+
+        val loaded = assertNotNull(store.get(key))
+        assertEquals(1, loaded.metadataVersion)
+        assertEquals("1", redis.hashes.getValue(keys.metadata).getValue("revision"))
     }
 
     private fun service(store: CoordinatorStateStore): CoordinatorService =
@@ -146,7 +197,6 @@ class CoordinatorStateStoreTest {
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
             shardCount = 4,
-            consumerConcurrencyPolicy = ConsumerConcurrencyPolicy(defaultMaxConcurrency = 4),
             createdAt = Instant.now(clock),
             updatedAt = Instant.now(clock),
         )
@@ -170,4 +220,66 @@ class CoordinatorStateStoreTest {
                 availableConcurrency = 4,
             ),
         )
+}
+
+private class FakeStateStoreRedisCommands : CoordinatorRedisCommands() {
+    val values = mutableMapOf<String, String>()
+    val hashes = mutableMapOf<String, MutableMap<String, String>>()
+    private val sets = mutableMapOf<String, MutableSet<String>>()
+
+    override fun hasKey(key: String): Boolean =
+        key in values || key in hashes
+
+    override fun getValue(key: String): String? =
+        values[key]
+
+    override fun hashGet(key: String, field: String): String? =
+        hashes[key]?.get(field)
+
+    override fun setAdd(key: String, value: String) {
+        sets.getOrPut(key, ::linkedSetOf).add(value)
+    }
+
+    override fun setRemove(key: String, value: String) {
+        sets[key]?.remove(value)
+    }
+
+    override fun setMembers(key: String): Set<String> =
+        sets[key].orEmpty()
+
+    override fun executeLong(script: RedisScript<Long>, keys: List<String>, vararg args: String): Long? {
+        val key = keys.single()
+        if (args.size == 1) {
+            val revision = hashes[key]?.get("revision")
+            if (revision != args[0]) {
+                return 0
+            }
+            hashes.remove(key)
+            return 1
+        }
+
+        val mode = args[0]
+        val expectedRevision = args[1]
+        val nextRevision = args[2]
+        val aggregate = args[3]
+
+        if (mode == "NX" && key in hashes) {
+            return 0
+        }
+        if (mode != "NX") {
+            val currentRevision = hashes[key]?.get("revision")
+            if (currentRevision != null && currentRevision != expectedRevision) {
+                return -1
+            }
+        }
+
+        hashes[key] = mutableMapOf(
+            "aggregate" to aggregate,
+            "revision" to nextRevision,
+            "schemaVersion" to args[4],
+            "layoutVersion" to args[5],
+            "updatedAt" to args[6],
+        )
+        return 1
+    }
 }

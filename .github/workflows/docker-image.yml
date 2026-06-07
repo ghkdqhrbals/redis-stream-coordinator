@@ -6,7 +6,8 @@ on:
     paths:
       - "Dockerfile"
       - ".dockerignore"
-      - "compose.yaml"
+      - "compose.pods.yaml"
+      - "compose.stress.yaml"
       - ".github/workflows/docker-image.yml"
       - ".github/scripts/test_docker_distribution.py"
       - "coordinator-server/**"

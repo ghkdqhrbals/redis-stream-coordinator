@@ -32,6 +32,7 @@ The project does not provide a single-processing guarantee. Real applications of
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
 * `redisstream-core`: shared coordination protocol contract, version metadata, and versioned timing defaults used by both the coordinator server and support modules.
 * `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
+* `clients/python`: sync-first Python producer/consumer package published as `redisstream-coordinator` and imported as `redisstream`.
 * `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
 * `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
 
@@ -191,14 +192,53 @@ redisStreamPublisher.publish(
 
 During Spring bean initialization, both managed consumers and producer routing caches validate coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`. If the coordinator group does not exist or has no active shards, application startup fails immediately instead of waiting for the first heartbeat or publish call.
 
+## Python Integration
+
+The Python client is sync-first and lives under `clients/python`.
+
+```bash
+pip install redisstream-coordinator
+```
+
+```python
+from redisstream import RedisStreamCoordinator
+
+app = RedisStreamCoordinator(
+    coordinator_base_url="http://localhost:8080",
+    redis_url="redis://localhost:6379",
+)
+
+@app.stream_listener(
+    stream_prefix="orders",
+    group_id="orders-consumer",
+    concurrency=4,
+    poll_batch_size=10,
+)
+def consume(message):
+    # Run business processing first, then explicitly commit the Redis Stream record.
+    message.ack()
+
+publisher = app.publisher("orders", "orders-consumer")
+publisher.publish("order-123", {"eventId": "evt-1", "payload": "..."})
+
+app.start()
+```
+
+Python listener concurrency follows the JVM starter contract: `concurrency = 4` creates four logical coordinator members with independent heartbeat state and Redis consumer names. Producer routing uses the same Murmur3 32-bit routing algorithm and `XADD NOMKSTREAM` stale-route protection as the JVM starter. Processing remains at-least-once.
+
 ## Documentation
 
 * [Published Design Docs](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html)
 * [Published Design Docs (Korean)](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/index.html?tl=ko)
+* [Published Edge Case Q&A](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/docs/prd/14-edge-case-qna.html)
+* [Published Edge Case Q&A (Korean)](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/docs/prd/14-edge-case-qna.html?tl=ko)
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
+* [Release 0.1.0](docs/releases/0.1.0.md)
+* [Release 0.1.0 (Korean)](docs/ko/releases/0.1.0.md)
 * [Terraform and GitOps Governance](docs/prd/13-terraform-governance.md)
+* [Python Client Library](docs/prd/15-python-client.md)
 * [Terraform Shard Management Module](terraform/README.md)
 * [OpenAPI Spec](docs/openapi/coordinator.v1.yaml)
 * [Docker Guide](docs/docker.md)
@@ -212,19 +252,28 @@ During Spring bean initialization, both managed consumers and producer routing c
 ## Docker Quick Start
 
 ```bash
-docker compose --profile coordinator up --build
-curl -u admin:password http://localhost:8080/coord/v1/monitoring/health
+export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+
+RSC_TOKEN="$(
+  curl -sS -H 'Content-Type: application/json' \
+    -X POST http://localhost:8080/coord/v1/auth/login \
+    -d '{"username":"admin","password":"password"}' |
+  jq -r '.accessToken'
+)"
+
+curl -H "Authorization: Bearer ${RSC_TOKEN}" \
+  http://localhost:8080/coord/v1/monitoring/health
 ```
 
-The coordinator monitoring console is available at `http://localhost:8080/console`. Sign in with the configured coordinator Basic Auth user; the local default is `admin` / `password`. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
+The Docker quick start uses the external Redis Cluster declared through `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD`; this repository no longer keeps a local Redis Cluster compose file. The coordinator monitoring console is available at `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
 
 The runtime API reference is available at `http://localhost:8080/scalar`. The published static API reference is generated from `docs/openapi/coordinator.v1.yaml`.
 
 Run a full pod smoke stack with your configured external Redis, coordinator, two consumer pods, and one auto-publishing pod:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 curl -sS http://localhost:18090/sample/status
 curl -sS http://localhost:18081/sample/events
@@ -239,6 +288,8 @@ The pod smoke stack also starts Prometheus and Grafana for coordinator-owned met
 
 Prometheus scrapes `coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
 
+For an existing Grafana instance, import the dashboards in `monitoring/grafana/import/`. Configure a Prometheus datasource and an Infinity datasource for the coordinator API first; enter the coordinator URL, monitoring username, and password on the datasource, then select those datasources during dashboard import. The dashboard JSON does not store the coordinator password.
+
 Swagger UI is available for interactive local testing:
 
 * Coordinator: `http://localhost:8080/swagger-ui.html`
@@ -250,7 +301,7 @@ Use `admin` / `password` in the coordinator Swagger Authorize dialog for protect
 
 ## Current Status
 
-This repository now includes an early Spring Boot/Kotlin coordinator server module and the RedisStream Spring Boot starter. The current implementation provides the control-plane HTTP API, in-memory coordination, optional Redis-backed or JDBC-backed group metadata persistence, local Redis Cluster Docker Compose, a coordinator Docker image path, a lightweight monitoring console, consumer heartbeat integration, producer publishing integration, and CI review/test workflows.
+This repository includes the Spring Boot/Kotlin coordinator server, shared protocol core, RedisStream Spring Boot starter, sample consumer/publisher pods, external-Redis Docker Compose profiles, monitoring console, Grafana dashboard assets, and CI review/test workflows. Coordinator metadata can run in memory for tests or in Redis/JDBC for deployments.
 
 ## License
 

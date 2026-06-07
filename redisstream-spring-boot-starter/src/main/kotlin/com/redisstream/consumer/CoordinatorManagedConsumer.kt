@@ -1,6 +1,7 @@
 package com.redisstream.consumer
 
 import org.springframework.context.SmartLifecycle
+import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -15,12 +16,12 @@ class CoordinatorManagedConsumer(
     private val client: CoordinatorClient,
     private val lifecycle: CoordinatorShardLifecycle,
 ) : SmartLifecycle {
+    private val logger = LoggerFactory.getLogger(CoordinatorManagedConsumer::class.java)
     private val running = AtomicBoolean(false)
     private var executor: ScheduledExecutorService? = null
     private var task: ScheduledFuture<*>? = null
     private var memberEpoch: Long = 0
     private var metadataVersion: Long = 0
-    private var assignedMaxConcurrency: Int = properties.runtimeMaxConcurrency
     private var ownedShards: Set<CoordinatorShard> = emptySet()
     private var revokingShards: Map<CoordinatorShard, RevokingShardReport> = emptyMap()
     private var lastContext: CoordinatorConsumerContext = context(0, 0)
@@ -38,7 +39,18 @@ class CoordinatorManagedConsumer(
             }
         }
         task = executor!!.scheduleWithFixedDelay(
-            { runCatching { pollOnce() } },
+            {
+                runCatching { pollOnce() }
+                    .onFailure { error ->
+                        logger.warn(
+                            "Coordinator heartbeat failed for stream={} group={} member={}: {}",
+                            properties.streamPrefix,
+                            properties.consumerGroupName,
+                            properties.memberId,
+                            error.message,
+                        )
+                    }
+            },
             0,
             properties.heartbeatInterval.toMillis(),
             TimeUnit.MILLISECONDS,
@@ -216,11 +228,15 @@ class CoordinatorManagedConsumer(
             HeartbeatStatus.OK -> applyAssignment(response, context)
             HeartbeatStatus.SYNC_METADATA, HeartbeatStatus.REVOKE_PENDING -> applyDrainOnlyAssignment(response, context)
             HeartbeatStatus.FENCED_MEMBER_EPOCH, HeartbeatStatus.UNKNOWN_MEMBER_ID -> {
+                resetForRejoin()
                 lifecycle.onFenced(context)
-                memberEpoch = 0
-                metadataVersion = 0
-                ownedShards = emptySet()
-                revokingShards = emptyMap()
+                logger.warn(
+                    "Coordinator returned {}; local member state was reset and next heartbeat will rejoin stream={} group={} member={}",
+                    response.status,
+                    properties.streamPrefix,
+                    properties.consumerGroupName,
+                    properties.memberId,
+                )
             }
             HeartbeatStatus.RETRY -> Unit
             HeartbeatStatus.UNSUPPORTED_PROTOCOL, HeartbeatStatus.INVALID_REQUEST -> {
@@ -229,13 +245,19 @@ class CoordinatorManagedConsumer(
         }
     }
 
+    private fun resetForRejoin() {
+        memberEpoch = 0
+        metadataVersion = 0
+        ownedShards = emptySet()
+        revokingShards = emptyMap()
+    }
+
     /**
      * Diffs target assignment against local ownership and invokes assign, pending, and revoke callbacks.
      */
     private fun applyAssignment(response: HeartbeatResponse, context: CoordinatorConsumerContext) {
         memberEpoch = response.memberEpoch
         metadataVersion = response.metadataVersion
-        assignedMaxConcurrency = response.assignedMaxConcurrency
 
         val nextAssigned = response.assignment.assignedShards.toSortedSet()
         val newlyAssigned = nextAssigned - ownedShards
@@ -272,7 +294,6 @@ class CoordinatorManagedConsumer(
     private fun applyDrainOnlyAssignment(response: HeartbeatResponse, context: CoordinatorConsumerContext) {
         memberEpoch = response.memberEpoch
         metadataVersion = response.metadataVersion
-        assignedMaxConcurrency = response.assignedMaxConcurrency
 
         val keepReading = ownedShards
             .filter { it in response.assignment.assignedShards }
@@ -306,7 +327,6 @@ class CoordinatorManagedConsumer(
         CoordinatorConsumerContext(
             memberId = properties.memberId,
             memberName = properties.heartbeatMemberName,
-            assignedMaxConcurrency = assignedMaxConcurrency,
             metadataVersion = metadataVersion,
             groupEpoch = groupEpoch,
             assignmentEpoch = assignmentEpoch,

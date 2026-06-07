@@ -270,7 +270,6 @@ private class ScriptedPublisherRoutingClient(
             groupEpoch = 0,
             assignmentEpoch = 0,
             metadataVersion = 0,
-            assignedMaxConcurrency = 0,
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
@@ -296,7 +295,6 @@ private class SingleRoutingClient(
             groupEpoch = 0,
             assignmentEpoch = 0,
             metadataVersion = 0,
-            assignedMaxConcurrency = 0,
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 

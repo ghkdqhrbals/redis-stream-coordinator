@@ -86,12 +86,19 @@
             </div>
             <div id="messageError" class="form-error" role="alert"></div>
             <div class="table-wrap">
-                <table class="message-table">
+                <table class="message-table resizable-message-table" data-resizable-table="stream-messages">
+                    <colgroup>
+                        <col style="width: 190px">
+                        <col style="width: 90px">
+                        <col style="width: 190px">
+                        <col>
+                    </colgroup>
                     <thead>
                     <tr>
-                        <th>Offset</th>
-                        <th>Payload</th>
-                        <th>Fields</th>
+                        <th>Time<span class="column-resize-handle" aria-hidden="true"></span></th>
+                        <th>Shard<span class="column-resize-handle" aria-hidden="true"></span></th>
+                        <th>Offset<span class="column-resize-handle" aria-hidden="true"></span></th>
+                        <th>Fields<span class="column-resize-handle" aria-hidden="true"></span></th>
                     </tr>
                     </thead>
                     <tbody id="messageRows"></tbody>
@@ -100,6 +107,7 @@
         </section>
     </section>
 </main>
+<script src="/console/table-resize.js"></script>
 <script src="/console/messages.js"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@ data class CoordinatorProperties(
     val streams: Streams = Streams(),
     val audit: Audit = Audit(),
     val defaults: Defaults = Defaults(),
+    val monitoring: Monitoring = Monitoring(),
 ) {
     data class Loop(
         val enabled: Boolean = true,
@@ -29,6 +30,8 @@ data class CoordinatorProperties(
     data class Api(
         val adminUsername: String = "admin",
         val adminPassword: String = "password",
+        val tokenSecret: String = "",
+        val tokenTtl: Duration = Duration.ofDays(7),
         val authenticateMemberApi: Boolean = false,
         val users: List<ApiUser> = emptyList(),
         val rateLimit: RateLimit = RateLimit(),
@@ -68,6 +71,7 @@ data class CoordinatorProperties(
 
     data class Health(
         val redisTimeoutMs: Long = 300,
+        val cacheTtlMs: Long = 1_000,
     )
 
     data class StateMutex(
@@ -126,4 +130,13 @@ data class CoordinatorProperties(
         val initialShardCount: Int = 12,
         val consumerMaxConcurrency: Int = 12,
     )
+
+    data class Monitoring(
+        val offsetCacheTtlMs: Long = 15_000,
+        val groupQueryParallelism: Int = 8,
+        val shardQueryParallelism: Int = 24,
+    ) {
+        val offsetCacheTtl: Duration
+            get() = Duration.ofMillis(offsetCacheTtlMs.coerceAtLeast(0))
+    }
 }
