@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Terraform and GitOps Governance</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+        --sidebar: #fbfcfd;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .topbar {
+        width: min(100%, 1360px);
+        margin: 0 auto;
+        padding: 12px clamp(14px, 2.2vw, 24px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .site-title {
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .site-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+      .language-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+      .language-switch a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .language-switch a[aria-current="true"] {
+        color: var(--fg);
+        font-weight: 700;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1360px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
+      }
+      .sidebar {
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }
+      .doc-index {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
+      }
+      .doc-index a {
+        color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-decoration: none;
+        overflow-wrap: normal;
+      }
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {
+        background: var(--code);
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+        padding-bottom: 56px;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .responsive-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .layout {
+          display: block;
+        }
+        .topbar {
+          display: block;
+        }
+        .language-switch {
+          margin-top: 8px;
+        }
+        .sidebar {
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }
+        .doc-index {
+          max-height: 220px;
+          overflow: auto;
+        }
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+      </style>
+
+    <script>
+      (() => {
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "en") {
+          const target = new URL("../../../docs/prd/13-terraform-governance.html", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <div>
+          <div class="site-title">Redis Stream Coordinator</div>
+          <div class="site-subtitle">Design docs</div>
+        </div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/13-terraform-governance.html">English</a><span aria-hidden="true">/</span><a href="13-terraform-governance.html" aria-current="true">한국어</a></div>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+          <a href="../PRD.html">Redis Stream Coordinator Design</a>
+          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+          <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
+          <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+          <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+          <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+          <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html" aria-current="page">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
+          <a href="../operations-runbook.html">운영 Runbook</a>
+          <a href="../testing.html">테스트 가이드</a>
+          <a href="../../api.html">API Reference</a>
+        </nav>
+      </aside>
+      <main>
+<h1 id="terraform-and-gitops-governance">Terraform and GitOps Governance</h1>
+<h2 id="_1">목적</h2>
+<p>Coordinator admin API는 control-plane source of truth를 변경한다. Group 생성/삭제, shard count, resharding rollback이 여기에 해당한다. 운영 환경에서는 이런 mutation을 가능하면 Terraform 또는 GitOps workflow로 검토하고 적용해야 한다.</p>
+<p>Terraform은 runtime audit log를 대체하지 않는다. Terraform은 desired state, plan output, 승인 이력, 누가 merge/apply했는지를 남긴다. Coordinator audit log는 실제 API에 도착한 요청, 실패한 요청, forbidden 요청, request id, caller identity, client address, request summary, request body fingerprint를 남긴다.</p>
+<h2 id="_2">관리 경계</h2>
+<p>Terraform 또는 GitOps가 관리하기 좋은 것:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Desired state</th>
+<th>Coordinator API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Desired state">Group 존재 여부</td>
+<td data-label="Coordinator API"><code>POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code> and <code>DELETE /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
+</tr>
+<tr>
+<td data-label="Desired state">Initial shard count</td>
+<td data-label="Coordinator API">create group request</td>
+</tr>
+<tr>
+<td data-label="Desired state">Target shard count</td>
+<td data-label="Coordinator API"><code>POST /coord/v1/streams/{streamPrefix}/scale</code></td>
+</tr>
+<tr>
+<td data-label="Desired state">운영 사유와 actor metadata</td>
+<td data-label="Coordinator API">mutation request body plus <code>X-Request-Id</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Terraform 또는 GitOps가 관리하면 안 되는 것:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Runtime state</th>
+<th>이유</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Runtime state">Member heartbeat</td>
+<td data-label="이유">일시적인 liveness와 ownership reconciliation이다.</td>
+</tr>
+<tr>
+<td data-label="Runtime state">Consumer runtime parallelism</td>
+<td data-label="이유"><code>@StreamListener(concurrency = N)</code> 같은 consumer deployment 설정 영역이며 coordinator admin API 대상이 아니다.</td>
+</tr>
+<tr>
+<td data-label="Runtime state">Current assignment report</td>
+<td data-label="이유">member가 보고하는 관측값이지 desired state가 아니다.</td>
+</tr>
+<tr>
+<td data-label="Runtime state">Redis Stream offset, pending entry, message payload</td>
+<td data-label="이유">data plane 책임이다.</td>
+</tr>
+<tr>
+<td data-label="Runtime state">Revoke/drain progress</td>
+<td data-label="이유">live rebalance transition이다.</td>
+</tr>
+<tr>
+<td data-label="Runtime state">Producer routing cache</td>
+<td data-label="이유">application runtime local cache이다.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="provider-contract">권장 Provider Contract</h2>
+<p>운영 mutation을 사용자가 local script로 직접 작성하게 하기보다, stable <code>/coord/v1</code> API 위에 Terraform provider를 제공하는 방향이 좋다.</p>
+<p>권장 resource:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Resource</th>
+<th>책임</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Resource"><code>redisstreamcoordinator_group</code></td>
+<td data-label="책임"><code>{streamPrefix, consumerGroup}</code> metadata record와 initial shard count를 관리한다.</td>
+</tr>
+<tr>
+<td data-label="Resource"><code>redisstreamcoordinator_group_shard_count</code></td>
+<td data-label="책임">기존 group의 shard count 변경을 적용하고, coordinator가 새 producer routing metadata를 노출할 때까지 기다린다.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Provider import id는 다음 형식을 권장한다.</p>
+<pre><code class="language-text">{streamPrefix}/{consumerGroup}
+</code></pre>
+<p>Provider mutation call은 다음 header를 포함해야 한다.</p>
+<pre><code class="language-http">X-Request-Id: terraform-${workspace}-${run_id}
+Authorization: Basic &lt;write-user&gt;
+</code></pre>
+<p>Mutation request body에는 다음 값을 넣는다.</p>
+<pre><code class="language-json">{
+  &quot;requestedBy&quot;: &quot;terraform:&lt;workspace&gt;&quot;,
+  &quot;reason&quot;: &quot;terraform apply &lt;run id&gt;&quot;
+}
+</code></pre>
+<h2 id="terraform-module">제공 Terraform Module</h2>
+<p>현재 repository에는 초기 Terraform module이 포함되어 있다.</p>
+<pre><code class="language-text">terraform/modules/stream-group
+</code></pre>
+<p>이 module은 전용 provider가 나오기 전에도 Terraform으로 shard count를 관리할 수 있도록 <code>terraform_data</code>와 작은 <code>curl</code> 실행 스크립트를 사용해 Coordinator Admin API를 호출한다.</p>
+<p>관리 입력값:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>입력값</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="입력값"><code>coordinator_base_url</code></td>
+<td data-label="의미">Coordinator API base URL</td>
+</tr>
+<tr>
+<td data-label="입력값"><code>coordinator_username</code> / <code>coordinator_password</code></td>
+<td data-label="의미">선택적 Basic Auth 인증 정보. <code>WRITE</code> 권한 필요</td>
+</tr>
+<tr>
+<td data-label="입력값"><code>stream_prefix</code></td>
+<td data-label="의미">Redis Stream shard prefix</td>
+</tr>
+<tr>
+<td data-label="입력값"><code>consumer_group</code></td>
+<td data-label="의미">Redis Stream consumer group</td>
+</tr>
+<tr>
+<td data-label="입력값"><code>shard_count</code></td>
+<td data-label="의미">원하는 physical shard count. 값이 바뀌면 <code>/scale</code>을 호출</td>
+</tr>
+<tr>
+<td data-label="입력값"><code>requested_by</code> / <code>reason</code></td>
+<td data-label="의미">coordinator audit log에 남길 metadata</td>
+</tr>
+</tbody>
+</table></div>
+<p>Apply 동작:</p>
+<ol>
+<li><code>POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code>로 group이 없으면 생성한다.</li>
+<li>이미 존재하는 group의 <code>409</code>는 정상 조건으로 처리한다.</li>
+<li><code>GET /producer-routing</code>으로 현재 shard count를 읽는다.</li>
+<li>현재 <code>shardCount</code>와 Terraform의 <code>shard_count</code>가 다르면 <code>POST /coord/v1/streams/{streamPrefix}/scale</code>을 호출한다.</li>
+<li>Producer routing metadata가 원하는 shard count를 노출할 때까지 poll한다.</li>
+</ol>
+<p>Destroy 동작은 의도적으로 no-op이다. <code>terraform destroy</code>가 실수로 coordinator metadata나 active assignment를 삭제하면 안 된다. Group 삭제는 audit log와 safety validation이 있는 Coordinator Admin API를 명시적으로 호출하는 작업으로 유지한다.</p>
+<p>예시:</p>
+<pre><code class="language-hcl">module &quot;create_order_group&quot; {
+  source = &quot;../../modules/stream-group&quot;
+
+  coordinator_base_url = &quot;https://api.example.com&quot;
+  coordinator_username = var.coordinator_username
+  coordinator_password = var.coordinator_password
+
+  stream_prefix  = &quot;create-order&quot;
+  consumer_group = &quot;demo-workers&quot;
+  shard_count    = 20
+
+  requested_by = &quot;terraform:${terraform.workspace}&quot;
+  reason       = &quot;scale create-order stream group&quot;
+}
+</code></pre>
+<h2 id="drift-detection">Drift Detection</h2>
+<p>Terraform read operation은 coordinator source-of-truth API를 호출해야 한다.</p>
+<pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+</code></pre>
+<p>Provider가 managed desired state로 다룰 field:</p>
+<ul>
+<li>group existence,</li>
+<li><code>shardCount</code>.</li>
+</ul>
+<p>Provider가 computed runtime state로 다룰 field:</p>
+<ul>
+<li>heartbeat로 보고되는 consumer runtime parallelism,</li>
+<li><code>groupEpoch</code>,</li>
+<li><code>assignmentEpoch</code>,</li>
+<li><code>metadataVersion</code>,</li>
+<li><code>members</code>,</li>
+<li><code>targetAssignments</code>,</li>
+<li><code>currentAssignments</code>,</li>
+<li><code>migrations</code>,</li>
+<li><code>revokeProgress</code>.</li>
+</ul>
+<h2 id="audit-evidence">Audit Evidence</h2>
+<p>Terraform이 caller여도 모든 admin mutation은 coordinator audit event를 남겨야 한다.</p>
+<p>Audit event에 포함해야 할 값:</p>
+<ul>
+<li><code>action</code>,</li>
+<li><code>outcome</code>,</li>
+<li>HTTP status,</li>
+<li>authenticated principal,</li>
+<li><code>requestedBy</code>,</li>
+<li><code>reason</code>,</li>
+<li><code>requestId</code>,</li>
+<li>client address,</li>
+<li>user agent,</li>
+<li>roles,</li>
+<li>route and path,</li>
+<li>duration,</li>
+<li>stream prefix,</li>
+<li>consumer group,</li>
+<li>resharding id when present,</li>
+<li>request summary,</li>
+<li>SHA-256 request body fingerprint.</li>
+</ul>
+<p>Redis-backed audit이면 event는 다음 key에 저장한다.</p>
+<pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
+</code></pre>
+<p>Log-backed audit이면 structured application log로 남긴다.</p>
+<h2 id="failure-handling">Failure Handling</h2>
+<p>Terraform apply는 accepted resharding이 즉시 완료됐다고 가정하면 안 된다. Scale API는 <code>202 Accepted</code>를 반환하고, consumer는 heartbeat reconciliation을 통해 점진적으로 수렴한다.</p>
+<p>권장 flow:</p>
+<ol>
+<li>Desired shard count를 apply한다.</li>
+<li>Producer routing metadata의 <code>shardCount</code>가 target과 같아질 때까지 poll한다.</li>
+<li>Monitoring API로 assignment와 revoke progress가 정상인지 확인한다.</li>
+<li>Coordinator가 incompatible active resharding이나 unsafe delete condition을 보고하면 Terraform run을 실패시킨다.</li>
+</ol>
+<p><code>targetShardCount=0</code>일 때 2번은 producer routing이 <code>shardCount=0</code>과 빈 shard list를 반환한다는 뜻이다. 그래도 Terraform은 모든 제거 대상 stream shard가 모든 Redis consumer group 기준으로 drain될 때까지 monitoring state를 poll해야 stream retired로 간주할 수 있다.</p>
+<p>Duplicate-sensitive workload는 shard count 변경 전 producer를 여전히 quiesce해야 한다. Terraform은 admin mutation을 orchestrate할 수 있지만, application이 별도 신호를 제공하지 않으면 모든 publish retry가 drain됐는지 증명할 수 없다.</p>
+      </main>
+    </div>
+  </body>
+</html>

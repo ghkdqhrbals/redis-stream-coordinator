@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
@@ -455,24 +458,23 @@
 <ul>
 <li>submit local YAML shard count as desired state,</li>
 <li>create or mutate group metadata,</li>
-<li>change server-side consumer concurrency policy.</li>
+<li>change consumer deployment or listener concurrency.</li>
 </ul>
 <h2 id="admin-api-source-of-truth">Admin API Source of Truth</h2>
 <p>Initial group creation and shard scale-out/in happen only through the Coordinator Admin API.</p>
 <p>Source of truth:</p>
 <ul>
 <li>shard count: coordinator group metadata,</li>
-<li>consumer <code>maxConcurrency</code>: coordinator consumer concurrency policy,</li>
+<li>consumer <code>concurrency</code>: consumer-side logical member count created by <code>@StreamListener(concurrency = N)</code>,</li>
 <li>routing metadata: coordinator producer routing endpoint.</li>
 </ul>
 <h2 id="create-group">Create Group</h2>
-<p><code>initialShardCount</code> and <code>consumerConcurrencyPolicy.defaultMaxConcurrency</code> can be omitted. In that case the coordinator uses configured defaults.</p>
+<p><code>initialShardCount</code> can be omitted. In that case the coordinator uses configured defaults.</p>
 <p>Processing order:</p>
 <ol>
 <li>Verify the group does not already exist.</li>
 <li>Validate the requested shard count.</li>
 <li>Provision shard stream keys and Redis consumer groups when provisioning is enabled.</li>
-<li>Store consumer concurrency policy.</li>
 <li>Store <code>shardCount</code> and <code>groupEpoch=1</code>.</li>
 <li>Reject duplicate create requests with <code>409 Conflict</code>.</li>
 </ol>
@@ -482,18 +484,18 @@
 <ul>
 <li>there is no active resharding for the group,</li>
 <li><code>targetShardCount</code> differs from the current shard count,</li>
-<li><code>targetShardCount</code> is positive.</li>
+<li><code>targetShardCount</code> is zero or positive.</li>
 </ul>
-<p>If a consumer concurrency policy is provided with the scale request, it is stored in the same metadata update.</p>
-<h2 id="consumer-concurrency-update">Consumer Concurrency Update</h2>
-<p>When only the local worker capacity limit changes, operators use the consumer concurrency API. This does not change shard count.</p>
-<p>Rules:</p>
+<p>Consumer parallelism is not part of scale metadata. Operators change consumer parallelism by changing the consumer deployment or listener configuration. The coordinator observes the resulting logical members through heartbeat and rebalances by live member count.</p>
+<p>Scale-in does not move messages from removed shard streams. Removed shards enter a drain phase:</p>
 <ul>
-<li>the policy is propagated through <code>assignedMaxConcurrency</code> in heartbeat responses,</li>
-<li>a member cannot exceed server-side policy even if it reports a larger runtime capacity,</li>
-<li>reducing concurrency does not reduce shard count,</li>
-<li>if the assignment weight policy depends on <code>maxConcurrency</code>, the coordinator increments <code>groupEpoch</code> and recalculates assignment,</li>
-<li>no-op updates return current policy without writing new metadata.</li>
+<li><code>targetShardCount=0</code> is a valid full drain. It removes every shard from producer routing after all removed shards drain.</li>
+<li>Producers refresh routing metadata and stop writing new records to removed shard indexes.</li>
+<li>Consumers keep processing records that already exist on removed shard streams.</li>
+<li>The coordinator must not mark removed shards deprecated while any live member still owns or revokes them.</li>
+<li>If every live member expires during scale-in, there is no heartbeat target that can acknowledge revoke. The coordinator skips the consumer-level revoke wait and advances to Redis-level drain checks.</li>
+<li>The coordinator must also inspect Redis <code>XINFO GROUPS</code> for every removed physical stream shard and wait until every Redis consumer group attached to that stream reports <code>pending=0</code> and known <code>lag=0</code>.</li>
+<li>If Redis reports <code>lag=null</code> for any group on a removed shard, drain completion is not proven and scale-in remains in <code>DRAINING</code>.</li>
 </ul>
 <h2 id="monitoring">Monitoring</h2>
 <p>Group monitoring returns:</p>
@@ -501,7 +503,7 @@
 <li>group epoch,</li>
 <li>assignment epoch,</li>
 <li>shard count,</li>
-<li>consumer concurrency policy,</li>
+<li>consumer logical member count and runtime capacity,</li>
 <li>active resharding,</li>
 <li>target/current assignment summary,</li>
 <li>member liveness,</li>

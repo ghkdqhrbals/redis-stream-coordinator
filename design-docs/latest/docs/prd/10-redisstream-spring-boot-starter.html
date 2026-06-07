@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html" aria-current="page">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
@@ -414,10 +417,10 @@ class OrdersConsumer {
     }
 }
 </code></pre>
-<p>For annotation listeners, <code>concurrency = "4"</code> creates four logical coordinator members in the same application process. Each logical member has its own generated <code>memberId</code>, heartbeat loop, Redis consumer name, assignment state, and shard ownership. This is the Kafka-like listener concurrency model.</p>
+<p>For annotation listeners, <code>concurrency = "4"</code> creates four logical coordinator members in the same application process. Each logical member has its own <code>memberId</code>, heartbeat loop, Redis consumer name, assignment state, and shard ownership. The starter derives the base member id from pod IP context and appends concurrency suffixes such as <code>-m0</code>, <code>-m1</code>, <code>-m2</code>, and <code>-m3</code>. This is the Kafka-like listener concurrency model.</p>
 <p>The annotation listener always uses this logical-member split model. The starter does not expose a split toggle, and there is no supported mode where <code>concurrency = "4"</code> means one coordinator member with four local pollers.</p>
 <p>Shard ownership and member concurrency are not the same thing. The coordinator assigns each shard to exactly one live member, while a single member can own many shards. Listener concurrency increases the number of logical members participating in assignment; it does not change the rule that a shard has one live owner.</p>
-<p>For annotation-based consumers, the starter generates the runtime <code>memberId</code> automatically. <code>id</code> is the listener endpoint identity, not the coordinator member ID.</p>
+<p>For annotation-based consumers, the starter creates the runtime <code>memberId</code> automatically from <code>POD_IP</code>, local host address, or hostname. In Kubernetes, expose <code>status.podIP</code> as <code>POD_IP</code> with the Downward API. <code>id</code> is the listener endpoint identity, not the coordinator member ID.</p>
 <p>Heartbeat interval and rebalance timeout default to the shared coordination version timing. <code>rebalanceTimeout</code> is the maximum time the coordinator waits for this member to drain revoked shards before it may fence the member and reassign those shards.</p>
 <p>Minimal bean-based consumer and producer registration:</p>
 <pre><code class="language-kotlin">@Bean
@@ -459,7 +462,7 @@ class OrdersConsumerConfiguration {
         }
 }
 </code></pre>
-<p><code>consumerGroupName</code> is the public name for the logical Redis Stream consumer group. The starter does not expose <code>member-name</code> as a YAML property; heartbeat compatibility fields are derived internally from <code>consumerGroupName</code>.</p>
+<p><code>consumerGroupName</code> is the Redis Stream consumer group name. The starter does not expose <code>member-name</code> as a YAML property; heartbeat compatibility fields are derived internally from <code>consumerGroupName</code>.</p>
 <p>When a managed consumer bean is created, the starter fetches coordinator routing metadata for the configured <code>streamPrefix</code> and <code>consumerGroupName</code>. If the group does not exist, <code>shardCount</code> is zero, or active shard metadata is incomplete, application startup fails immediately.</p>
 <p>The starter:</p>
 <ul>
@@ -578,7 +581,7 @@ class OrdersProducerConfiguration {
             consumerGroupName = &quot;orders-consumer&quot;,
         ) {
             routingRefreshInterval = Duration.ofSeconds(5)
-            publishMaxAttempts = 1
+            publishMaxAttempts = 2
             xadd.maxLen = 100_000
             xadd.approximateTrimming = true
         }
@@ -597,16 +600,17 @@ class OrdersProducerConfiguration {
 <li>reads producer routing metadata,</li>
 <li>caches metadata by <code>metadataVersion</code>,</li>
 <li>routes partition keys to active stream shards,</li>
-<li>sends XADD with configured max length policy,</li>
+<li>sends <code>XADD NOMKSTREAM</code> with configured max length policy,</li>
 <li>refreshes routing metadata on stale route signals,</li>
 <li>returns the produced stream key and Redis Stream ID.</li>
 </ul>
+<p><code>NOMKSTREAM</code> is the default producer safety guard for scale-in. If a producer has stale routing metadata and targets a shard key that was removed, Redis must not recreate that stream key. The publish attempt fails, the routing cache is invalidated, and the default second attempt fetches fresh routing metadata before recalculating the target shard.</p>
 <h2 id="redis-command-template">Redis Command Template</h2>
 <p>Redis commands should be centralized behind shared templates instead of scattered across consumer and producer classes.</p>
 <p>Benefits:</p>
 <ul>
 <li>Redis version compatibility checks happen in one place.</li>
-<li><code>XACKDEL</code>, <code>XACK</code>, <code>XREADGROUP</code>, <code>XADD</code>, and fallback behavior are easier to test.</li>
+<li><code>XACKDEL</code>, <code>XACK</code>, <code>XREADGROUP</code>, <code>XADD NOMKSTREAM</code>, and fallback behavior are easier to test.</li>
 <li>Producer and consumer modules use consistent serialization.</li>
 <li>Unsupported command paths can fail fast with clear errors.</li>
 </ul>

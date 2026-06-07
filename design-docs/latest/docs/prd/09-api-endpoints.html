@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
@@ -373,8 +376,10 @@
 <p>Common headers:</p>
 <pre><code class="language-http">Content-Type: application/json
 Accept: application/json
-Authorization: Basic &lt;base64(admin:password)&gt;
+Authorization: Bearer &lt;token-from-POST-/coord/v1/auth/login&gt;
+X-Request-Id: &lt;caller-generated-id&gt;
 </code></pre>
+<p><code>X-Request-Id</code> is optional but strongly recommended for admin mutations, Terraform applies, CI automation, and incident replay. The coordinator records it in audit logs when present.</p>
 <p>Path parameters:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -386,15 +391,15 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <tbody>
 <tr>
 <td data-label="Parameter"><code>streamPrefix</code></td>
-<td data-label="Meaning">Logical Redis Stream prefix managed by the coordinator.</td>
+<td data-label="Meaning">Sharded Redis Stream prefix managed by the coordinator. Physical stream keys are built as <code>{streamPrefix}:{shardIndex}</code>.</td>
 </tr>
 <tr>
 <td data-label="Parameter"><code>consumerGroup</code></td>
-<td data-label="Meaning">Logical Redis Stream consumer group name.</td>
+<td data-label="Meaning">Redis Stream consumer group name.</td>
 </tr>
 <tr>
 <td data-label="Parameter"><code>memberId</code></td>
-<td data-label="Meaning">Runtime-generated member id, normally a UUID.</td>
+<td data-label="Meaning">Runtime-generated member id. The starter derives it from pod IP context by default.</td>
 </tr>
 <tr>
 <td data-label="Parameter"><code>reshardingId</code></td>
@@ -502,8 +507,8 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <tr>
 <td data-label="Area">Admin</td>
 <td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
-<td data-label="Purpose">Create a group.</td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}</code></td>
+<td data-label="Purpose">Create a stream shard group.</td>
 <td data-label="Mutates State">yes</td>
 </tr>
 <tr>
@@ -515,6 +520,13 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </tr>
 <tr>
 <td data-label="Area">Admin</td>
+<td data-label="Method"><code>DELETE</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
+<td data-label="Purpose">Delete inactive group metadata.</td>
+<td data-label="Mutates State">yes</td>
+</tr>
+<tr>
+<td data-label="Area">Admin</td>
 <td data-label="Method"><code>GET</code></td>
 <td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing</code></td>
 <td data-label="Purpose">Read producer routing metadata.</td>
@@ -523,15 +535,8 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <tr>
 <td data-label="Area">Admin</td>
 <td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale</code></td>
-<td data-label="Purpose">Start shard scale-out or scale-in.</td>
-<td data-label="Mutates State">yes</td>
-</tr>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>PATCH</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency</code></td>
-<td data-label="Purpose">Update server-side consumer concurrency policy.</td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/scale</code></td>
+<td data-label="Purpose">Start stream-wide shard scale-out or scale-in.</td>
 <td data-label="Mutates State">yes</td>
 </tr>
 <tr>
@@ -678,9 +683,9 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </table></div>
 <h2 id="admin-api">Admin API</h2>
 <h3 id="create-group">Create Group</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}
 </code></pre>
-<p>Creates initial group metadata and the configured shard count. Member startup, local YAML, producers, and consumers cannot create group metadata directly.</p>
+<p>Creates initial stream shard metadata and the configured shard count. The official create path only requires <code>streamPrefix</code>; consumer groups come from consumer runtime configuration and converge through heartbeat.</p>
 <p>Request body:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -697,16 +702,6 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Meaning">Initial shard count. If omitted, coordinator defaults are used.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.defaultMaxConcurrency</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Default member worker limit. If omitted, coordinator defaults are used.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.memberOverrides</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional per-member-name worker limit override.</td>
-</tr>
-<tr>
 <td data-label="Field"><code>requestedBy</code></td>
 <td data-label="Required">yes</td>
 <td data-label="Meaning">Operator or automation identity for audit.</td>
@@ -718,7 +713,7 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </tr>
 </tbody>
 </table></div>
-<p>Response: <code>201 Created</code> with <code>GroupResponse</code>.</p>
+<p>Response: <code>201 Created</code> with <code>StreamCreateResponse</code>.</p>
 <p>Important response fields:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -729,45 +724,66 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </thead>
 <tbody>
 <tr>
-<td data-label="Field"><code>streamPrefix</code> / <code>consumerGroup</code></td>
-<td data-label="Meaning">Created group identifier.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning">Current group state: <code>EMPTY</code>, <code>ASSIGNING</code>, <code>RECONCILING</code>, or <code>STABLE</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Group metadata epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignmentEpoch</code></td>
-<td data-label="Meaning">Target assignment epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">Coordinator metadata version.</td>
+<td data-label="Field"><code>streamPrefix</code></td>
+<td data-label="Meaning">Created stream prefix.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>shardCount</code></td>
 <td data-label="Meaning">Stored shard count.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Stored server-side consumer concurrency policy.</td>
+<td data-label="Field"><code>metadataVersion</code></td>
+<td data-label="Meaning">Coordinator metadata version.</td>
 </tr>
 </tbody>
 </table></div>
 <p>Duplicate request behavior:</p>
 <ul>
-<li>If the group already exists, the coordinator returns <code>409 Conflict</code> with <code>GROUP_ALREADY_EXISTS</code>.</li>
-<li>Use <code>GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code> to read existing metadata.</li>
+<li>If the stream prefix already has coordinator metadata, the coordinator returns <code>409 Conflict</code>.</li>
+<li><code>POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code> remains only as a compatibility endpoint for older automation.</li>
 </ul>
 <h3 id="get-group">Get Group</h3>
 <pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
 </code></pre>
 <p>Returns group source-of-truth metadata. This is an admin/debug endpoint. Consumers receive assignments through heartbeat responses.</p>
 <p>Response: <code>200 OK</code> with <code>GroupResponse</code>.</p>
+<h3 id="delete-group">Delete Group</h3>
+<pre><code class="language-http">DELETE /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+</code></pre>
+<p>Deletes coordinator metadata for an inactive group. Use <code>force=true</code> only for operational recovery when live members cannot leave cleanly.</p>
+<p>Request body:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>requestedBy</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Meaning">Operator or automation identity for audit.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>reason</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Meaning">Human-readable delete reason.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>force</code></td>
+<td data-label="Required">no</td>
+<td data-label="Meaning">Delete even when live members are still registered.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Response: <code>200 OK</code> with the deleted <code>GroupResponse</code> snapshot.</p>
+<p>Failure behavior:</p>
+<ul>
+<li>If the group does not exist, the coordinator returns <code>404 Not Found</code> with <code>GROUP_NOT_FOUND</code>.</li>
+<li>If live members exist and <code>force=false</code>, the coordinator returns <code>422 Unprocessable Entity</code>.</li>
+</ul>
 <h3 id="get-producer-routing-metadata">Get Producer Routing Metadata</h3>
 <pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 </code></pre>
@@ -805,10 +821,11 @@ streamKey = format(streamKeyPattern, shardIndex)
 </tr>
 </tbody>
 </table></div>
-<h3 id="scale-group">Scale Group</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
+<h3 id="scale-stream">Scale Stream</h3>
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/scale
 </code></pre>
-<p>Starts shard scale-out or scale-in by creating a next resharding. This is the only supported shard count mutation path.</p>
+<p>Starts shard scale-out or scale-in for the stream prefix. Consumer group is intentionally not part of this request. Every registered consumer group for the stream observes the changed shard set on the next heartbeat and reconciles assignment independently.</p>
+<p>Scale-in completion is not based only on heartbeat. If removed shards still have live owners, the coordinator waits for revoke progress through heartbeat. If every live member has expired, the coordinator advances to Redis-level drain checks and completes only when every Redis consumer group on removed shards reports <code>pending=0</code> and known <code>lag=0</code>.</p>
 <p>For duplicate-sensitive workloads, pause producers and drain in-flight publish retries before calling this endpoint. The project does not provide global event id deduplication across shards.</p>
 <p>Request body:</p>
 <div class="table-scroll"><table class="responsive-table">
@@ -823,17 +840,7 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>targetShardCount</code></td>
 <td data-label="Required">yes</td>
-<td data-label="Meaning">New shard count. Must be positive and different from the current active shard count.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.defaultMaxConcurrency</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional worker limit update in the same metadata change.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.memberOverrides</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional per-member-name worker limit override.</td>
+<td data-label="Meaning">New shard count. Must be zero or positive and different from the current active shard count. <code>0</code> drains and removes every shard.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>requestedBy</code></td>
@@ -852,7 +859,9 @@ streamKey = format(streamKeyPattern, shardIndex)
 </tr>
 </tbody>
 </table></div>
-<p>Response: <code>202 Accepted</code> with <code>Migration</code>.</p>
+<p>Stream-level scale only changes shard count. Consume parallelism is configured by consumer applications, for example through <code>@StreamListener(concurrency = N)</code>. The coordinator observes the resulting logical members through heartbeat and must not expose an admin endpoint that changes consumer runtime parallelism.</p>
+<p>Compatibility note: <code>POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale</code> remains available during the current implementation phase, but stream-scoped scale is the official operator-facing path.</p>
+<p>Response: <code>202 Accepted</code> with <code>StreamScaleResponse</code>.</p>
 <p>Important response fields:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -863,20 +872,20 @@ streamKey = format(streamKeyPattern, shardIndex)
 </thead>
 <tbody>
 <tr>
-<td data-label="Field"><code>reshardingId</code></td>
-<td data-label="Meaning">Created migration id.</td>
+<td data-label="Field"><code>streamPrefix</code></td>
+<td data-label="Meaning">Stream prefix that was scaled.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>fromShardCount</code> / <code>toShardCount</code></td>
-<td data-label="Meaning">Old and new shard counts.</td>
+<td data-label="Field"><code>targetShardCount</code></td>
+<td data-label="Meaning">Requested shard count.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning">Migration state.</td>
+<td data-label="Field"><code>affectedConsumerGroups</code></td>
+<td data-label="Meaning">Consumer groups whose metadata was updated.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>createdAt</code> / <code>updatedAt</code></td>
-<td data-label="Meaning">Metadata timestamps.</td>
+<td data-label="Field"><code>migrations[]</code></td>
+<td data-label="Meaning">Per-group migration records. Each group converges through heartbeat responses.</td>
 </tr>
 </tbody>
 </table></div>
@@ -885,70 +894,6 @@ streamKey = format(streamKeyPattern, shardIndex)
 <li>If another migration is active, the coordinator returns <code>409 Conflict</code> with <code>ACTIVE_MIGRATION_EXISTS</code>.</li>
 <li>If provisioning fails, the coordinator returns <code>503 Service Unavailable</code> with <code>REDIS_STREAM_PROVISIONING_FAILED</code>.</li>
 </ul>
-<h3 id="update-consumer-concurrency">Update Consumer Concurrency</h3>
-<pre><code class="language-http">PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
-</code></pre>
-<p>Updates the server-side consumer worker capacity policy. This does not change shard count.</p>
-<p>Request body:</p>
-<div class="table-scroll"><table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Required</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>defaultMaxConcurrency</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Default worker limit for members without override.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>memberOverrides</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional per-member-name worker limit override.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>requestedBy</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Operator or automation identity for audit.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>reason</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Human-readable change reason.</td>
-</tr>
-</tbody>
-</table></div>
-<p>Response: <code>200 OK</code> with <code>ConsumerConcurrencyResponse</code>.</p>
-<p>Important response fields:</p>
-<div class="table-scroll"><table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">Updated metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Current group epoch after policy update.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Stored policy.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>affectedMembers</code></td>
-<td data-label="Meaning">Members whose assigned max concurrency changed.</td>
-</tr>
-</tbody>
-</table></div>
 <h3 id="get-migration">Get Migration</h3>
 <pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
 </code></pre>
@@ -1019,7 +964,7 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>memberName</code></td>
 <td data-label="Required">no</td>
-<td data-label="Meaning">Stable logical member name used for policy overrides.</td>
+<td data-label="Meaning">Stable logical member name for monitoring and diagnostics.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>memberEpoch</code></td>
@@ -1099,10 +1044,6 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>metadataVersion</code></td>
 <td data-label="Meaning">Latest coordinator metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignedMaxConcurrency</code></td>
-<td data-label="Meaning">Server-side worker limit assigned to this member.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>assignment.assignedShards</code></td>

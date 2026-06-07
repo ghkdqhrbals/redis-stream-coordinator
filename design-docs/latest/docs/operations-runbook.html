@@ -348,6 +348,9 @@
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="prd/13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="prd/14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="prd/15-python-client.html">Python Client Library</a>
           <a href="operations-runbook.html" aria-current="page">Operations Runbook</a>
           <a href="testing.html">Testing Guide</a>
           <a href="../api.html">API Reference</a>
@@ -357,8 +360,19 @@
 <h1 id="operations-runbook">Operations Runbook</h1>
 <p>This runbook covers the coordinator control plane. Application message handling, retry, DLQ, and idempotency remain in the consumer application.</p>
 <h2 id="health-checks">Health Checks</h2>
+<p>Issue an operator token. Tokens expire after seven days by default.</p>
+<pre><code class="language-bash">read -rsp 'Coordinator password: ' RSC_PASSWORD
+echo
+RSC_TOKEN=&quot;$(
+  curl -sS -H 'Content-Type: application/json' \
+    -X POST http://localhost:8080/coord/v1/auth/login \
+    -d &quot;{\&quot;username\&quot;:\&quot;admin\&quot;,\&quot;password\&quot;:\&quot;${RSC_PASSWORD}\&quot;}&quot; |
+  jq -r '.accessToken'
+)&quot;
+unset RSC_PASSWORD
+</code></pre>
 <p>Coordinator health:</p>
-<pre><code class="language-bash">curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+<pre><code class="language-bash">curl -H &quot;Authorization: Bearer ${RSC_TOKEN}&quot; \
   http://localhost:8080/coord/v1/monitoring/health
 </code></pre>
 <p>Interpretation:</p>
@@ -386,17 +400,29 @@
 </table></div>
 <h2 id="common-operator-checks">Common Operator Checks</h2>
 <p>List groups:</p>
-<pre><code class="language-bash">curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+<pre><code class="language-bash">curl -H &quot;Authorization: Bearer ${RSC_TOKEN}&quot; \
   http://localhost:8080/coord/v1/monitoring/groups
 </code></pre>
 <p>Inspect assignments:</p>
-<pre><code class="language-bash">curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+<pre><code class="language-bash">curl -H &quot;Authorization: Bearer ${RSC_TOKEN}&quot; \
   http://localhost:8080/coord/v1/monitoring/streams/orders/groups/orders-consumer/assignments
 </code></pre>
 <p>Inspect migrations:</p>
-<pre><code class="language-bash">curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
+<pre><code class="language-bash">curl -H &quot;Authorization: Bearer ${RSC_TOKEN}&quot; \
   http://localhost:8080/coord/v1/monitoring/streams/orders/groups/orders-consumer/migrations
 </code></pre>
+<h2 id="terraform-and-gitops-admin-mutations">Terraform And GitOps Admin Mutations</h2>
+<p>Production admin mutations should be applied through Terraform or another GitOps workflow when possible.</p>
+<p>Recommended pattern:</p>
+<ol>
+<li>Review desired changes in a pull request.</li>
+<li>Run plan against coordinator read APIs.</li>
+<li>Apply with a dedicated <code>WRITE</code> principal.</li>
+<li>Send <code>X-Request-Id</code> and request body fields <code>requestedBy</code> and <code>reason</code>.</li>
+<li>Verify coordinator audit logs and monitoring APIs after apply.</li>
+</ol>
+<p>Terraform manages desired state such as group existence and shard count. It does not manage consumer runtime concurrency, heartbeats, current assignments, revoke progress, offsets, pending entries, or message payloads.</p>
+<p>Coordinator audit remains required even when Terraform is the caller. It records the actual API request, outcome, status, principal, roles, request id, request body fingerprint, client address, duration, stream prefix, consumer group, and operation reason.</p>
 <h2 id="alerts">Alerts</h2>
 <p>Alert on:</p>
 <ul>

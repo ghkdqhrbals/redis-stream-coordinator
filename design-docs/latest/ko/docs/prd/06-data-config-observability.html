@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
           <a href="../../api.html">API Reference</a>
@@ -410,14 +413,14 @@
     admin-username: admin
     # 운영 환경에서는 환경변수/secret으로 주입한다. 기본 local password는 password이다.
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
-    # 선택 ACL이다. 비어 있으면 admin-username/admin-password가 ADMIN/MONITOR/MEMBER 전체 권한을 가진다.
+    # 선택 ACL이다. 비어 있으면 admin-username/admin-password가 READ/WRITE/MEMBER 전체 권한을 가진다.
     users:
       - username: admin
         password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
-        roles: [ADMIN]
-      - username: monitor
+        roles: [WRITE]
+      - username: grafana
         password: ${REDIS_STREAM_COORDINATOR_MONITOR_PASSWORD:}
-        roles: [MONITOR]
+        roles: [READ]
       - username: member
         password: ${REDIS_STREAM_COORDINATOR_MEMBER_PASSWORD:}
         roles: [MEMBER]
@@ -432,6 +435,11 @@
     # log 또는 redis. redis는 group-scoped admin audit list에 이벤트를 저장한다.
     sink: log
     redis-max-entries: 1000
+
+  store:
+    # local 개발은 memory, Redis 기반 metadata는 redis, DB 기반 metadata는 jdbc를 사용한다.
+    type: redis
+    key-prefix: redis-stream:coord
 
   # Redis Stream data plane과 optional stream provisioning에 사용할 Redis 접속 정보이다.
   redis:
@@ -475,31 +483,61 @@
   defaults:
     # create group 요청에서 initialShardCount가 없을 때 사용할 기본 shard count이다.
     initial-shard-count: 1
-    # create/update 요청에서 maxConcurrency가 없을 때 member별로 내려줄 기본 consumer worker 수이다.
-    consumer-max-concurrency: 1
 </code></pre>
-<p>Shard count와 consumer <code>maxConcurrency</code>의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 <code>defaults</code>는 요청값이 생략됐을 때만 쓰이며, stream/group별 개별 설정은 Admin API로 저장한다. Kafka coordinator처럼 coordinator server config에는 shard count나 consumer concurrency min/max를 두지 않는다.</p>
+<p>Shard count의 실제 값은 Coordinator Admin API로 생성/변경된 group metadata에 저장한다. YAML의 <code>defaults</code>는 요청값이 생략됐을 때만 쓰인다. Consumer 병렬성은 consumer deployment 또는 listener configuration이 결정하고, coordinator는 heartbeat로 들어오는 logical member 수를 관찰한다.</p>
 <h2 id="coordinator-state-serialization">Coordinator State Serialization</h2>
 <p>Redis-backed coordinator는 Redis mutex와 <code>storeRevision</code> compare-and-set을 state serialization boundary로 사용한다.</p>
 <ul>
-<li>create, heartbeat, scale, rollback, consumer concurrency update, monitoring read-time operational refresh, scheduled tick은 Redis mutex 안에서 group metadata hash를 읽고 갱신한다.</li>
+<li>create, heartbeat, scale, rollback, monitoring read-time operational refresh, scheduled tick은 Redis mutex 안에서 group metadata hash를 읽고 갱신한다.</li>
 <li>critical section 순서는 <code>acquire Redis mutex -&gt; read latest metadata hash -&gt; validate/process/reconcile -&gt; save with storeRevision CAS -&gt; release mutex</code>이다.</li>
 <li>여러 coordinator pod가 같은 Redis store를 보더라도 같은 group update는 mutex 또는 <code>storeRevision</code> CAS로 직렬화된다.</li>
 <li>event loop tick은 다른 instance가 먼저 같은 group을 update하면 reload하거나 skip하고 다음 tick에서 이어간다.</li>
 <li>memory store는 개발용이며 process-local state이므로 여러 coordinator replicas에 사용하지 않는다.</li>
 </ul>
 <p>이 구조의 목적은 사용자가 <code>replicas=1</code>, <code>Recreate</code>, blue/green passive mode 같은 배포 세부사항을 직접 맞추지 않아도 안전하게 운영을 시작할 수 있게 하는 것이다.</p>
+<h2 id="metadata-store-options">Metadata Store Options</h2>
+<p>Coordinator metadata store는 세 가지를 지원한다.</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Store</th>
+<th>용도</th>
+<th>일관성 경계</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Store"><code>memory</code></td>
+<td data-label="용도">local 개발과 unit test</td>
+<td data-label="일관성 경계">process-local map</td>
+</tr>
+<tr>
+<td data-label="Store"><code>redis</code></td>
+<td data-label="용도">Redis만으로 운영하는 배포</td>
+<td data-label="일관성 경계">group metadata hash 1개 + Redis mutex + <code>storeRevision</code> CAS</td>
+</tr>
+<tr>
+<td data-label="Store"><code>jdbc</code></td>
+<td data-label="용도">metadata를 DB에 저장해야 하는 배포</td>
+<td data-label="일관성 경계"><code>{streamPrefix, consumerGroup}</code> row 1개 + JSON metadata + <code>storeRevision</code> CAS</td>
+</tr>
+</tbody>
+</table></div>
+<p>JDBC store도 Redis store와 동일한 aggregate metadata JSON을 저장한다. primary key는 <code>{streamPrefix, consumerGroup}</code>이며 모든 update/delete는 이전 <code>storeRevision</code> 조건으로 보호한다.</p>
 <h2 id="access-control">Access Control</h2>
-<p>MVP는 Basic Auth를 사용한다. <code>api.users</code>가 비어 있으면 <code>admin-username</code> / <code>admin-password</code>가 <code>ADMIN</code>, <code>MONITOR</code>, <code>MEMBER</code> 전체 권한을 가진다.</p>
+<p>Coordinator는 <code>POST /coord/v1/auth/login</code>으로 signed Bearer token을 발급한다. 운영자는 설정된 username/password로 한 번 로그인해 기본 7일 만료 token을 받고, 이후 API 호출에는 <code>Authorization: Bearer &lt;token&gt;</code>을 보낸다. Basic Auth는 하위 호환과 bootstrap 도구를 위해 계속 허용하지만, 운영 예시는 password가 매 요청에 남지 않도록 login + Bearer token 흐름을 우선 사용한다.</p>
+<p>Token 서명에는 <code>coordinator.api.token-secret</code>을 사용한다. 운영 배포에서는 이를 반드시 platform secret manager로 명시하고 rotation해야 한다. 값이 비어 있으면 local development 용도로만 기본 admin credential material에서 fallback secret을 만든다.</p>
+<p><code>api.users</code>가 비어 있으면 <code>admin-username</code> / <code>admin-password</code>가 <code>READ</code>, <code>WRITE</code>, <code>MEMBER</code> 전체 권한을 가진다.</p>
 <p><code>api.users</code>가 설정되면 각 user의 role로 ACL을 평가한다.</p>
 <ul>
-<li><code>ADMIN</code>: create, scale, consumer concurrency update, rollback 같은 mutation API.</li>
-<li><code>MONITOR</code>: monitoring API와 producer routing/group/migration 조회 API.</li>
+<li><code>READ</code>: monitoring, Grafana datasource, health, compatibility, message inspection API.</li>
+<li><code>WRITE</code>: <code>READ</code> 전체와 create/delete/scale/rollback/producer routing metadata 같은 coordinator control-plane API.</li>
 <li><code>MEMBER</code>: member heartbeat API. <code>authenticate-member-api=true</code>일 때만 요구한다.</li>
 </ul>
+<p>기존 <code>ADMIN</code>, <code>MONITOR</code> role 이름은 하위 호환 alias로 허용한다. <code>ADMIN</code>은 legacy full coordinator permission, <code>MONITOR</code>는 <code>READ</code>로 처리한다.</p>
 <p>인증 실패는 <code>401 Unauthorized</code>를 반환한다. 권한이 없는 mutation 요청은 <code>403 Forbidden</code>을 반환한다.</p>
 <h2 id="api-rate-limiting">API Rate Limiting</h2>
-<p><code>coordinator.api.rate-limit.enabled=true</code>이면 create, scale, consumer concurrency update, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 <code>{streamPrefix, consumerGroup}</code> 조합이다.</p>
+<p><code>coordinator.api.rate-limit.enabled=true</code>이면 create, scale, rollback 같은 admin mutation API에 fixed-window rate limit을 적용한다. Key는 authenticated principal과 <code>{streamPrefix, consumerGroup}</code> 조합이다.</p>
 <p>Rate limit 초과 시 coordinator는 <code>429 Too Many Requests</code>와 <code>Retry-After</code> header를 반환한다. Monitoring read API와 member heartbeat API는 이 limit에 포함하지 않는다. 현재 구현은 coordinator instance local limiter이므로, 여러 coordinator instance를 운영할 경우 global rate limit은 외부 gateway나 load balancer에서 보강한다.</p>
 <h2 id="monitoring-api">Monitoring API</h2>
 <p>Monitoring API는 coordinator state를 조회만 한다. 상태 변경은 Admin API로만 수행한다.
@@ -520,6 +558,7 @@ GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migration
 <li>target/current assignment summary</li>
 <li>revoke progress</li>
 <li>consumer-reported shard consumption progress, including stream key, shard, last delivered id, last acked id, pending count, and update time</li>
+<li>관측 기반 초당 produce/consume 수</li>
 <li>active migration progress</li>
 </ul>
 <h2 id="metrics">Metrics</h2>
@@ -532,7 +571,6 @@ GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migration
 <li><code>redis_stream_coord_member_active</code></li>
 <li><code>redis_stream_coord_member_heartbeat_age_seconds</code></li>
 <li><code>redis_stream_coord_member_lease_remaining_seconds</code></li>
-<li><code>redis_stream_coord_member_assigned_max_concurrency</code></li>
 <li><code>redis_stream_coord_member_runtime_max_concurrency</code></li>
 <li><code>redis_stream_coord_member_active_workers</code></li>
 <li><code>redis_stream_coord_member_current_shards</code></li>
@@ -561,8 +599,9 @@ GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migration
 <li><code>redis_stream_coord_consumer_shard_progress_updated_at_seconds</code></li>
 <li><code>redis_stream_coord_consumer_shard_progress_age_seconds</code></li>
 </ul>
-<p>Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, stream shard length, end offset, group offset, consumer offset, pending count, lag, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.</p>
+<p>Consumer shard progress is reported by heartbeat and validated against coordinator-owned assignment before it is stored. Redis Stream ids are split into numeric millisecond and sequence gauges so Prometheus can scrape them; the full id remains available through the monitoring API. Member lease age, heartbeat age, worker capacity, assigned shard count, revoking shard count, stream shard length, produced rate, estimated consumed rate, end offset, group offset, consumer offset, pending count, lag, and producer routing request counters are exported from the coordinator so consumer and producer libraries do not need to publish their own Micrometer meters. Message handler duration, retry, DLQ, idempotency, and duplicate-processing metrics remain application data-plane concerns.</p>
 <p>The coordinator server exposes Prometheus-format metrics through Spring Boot Actuator at <code>/actuator/prometheus</code> when the Prometheus registry is present. The repository-provided Docker smoke stack includes Prometheus and Grafana provisioning so open-source users can run the coordinator, sample producer/consumer pods, metric scraping, and a dashboard with one command. Grafana should not embed the custom monitoring console by iframe; it should call coordinator monitoring APIs directly through a Grafana-managed datasource. Coordinator API credentials belong to Grafana datasource provisioning and should not be hard-coded into dashboard panel URLs.</p>
+<p>Grafana shard/group row는 <code>producedPerSecond</code>, <code>consumedPerSecond</code>도 제공한다. <code>producedPerSecond</code>는 두 번의 monitoring observation 사이 Redis Stream length 증가량으로 계산한다. <code>consumedPerSecond</code>는 <code>streamLengthDelta - lagDelta</code> 기반의 추정값이므로 Redis lag가 알려져 있을 때만 계산한다. 첫 observation은 비교 대상이 없으므로 <code>null</code>을 반환한다.</p>
 <h2 id="redis-command-template-boundary">Redis Command Template Boundary</h2>
 <p>Coordinator Redis calls are centralized behind a command template instead of being scattered across state store, mutex, audit, and stream provisioning code. This keeps Lua scripts, lock operations, list/set access, health ping, and stream provisioning commands discoverable in one place and makes Redis command compatibility easier to review.</p>
 <h2 id="logs">Logs</h2>
@@ -580,9 +619,32 @@ GET /coord/v1/monitoring/streams/{streamPrefix}/groups/{consumerGroup}/migration
 <li><code>requestedBy</code></li>
 <li><code>reshardingId</code></li>
 </ul>
-<p>Admin audit events are emitted for create, scale, consumer concurrency update, and rollback. The default sink is structured application logs. When <code>coordinator.audit.sink=redis</code>, the coordinator writes JSON audit events to:</p>
+<p>Admin audit event는 create, delete, scale, rollback 같은 control-plane mutation마다 남긴다. 기본 sink는 structured application log이다. <code>coordinator.audit.sink=redis</code>이면 coordinator는 JSON audit event를 다음 group-scoped key에 쓴다.</p>
 <pre><code class="language-text">redis-stream:coord:{streamPrefix:consumerGroup}:admin:audit
 </code></pre>
+<p>Audit event에는 다음 값을 포함한다.</p>
+<ul>
+<li>action,</li>
+<li>outcome,</li>
+<li>HTTP status,</li>
+<li>authenticated principal,</li>
+<li>granted roles,</li>
+<li><code>requestedBy</code>,</li>
+<li><code>reason</code>,</li>
+<li>request id,</li>
+<li>client address,</li>
+<li>user agent,</li>
+<li>route and query string,</li>
+<li>request duration,</li>
+<li>stream prefix,</li>
+<li>consumer group,</li>
+<li>resharding id when present,</li>
+<li>request summary,</li>
+<li>SHA-256 request body fingerprint,</li>
+<li>coordinator id,</li>
+<li>timestamp.</li>
+</ul>
+<p>Audit log는 runtime evidence이다. Terraform/GitOps change management와 역할이 다르다. Terraform은 의도한 desired state와 승인 이력을 보여주고, coordinator audit log는 실제 coordinator가 받은 요청과 응답 결과를 보여준다. 실패한 요청, forbidden 요청, retry된 요청도 coordinator audit log에 남아야 한다.</p>
 <h2 id="alerts">Alerts</h2>
 <ul>
 <li>coordinator API unavailable</li>

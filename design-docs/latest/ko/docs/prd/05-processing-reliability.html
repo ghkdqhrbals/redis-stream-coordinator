@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
           <a href="../../api.html">API Reference</a>
@@ -406,7 +409,8 @@
 <p>Coordinator heartbeat response의 <code>assignment.assignedShards</code>에서 기존 owned shard가 빠지면 member는 해당 shard의 신규 read를 중단하고 local in-flight가 0이 된 뒤 heartbeat의 <code>revokingShards.state=REVOKED</code>로 보고한다.</p>
 <p><code>OK</code> response의 <code>assignment.assignedShards</code>에 새 shard가 포함되면 member는 shard를 <code>ownedShards</code>에 반영하고, 실제 Redis Stream read/recovery는 member data-plane 정책에 따라 수행한다.</p>
 <p>Metadata correction 중 <code>SYNC_METADATA</code>와 <code>REVOKE_PENDING</code>은 drain-only response이다. Member는 이미 소유한 shard 중 <code>assignment.assignedShards</code>에 남은 shard만 유지할 수 있고, 처음 등장한 shard는 이후 <code>OK</code> response를 받을 때까지 read를 시작하면 안 된다.</p>
-<p>Coordinator가 <code>FENCED_MEMBER_EPOCH</code>을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 <code>memberEpoch=0</code> full heartbeat로 rejoin한다.</p>
+<p>Coordinator가 <code>UNKNOWN_MEMBER_ID</code>, <code>FENCED_MEMBER_EPOCH</code>을 반환하거나 member epoch mismatch가 발생하면 member는 read/ack를 중단하고 local ownership/revoke state를 비운 뒤, 같은 <code>memberId</code>와 <code>memberEpoch=0</code> full heartbeat로 rejoin한다.</p>
+<p>Consumer module은 <code>UNKNOWN_MEMBER_ID</code> 이후 stale <code>ownedShards</code>를 계속 보고하면 안 된다. Rejoin은 empty ownership report에서 시작하며, 이후 <code>OK</code> heartbeat로 내려온 shard만 다시 read할 수 있다.</p>
 <p>Coordinator는 member가 보고한 <code>ownedShards</code>/<code>revokingShards</code>를 server-side target assignment와 이전에 수락한 current assignment 기준으로 검증한다. 아직 pending인 shard, 다른 live member가 소유 중인 shard, 또는 더 이상 허용되지 않는 shard를 owned로 보고하면 stale ownership으로 보고 fencing한다. 이미 처리된 terminal <code>REVOKED</code> duplicate report는 fencing하지 않고 무시한다.</p>
       </main>
     </div>

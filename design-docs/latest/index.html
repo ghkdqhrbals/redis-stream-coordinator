@@ -348,6 +348,9 @@
           <a href="docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="docs/prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="docs/prd/13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="docs/prd/14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="docs/prd/15-python-client.html">Python Client Library</a>
           <a href="docs/operations-runbook.html">Operations Runbook</a>
           <a href="docs/testing.html">Testing Guide</a>
           <a href="api.html">API Reference</a>
@@ -371,6 +374,9 @@
 <li><a href="docs/prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a></li>
 <li><a href="docs/prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a></li>
 <li><a href="docs/prd/12-failure-modes-edge-cases.html">Failure Modes and Edge Cases</a></li>
+<li><a href="docs/prd/13-terraform-governance.html">Terraform and GitOps Governance</a></li>
+<li><a href="docs/prd/14-edge-case-qna.html">Edge Case Q&amp;A</a></li>
+<li><a href="docs/prd/15-python-client.html">Python Client Library</a></li>
 <li><a href="api.html">Scalar API Reference</a></li>
 </ol>
 <h2 id="why-this-exists">Why This Exists</h2>
@@ -386,15 +392,15 @@
 <li>Use a central Group Coordinator.</li>
 <li>Identify a group from <code>{streamPrefix, consumerGroup}</code> in the API path instead of hard-coding group identity in coordinator YAML.</li>
 <li>Let the coordinator expire members whose heartbeat age exceeds <code>member-lease-ttl</code>, fence stale owners, and recalculate target assignment.</li>
-<li>Let member runtimes create their own UUID member IDs while the coordinator owns registration state, epochs, and fencing.</li>
-<li>For annotation-based consumers, treat <code>@StreamListener(concurrency = "N")</code> as <code>N</code> logical coordinator members in the same application process. Each logical member has its own generated <code>memberId</code>, heartbeat loop, Redis consumer name, assignment state, and shard ownership.</li>
+<li>Let member runtimes derive their own member IDs from pod IP context while the coordinator owns registration state, epochs, and fencing.</li>
+<li>For annotation-based consumers, treat <code>@StreamListener(concurrency = "N")</code> as <code>N</code> logical coordinator members in the same application process. Each logical member has its own pod-IP-based <code>memberId</code> with a concurrency suffix, heartbeat loop, Redis consumer name, assignment state, and shard ownership.</li>
 <li>Store shard ownership as coordinator-calculated target assignment and member-reported current assignment.</li>
 <li>Require revoke-before-assign: a shard is not assigned to a new live member until the previous owner has acknowledged revocation or expired.</li>
 <li>Run rebalance as member-level reconciliation, not a group-wide stop-the-world barrier.</li>
 <li>Change shard count only through the Coordinator Admin API.</li>
 <li>Treat bean-based <code>runtimeMaxConcurrency</code> as local worker capacity for one coordinator member, not as shard count and not as listener member count.</li>
 <li>Keep coordinator YAML limited to Redis connectivity, security, event-loop defaults, and operational defaults.</li>
-<li>Store per-group shard count and consumer concurrency policy in coordinator metadata.</li>
+<li>Store per-group shard count in coordinator metadata. Consumer parallelism is controlled by consumer deployment/listener configuration.</li>
 <li>Store each group aggregate in one Redis metadata key and use store revision CAS for updates.</li>
 <li>If a consumer reports a higher metadata version than Redis currently stores, the coordinator repeatedly sends <code>SYNC_METADATA</code> until the consumer heartbeats with the current Redis metadata version.</li>
 <li>During metadata correction, consumers drain removed shards and receive <code>REVOKE_PENDING</code> until conflicting previous owners are released; only <code>OK</code> permits starting newly assigned shards.</li>
@@ -403,6 +409,7 @@
 <li>Do not claim exactly-once side effects. Business side effects cannot be committed atomically with Redis Stream ACK across arbitrary databases, Redis writes, HTTP calls, or external APIs.</li>
 <li>The same partition key can route to a different Redis Stream shard after shard count changes.</li>
 <li>Version public APIs, coordinator-module compatibility, and metadata schema explicitly.</li>
+<li>Prefer Terraform or another GitOps workflow for production admin mutations. Terraform records desired state and approval history; coordinator audit logs remain the runtime evidence for actual API calls, failed attempts, forbidden requests, request ids, caller identity, and request body fingerprints.</li>
 </ul>
 <h2 id="success-criteria">Success Criteria</h2>
 <ul>
@@ -414,12 +421,14 @@
 <li>Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.</li>
 <li>Spring Boot applications can integrate by adding the starter and using <code>@StreamListener</code>, implementing <code>CoordinatorShardLifecycle</code>, or using the built-in Redis Stream polling handler.</li>
 <li>Annotation listener concurrency creates independent coordinator members, so <code>concurrency = 4</code> joins as four member IDs rather than one member with four local shard pollers.</li>
+<li>Python applications can integrate with the sync-first <code>redisstream-coordinator</code> package while sharing the same heartbeat, assignment, routing, and Redis command semantics as the JVM starter.</li>
 <li>Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.</li>
 </ul>
 <h2 id="guarantee-boundaries">Guarantee Boundaries</h2>
 <ul>
 <li>Routing determinism is guaranteed only for the same routing protocol, <code>shardCount</code>, and partition key.</li>
 <li>Shard scale-out/in changes the routing domain. The same partition key can route to different shard indexes between old and new shard counts.</li>
+<li>Every scale-in, including <code>targetShardCount=0</code>, is finalized by Redis-level drain evidence. If all live members expire before they can acknowledge revoke, the coordinator skips consumer-level revoke and retires removed shard streams only after every Redis consumer group on those streams reports <code>pending=0</code> and known <code>lag=0</code>.</li>
 <li>The baseline processing model is at-least-once.</li>
 <li>Single processing and exactly-once side effects are not guaranteed.</li>
 <li>Applications must handle duplicate side effects through domain-level idempotency, deduplication, unique constraints, or compensation.</li>

@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
           <a href="../../api.html">API Reference</a>
@@ -364,7 +367,7 @@
 <li>member join/leave, metadata change, Coordinator Admin API로 요청된 shard count change를 group epoch 증가로 모델링한다.</li>
 <li>topic partition에 해당하는 Redis Stream shard count는 Coordinator Admin API 요청으로만 생성/증감한다.</li>
 <li>Annotation listener의 <code>concurrency = "N"</code>은 N개의 독립 coordinator member를 만드는 member fan-out이다. 각 member는 별도 heartbeat와 assignment state를 가진다.</li>
-<li>Bean 기반 <code>runtimeMaxConcurrency</code>는 partition/shard 개수가 아니라 하나의 member 안에서 사용할 consumer worker 수이며, coordinator의 server-side consumer concurrency policy로 제한된다.</li>
+<li>Bean 기반 <code>runtimeMaxConcurrency</code>는 partition/shard 개수가 아니라 하나의 member 안에서 사용할 consumer worker 수이며, coordinator assignment weight로 쓰지 않는다.</li>
 <li>target assignment는 coordinator가 계산하고 assignment epoch으로 versioning한다.</li>
 <li>member는 heartbeat/reconciliation loop로 target assignment에 수렴한다.</li>
 <li>coordinator는 <code>tick-interval</code>마다 heartbeat가 <code>member-lease-ttl</code>을 넘긴 member를 <code>EXPIRED</code>로 표시하고 shard를 재할당한다.</li>
@@ -393,7 +396,7 @@
 <ul>
 <li>Redis는 stream data plane으로 사용한다.</li>
 <li>Coordinator metadata store는 Redis-backed 단일 metadata key이다.</li>
-<li>각 member는 runtime 시작 시 UUID <code>memberId</code>를 직접 생성한다.</li>
+<li>각 member는 runtime 시작 시 pod IP context에서 <code>memberId</code>를 직접 생성한다.</li>
 <li>producer와 consumer는 coordinator가 Redis metadata key 기준으로 내려준 shard count을 source of truth로 사용한다.</li>
 <li>producer retry, network failure, consumer pending recovery, shard migration은 중복 message 또는 중복 처리 시도를 만들 수 있다.</li>
 <li>동일 partition key는 같은 routing metadata 안에서만 같은 shard로 route된다. shard count가 바뀌면 다른 shard로 route될 수 있다.</li>

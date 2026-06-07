@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
           <a href="../../api.html">API Reference</a>
@@ -462,6 +465,7 @@ RECONCILING
 <li>member data-plane은 <code>memberEpoch</code>과 <code>assignmentEpoch</code>이 유효한 assignment에서만 read/ack한다.</li>
 <li><code>STABLE</code> group에서는 active member의 current assignment 합집합이 target assignment와 같아야 한다.</li>
 </ul>
+<p>Coordinator가 <code>UNKNOWN_MEMBER_ID</code>를 반환하면 consumer는 local ownership이 더 이상 유효하지 않다고 판단해야 한다. Consumer는 read/ack를 중단하고 local owned shard와 revoking shard 상태를 비운 뒤, 같은 <code>memberId</code>와 <code>memberEpoch=0</code>으로 full heartbeat를 다시 보낸다. Group metadata가 여전히 존재하면 이 heartbeat는 rejoin 요청이며, coordinator는 새 member epoch과 assignment를 내려줄 수 있다.</p>
 <h2 id="member-metadata">Member Metadata</h2>
 <pre><code class="language-json">{
   &quot;memberId&quot;: &quot;018f8d27-8d71-7a7c-a7e7-b3f77c613d7f&quot;,
@@ -469,7 +473,6 @@ RECONCILING
   &quot;state&quot;: &quot;ACTIVE&quot;,
   &quot;memberEpoch&quot;: 11,
   &quot;metadataVersion&quot;: 8,
-  &quot;assignedMaxConcurrency&quot;: 12,
   &quot;runtimeMaxConcurrency&quot;: 12,
   &quot;activeConsumerWorkers&quot;: 8,
   &quot;currentAssignment&quot;: [
@@ -485,10 +488,9 @@ RECONCILING
 <ul>
 <li><code>lastHeartbeatAt</code>: coordinator가 마지막 heartbeat를 정상 반영한 시각이다.</li>
 <li><code>memberLeaseExpiresAt</code>: 이 시각 이후에는 <code>EXPIRED</code>로 fencing하고 재할당을 시작한다.</li>
-<li><code>assignedMaxConcurrency</code>: Coordinator Admin API가 저장한 server-side consumer concurrency policy 기준으로 허용된 consumer worker 수이다.</li>
 <li><code>runtimeMaxConcurrency</code>: member process가 heartbeat로 보고한 local consumer worker 상한이다.</li>
 <li><code>activeConsumerWorkers</code>: member가 현재 실행 중인 consumer worker 수이다.</li>
-<li><code>maxConcurrency</code>는 partition/shard 개수가 아니며, target assignment의 shard 수 상한으로 쓰지 않는다.</li>
+<li><code>runtimeMaxConcurrency</code>는 partition/shard 개수가 아니며, target assignment의 shard 수 상한으로 쓰지 않는다.</li>
 </ul>
 <h2 id="logical-member-worker-capacity">Logical Member와 Worker Capacity</h2>
 <p>설계에서는 논리 coordinator member와 member 내부 worker capacity를 분리한다.</p>
@@ -584,8 +586,9 @@ RECONCILING
 <li>Bean 기반 <code>runtimeMaxConcurrency</code>는 member 내부 consumer worker 수이다.</li>
 <li><code>runtimeMaxConcurrency</code>는 topic partition 수나 Redis Stream shard 수를 의미하지 않는다.</li>
 <li>Redis Stream shard는 한 시점에 정확히 하나의 live member만 소유한다.</li>
-<li>하나의 member는 여러 shard를 소유할 수 있고, 소유 shard를 <code>assignedMaxConcurrency</code> 이하의 consumer worker가 multiplexing해서 읽는다.</li>
-<li>coordinator는 <code>maxConcurrency</code>를 처리량 가중치로 참고할 수 있지만, shard count 변경과 동일하게 취급하지 않는다.</li>
+<li>하나의 member는 여러 shard를 소유할 수 있고, member runtime이 소유 shard를 multiplexing해서 읽는다.</li>
+<li>consumer parallelism은 deployment/listener configuration으로 제어한다.</li>
+<li>coordinator는 live logical member 수 기준으로 shard를 균등 배치한다. heartbeat의 <code>runtimeMaxConcurrency</code>는 관측값이며 assignment weight가 아니다.</li>
 <li>built-in polling adapter는 여러 worker가 있어도 같은 shard에 대해 동시에 Redis read를 수행하지 않는다.</li>
 </ul>
 <p>Annotation listener에서 <code>concurrency = 4</code>는 독립적으로 assign되는 coordinator member 네 개를 뜻한다. Bean 기반 integration에서 <code>runtimeMaxConcurrency = 4</code>는 하나의 member가 최대 네 개의 handler execution을 병렬로 실행할 수 있다는 뜻이다. 어떤 경우에도 member가 shard 네 개까지만 소유할 수 있다는 뜻은 아니다.</p>

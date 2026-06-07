@@ -348,6 +348,9 @@
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="prd/13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="prd/14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="prd/15-python-client.html">Python Client Library</a>
           <a href="operations-runbook.html" aria-current="page">운영 Runbook</a>
           <a href="testing.html">테스트 가이드</a>
           <a href="../api.html">API Reference</a>
@@ -395,6 +398,18 @@
 <pre><code class="language-bash">curl -u admin:${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD} \
   http://localhost:8080/coord/v1/monitoring/streams/orders/groups/orders-consumer/migrations
 </code></pre>
+<h2 id="terraformgitops-admin-mutation">Terraform/GitOps Admin Mutation</h2>
+<p>운영 환경의 admin mutation은 가능하면 Terraform 또는 GitOps workflow로 적용한다.</p>
+<p>권장 패턴:</p>
+<ol>
+<li>Pull request에서 desired change를 review한다.</li>
+<li>Coordinator read API 기준으로 plan을 확인한다.</li>
+<li>전용 <code>WRITE</code> principal로 apply한다.</li>
+<li><code>X-Request-Id</code>, request body의 <code>requestedBy</code>, <code>reason</code>을 반드시 넣는다.</li>
+<li>Apply 후 coordinator audit log와 monitoring API를 확인한다.</li>
+</ol>
+<p>Terraform은 group existence, shard count 같은 desired state를 관리한다. Consumer runtime concurrency, heartbeat, current assignment, revoke progress, offset, pending entry, message payload 같은 runtime state는 Terraform 관리 대상이 아니다.</p>
+<p>Terraform이 caller여도 coordinator audit log는 필수이다. 실제 API request, outcome, status, principal, roles, request id, request body fingerprint, client address, duration, stream prefix, consumer group, operation reason을 coordinator가 남긴다.</p>
 <h2 id="alert">Alert 후보</h2>
 <ul>
 <li>coordinator health <code>DEGRADED</code></li>

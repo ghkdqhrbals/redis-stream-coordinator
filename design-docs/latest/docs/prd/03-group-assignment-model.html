@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
@@ -414,7 +417,6 @@
 <li>target assignment,</li>
 <li>accepted current assignment,</li>
 <li>resharding state,</li>
-<li>consumer concurrency policy,</li>
 <li>audit and monitoring projections.</li>
 </ul>
 <p>Members own:</p>
@@ -428,7 +430,7 @@
 </ul>
 <h2 id="logical-member-and-worker-capacity">Logical Member and Worker Capacity</h2>
 <p>The design separates logical coordinator membership from local worker capacity.</p>
-<p>Annotation-based consumers use Kafka-style listener concurrency: <code>@StreamListener(concurrency = "4")</code> creates four logical coordinator members inside the same application process. The starter derives member IDs by appending member suffixes such as <code>-m0</code>, <code>-m1</code>, <code>-m2</code>, and <code>-m3</code> to a generated base ID. Each logical member has its own heartbeat loop, Redis consumer name, assignment state, member epoch, metadata version, and shard ownership. Annotation listeners do not have a single-member toggle.</p>
+<p>Annotation-based consumers use Kafka-style listener concurrency: <code>@StreamListener(concurrency = "4")</code> creates four logical coordinator members inside the same application process. The starter derives the base member ID from pod IP context, then appends member suffixes such as <code>-m0</code>, <code>-m1</code>, <code>-m2</code>, and <code>-m3</code>. Each logical member has its own heartbeat loop, Redis consumer name, assignment state, member epoch, metadata version, and shard ownership. Annotation listeners do not have a single-member toggle.</p>
 <p>Bean-based consumers can still register one coordinator member explicitly with <code>CoordinatorConsumerProperties.consumer(...)</code>. In that path, <code>runtimeMaxConcurrency</code> is local worker capacity for that one member. It controls how many handler executions or poll workers that member can run locally; it does not create additional coordinator members.</p>
 <p>This split keeps the ownership rule simple: the coordinator assigns shards to live members, while each member decides how to multiplex its owned shards across its local worker capacity.</p>
 <h2 id="assignment-state">Assignment State</h2>
@@ -449,13 +451,13 @@
 <li>member gracefully leaves,</li>
 <li>member expires,</li>
 <li>shard count migration changes the managed shard set,</li>
-<li>consumer concurrency policy affects assignment weight,</li>
 <li>rollback changes resharding state.</li>
 </ul>
 <h3 id="assignment-epoch">Assignment Epoch</h3>
 <p><code>assignmentEpoch</code> increments when target assignment is recalculated. If <code>groupEpoch</code> changes but assignment does not need to change, <code>assignmentEpoch</code> can remain stable.</p>
 <h3 id="member-epoch">Member Epoch</h3>
 <p><code>memberEpoch</code> increments when the coordinator needs to fence stale member state or acknowledge a new member lifecycle. A member that sends a heartbeat with an old epoch can be fenced and required to rejoin.</p>
+<p>If the coordinator returns <code>UNKNOWN_MEMBER_ID</code>, the consumer must treat its local ownership as invalid. The consumer stops reads and ACKs, clears local owned and revoking shard state, and sends the next full heartbeat with the same <code>memberId</code> and <code>memberEpoch=0</code>. When the group still exists, this heartbeat is a rejoin request and the coordinator can issue a fresh member epoch and assignment.</p>
 <h3 id="store-revision">Store Revision</h3>
 <p><code>storeRevision</code> protects Redis-backed group metadata from stale overwrites. It is incremented only with committed metadata updates and remains the final compare-and-set guard when a process resumes with an old snapshot.</p>
 <h2 id="sticky-assignment">Sticky Assignment</h2>
@@ -529,8 +531,8 @@
 <li>a consumer member can own many shards,</li>
 <li>annotation listener <code>concurrency</code> creates logical coordinator members, not local workers inside a single member,</li>
 <li>bean-based <code>runtimeMaxConcurrency</code> describes local worker capacity for one member, not a hard ownership limit,</li>
-<li><code>assignedMaxConcurrency</code> caps the coordinator-approved local worker capacity reported by one member,</li>
-<li>concurrency can be used as a balancing weight, but the coordinator must not require shard count to be less than or equal to member concurrency,</li>
+<li>consumer parallelism is controlled by deployment/listener configuration,</li>
+<li>shard assignment is balanced by live logical member count, not by reported runtime capacity,</li>
 <li>when one member owns more shards than its worker count, the member must multiplex owned shards across local workers,</li>
 <li>the built-in polling adapter must keep one active Redis read loop per shard at most, even when several local workers are available.</li>
 </ul>

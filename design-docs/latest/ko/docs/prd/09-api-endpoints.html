@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
           <a href="../../api.html">API Reference</a>
@@ -373,8 +376,10 @@
 <p>Common headers:</p>
 <pre><code class="language-http">Content-Type: application/json
 Accept: application/json
-Authorization: Basic &lt;base64(admin:password)&gt;
+Authorization: Bearer &lt;token-from-POST-/coord/v1/auth/login&gt;
+X-Request-Id: &lt;caller-generated-id&gt;
 </code></pre>
+<p><code>X-Request-Id</code>는 선택값이지만 admin mutation, Terraform apply, CI automation, incident replay에서는 강하게 권장한다. 값이 있으면 coordinator audit log에 기록한다.</p>
 <p>Path parameters:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -394,7 +399,7 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </tr>
 <tr>
 <td data-label="Parameter"><code>memberId</code></td>
-<td data-label="Meaning">member runtime이 생성한 UUID.</td>
+<td data-label="Meaning">member runtime이 생성한 member id. starter는 기본적으로 pod IP context에서 생성한다.</td>
 </tr>
 <tr>
 <td data-label="Parameter"><code>reshardingId</code></td>
@@ -527,10 +532,10 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <tr>
 <td data-label="Area">Admin</td>
 <td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
-<td data-label="Purpose">group 생성</td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}</code></td>
+<td data-label="Purpose">stream shard group 생성</td>
 <td data-label="Mutates State">yes</td>
-<td data-label="Duplicate Request Handling">existing group is <code>409 Conflict</code></td>
+<td data-label="Duplicate Request Handling">existing stream metadata is <code>409 Conflict</code></td>
 </tr>
 <tr>
 <td data-label="Area">Admin</td>
@@ -542,9 +547,17 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </tr>
 <tr>
 <td data-label="Area">Admin</td>
+<td data-label="Method"><code>DELETE</code></td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code></td>
+<td data-label="Purpose">inactive group metadata 삭제</td>
+<td data-label="Mutates State">yes</td>
+<td data-label="Duplicate Request Handling">live member가 있으면 force 없이는 reject</td>
+</tr>
+<tr>
+<td data-label="Area">Admin</td>
 <td data-label="Method"><code>POST</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale</code></td>
-<td data-label="Purpose">shard scale-out/in migration 시작</td>
+<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/scale</code></td>
+<td data-label="Purpose">stream 전체 shard scale-out/in migration 시작</td>
 <td data-label="Mutates State">yes</td>
 <td data-label="Duplicate Request Handling">active migration or same target is rejected/no-op</td>
 </tr>
@@ -555,14 +568,6 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Purpose">producer 라우팅 메타데이터 조회</td>
 <td data-label="Mutates State">no</td>
 <td data-label="Duplicate Request Handling">not required</td>
-</tr>
-<tr>
-<td data-label="Area">Admin</td>
-<td data-label="Method"><code>PATCH</code></td>
-<td data-label="Path"><code>/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency</code></td>
-<td data-label="Purpose">server-side consumer <code>maxConcurrency</code> 변경</td>
-<td data-label="Mutates State">yes</td>
-<td data-label="Duplicate Request Handling">same policy returns current policy</td>
 </tr>
 <tr>
 <td data-label="Area">Admin</td>
@@ -728,9 +733,9 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </table></div>
 <h2 id="admin-api">Admin API</h2>
 <h3 id="create-group">Create Group</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}
 </code></pre>
-<p>Creates initial group metadata and the configured shard count. Member startup, local YAML, producers, and consumers cannot create group metadata directly.</p>
+<p>초기 stream shard metadata와 shard count를 생성한다. 공식 create path는 <code>streamPrefix</code>만 받는다. Consumer group은 consumer runtime configuration에서 오며 heartbeat를 통해 수렴한다.</p>
 <p>Request body:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -745,11 +750,6 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Field"><code>initialShardCount</code></td>
 <td data-label="Required">no</td>
 <td data-label="Meaning">Initial shard count. Omitted value uses coordinator <code>defaults.initial-shard-count</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.defaultMaxConcurrency</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Default member consumer worker limit. Omitted value uses coordinator <code>defaults.consumer-max-concurrency</code>.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>requestedBy</code></td>
@@ -773,31 +773,23 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </thead>
 <tbody>
 <tr>
-<td data-label="Field"><code>streamPrefix</code> / <code>consumerGroup</code></td>
-<td data-label="Meaning">Created group identifier.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Initial group epoch.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">Initial metadata version.</td>
+<td data-label="Field"><code>streamPrefix</code></td>
+<td data-label="Meaning">생성된 stream prefix.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>shardCount</code></td>
 <td data-label="Meaning">Stored shard count.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Stored server-side consumer concurrency policy.</td>
+<td data-label="Field"><code>metadataVersion</code></td>
+<td data-label="Meaning">생성된 coordinator metadata version.</td>
 </tr>
 </tbody>
 </table></div>
 <p>Duplicate request behavior:</p>
 <ul>
-<li>같은 <code>{streamPrefix, consumerGroup}</code> metadata가 이미 있으면 <code>409 Conflict</code>로 거절한다.</li>
-<li>기존 metadata 조회는 <code>GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code>를 사용한다.</li>
+<li>stream prefix에 coordinator metadata가 이미 있으면 <code>409 Conflict</code>로 거절한다.</li>
+<li><code>POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}</code>는 이전 automation 호환용으로만 남긴다.</li>
 </ul>
 <h3 id="get-group-metadata">Get Group Metadata</h3>
 <pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
@@ -833,10 +825,6 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 <td data-label="Meaning">Stored shard count.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Server-side consumer concurrency policy.</td>
-</tr>
-<tr>
 <td data-label="Field"><code>activeMigration</code></td>
 <td data-label="Meaning">Active migration summary or null.</td>
 </tr>
@@ -850,6 +838,65 @@ Authorization: Basic &lt;base64(admin:password)&gt;
 </tr>
 </tbody>
 </table></div>
+<h3 id="delete-group">Delete Group</h3>
+<pre><code class="language-http">DELETE /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
+</code></pre>
+<p>Inactive group의 coordinator metadata를 삭제한다. Live member가 정상 leave할 수 없는 운영 복구 상황에서만 <code>force=true</code>를 사용한다.</p>
+<p>Request body:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>requestedBy</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Meaning">Operator or automation identity for audit.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>reason</code></td>
+<td data-label="Required">yes</td>
+<td data-label="Meaning">Human-readable delete reason.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>force</code></td>
+<td data-label="Required">no</td>
+<td data-label="Meaning">Live member가 남아 있어도 삭제할지 여부.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Response summary:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Field"><code>streamPrefix</code> / <code>consumerGroup</code></td>
+<td data-label="Meaning">삭제된 group identifier.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>metadataVersion</code></td>
+<td data-label="Meaning">삭제 직전 metadata version.</td>
+</tr>
+<tr>
+<td data-label="Field"><code>shardCount</code></td>
+<td data-label="Meaning">삭제 직전 shard count.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Failure behavior:</p>
+<ul>
+<li>group이 없으면 <code>404 Not Found</code>와 <code>GROUP_NOT_FOUND</code>를 반환한다.</li>
+<li>live member가 있고 <code>force=false</code>이면 <code>422 Unprocessable Entity</code>로 거절한다.</li>
+</ul>
 <h3 id="get-producer-routing-metadata">Get Producer Routing Metadata</h3>
 <pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
 </code></pre>
@@ -887,10 +934,12 @@ streamKey = format(streamKeyPattern, shardIndex)
 </tr>
 </tbody>
 </table></div>
-<h3 id="scale-group">Scale Group</h3>
-<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale
+<h3 id="scale-stream">Scale Stream</h3>
+<pre><code class="language-http">POST /coord/v1/streams/{streamPrefix}/scale
 </code></pre>
-<p>Starts shard scale-out or scale-in by creating a next resharding. This is the only supported shard count mutation path. For duplicate-sensitive workloads, callers should quiesce producers and drain in-flight publish retries before calling this endpoint.</p>
+<p>Stream prefix의 shard scale-out/in을 시작한다. Consumer group은 이 요청 path에 포함하지 않는다. 해당 stream을 읽는 모든 consumer group은 다음 heartbeat에서 변경된 shard set을 보고 각자 assignment를 재계산한다.</p>
+<p>Scale-in 완료는 heartbeat만으로 판단하지 않는다. 제거 대상 shard에 live owner가 있으면 coordinator는 heartbeat revoke progress를 기다린다. Live member가 모두 expire되면 Redis-level drain check로 진행하고, 제거 대상 shard의 모든 Redis consumer group이 <code>pending=0</code>과 known <code>lag=0</code>을 보고할 때만 완료한다.</p>
+<p>Duplicate-sensitive workload는 이 endpoint 호출 전에 producer를 멈추고 in-flight publish retry를 drain해야 한다.</p>
 <p>Request body:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -904,12 +953,7 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>targetShardCount</code></td>
 <td data-label="Required">yes</td>
-<td data-label="Meaning">New shard count. Must be positive and different from current active shard count.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy.defaultMaxConcurrency</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional server-side consumer worker limit update in the same metadata change.</td>
+<td data-label="Meaning">New shard count. Must be zero or positive and different from current active shard count. <code>0</code> drains and removes every shard.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>reason</code></td>
@@ -928,6 +972,8 @@ streamKey = format(streamKeyPattern, shardIndex)
 </tr>
 </tbody>
 </table></div>
+<p>stream-level scale request는 shard count만 변경한다. consume parallelism은 consumer application이 <code>@StreamListener(concurrency = N)</code> 같은 runtime 설정으로 정한다. coordinator는 heartbeat로 들어온 logical member들을 관찰하고 assignment를 계산할 뿐, admin API로 consumer runtime parallelism을 변경하지 않는다.</p>
+<p>Compatibility note: 현재 구현 단계에서는 <code>POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/scale</code>도 남아 있지만, 운영자가 사용할 공식 scale path는 stream-scoped endpoint이다.</p>
 <p>Response summary:</p>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
@@ -938,24 +984,20 @@ streamKey = format(streamKeyPattern, shardIndex)
 </thead>
 <tbody>
 <tr>
-<td data-label="Field"><code>reshardingId</code></td>
-<td data-label="Meaning">Created resharding id.</td>
+<td data-label="Field"><code>streamPrefix</code></td>
+<td data-label="Meaning">scale 대상 stream prefix.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>fromShardCount</code> / <code>toShardCount</code></td>
-<td data-label="Meaning">Old/new shard counts.</td>
+<td data-label="Field"><code>targetShardCount</code></td>
+<td data-label="Meaning">요청한 shard count.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>state</code></td>
-<td data-label="Meaning">Initial migration state, usually <code>PREPARING</code>.</td>
+<td data-label="Field"><code>affectedConsumerGroups</code></td>
+<td data-label="Meaning">metadata가 변경된 consumer group 목록.</td>
 </tr>
 <tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Group epoch after metadata mutation.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignmentEpoch</code></td>
-<td data-label="Meaning">Assignment epoch before or after recompute depending on loop timing.</td>
+<td data-label="Field"><code>migrations[]</code></td>
+<td data-label="Meaning">group별 migration record. 각 group은 heartbeat 응답으로 수렴한다.</td>
 </tr>
 </tbody>
 </table></div>
@@ -963,73 +1005,6 @@ streamKey = format(streamKeyPattern, shardIndex)
 <ul>
 <li>active migration이 있으면 새 migration을 만들지 않고 <code>409 Conflict</code>로 거절한다.</li>
 <li><code>targetShardCount</code>가 현재 active shard count와 같으면 새 migration을 만들지 않고 no-op response로 처리한다.</li>
-</ul>
-<h3 id="update-consumer-concurrency">Update Consumer Concurrency</h3>
-<pre><code class="language-http">PATCH /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/consumer-concurrency
-</code></pre>
-<p>Updates member-side consumer worker limit. This does not change shard count.</p>
-<p>Request body:</p>
-<div class="table-scroll"><table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Required</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>defaultMaxConcurrency</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Default consumer worker limit for members without override.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>memberOverrides</code></td>
-<td data-label="Required">no</td>
-<td data-label="Meaning">Optional per-member-name max concurrency override.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>reason</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Human-readable change reason.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>requestedBy</code></td>
-<td data-label="Required">yes</td>
-<td data-label="Meaning">Operator or automation identity for audit.</td>
-</tr>
-</tbody>
-</table></div>
-<p>Response summary:</p>
-<div class="table-scroll"><table class="responsive-table">
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td data-label="Field"><code>metadataVersion</code></td>
-<td data-label="Meaning">New metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>groupEpoch</code></td>
-<td data-label="Meaning">Bumped only if assignment weight policy depends on <code>maxConcurrency</code>.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>consumerConcurrencyPolicy</code></td>
-<td data-label="Meaning">Stored policy.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>affectedMembers</code></td>
-<td data-label="Meaning">Members that will receive changed <code>assignedMaxConcurrency</code> on heartbeat.</td>
-</tr>
-</tbody>
-</table></div>
-<p>Duplicate request behavior:</p>
-<ul>
-<li>요청 policy가 현재 policy와 같으면 metadata를 새로 쓰지 않고 현재 policy를 반환한다.</li>
 </ul>
 <h3 id="get-migration">Get Migration</h3>
 <pre><code class="language-http">GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}
@@ -1163,7 +1138,7 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>memberId</code></td>
 <td data-label="Required">yes</td>
-<td data-label="Meaning">Must match path parameter. Runtime-start UUID that identifies this member incarnation.</td>
+<td data-label="Meaning">Must match path parameter. Runtime member id derived from pod IP context by default.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>memberEpoch</code></td>
@@ -1255,10 +1230,6 @@ streamKey = format(streamKeyPattern, shardIndex)
 <tr>
 <td data-label="Field"><code>metadataVersion</code></td>
 <td data-label="Meaning">Latest metadata version.</td>
-</tr>
-<tr>
-<td data-label="Field"><code>assignedMaxConcurrency</code></td>
-<td data-label="Meaning">Server-side consumer worker limit assigned to this member.</td>
 </tr>
 <tr>
 <td data-label="Field"><code>assignment.assignedShards</code></td>

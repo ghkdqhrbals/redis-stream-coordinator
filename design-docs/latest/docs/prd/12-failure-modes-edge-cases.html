@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html" aria-current="page">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
@@ -586,6 +589,10 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Expected outcome">Coordinator expires A after member lease TTL or rebalance timeout and then allows reassignment. Duplicate processing is possible and remains at-least-once</td>
 </tr>
 <tr>
+<td data-label="Failure point">Every live member expires during scale-in</td>
+<td data-label="Expected outcome">There is no heartbeat target that can acknowledge revoke. Coordinator advances the migration to Redis-level drain checks and completes only when every Redis group on removed shards reports <code>pending=0</code> and known <code>lag=0</code></td>
+</tr>
+<tr>
 <td data-label="Failure point">A restarts after DRAIN without local revoking memory</td>
 <td data-label="Expected outcome">A rejoins with <code>memberEpoch=0</code>. Coordinator validates the rejoin against Redis-recorded target/current state and either keeps it fenced or requires full reconciliation</td>
 </tr>
@@ -643,6 +650,14 @@ coordinator assigns shard S to the new target only after release is accepted
 <pre><code class="language-text">1 coordinator -&gt; 0 reachable coordinators -&gt; 1 coordinator
 </code></pre>
 <p>The coordinator cannot control Kubernetes readiness, service endpoint propagation, or external load balancers. It only owns process-local terminating state and Redis critical sections.</p>
+<p>Implementation guardrails:</p>
+<ul>
+<li><code>CoordinatorShutdownGate</code> enters terminating mode on Spring context shutdown.</li>
+<li><code>@CriticalSection</code> service methods acquire the local monitor, then pass the shutdown gate, then acquire the Redis mutex.</li>
+<li>New heartbeat/admin mutations after terminating mode receive <code>503 COORDINATOR_TERMINATING</code> and should retry against another coordinator instance.</li>
+<li>Already-entered short critical sections are allowed to finish so their Redis write and mutex release can complete.</li>
+<li>Event-loop ticks stop scheduling state transitions after terminating mode starts.</li>
+</ul>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
@@ -755,6 +770,12 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Consumer behavior">Stop shards not returned by coordinator</td>
 </tr>
 <tr>
+<td data-label="Edge case">Coordinator returns <code>UNKNOWN_MEMBER_ID</code></td>
+<td data-label="Risk">Consumer keeps sending stale epoch and never becomes assignable</td>
+<td data-label="Coordinator behavior">Reject the stale heartbeat without accepting ownership; accept the same member later only as <code>memberEpoch=0</code> rejoin</td>
+<td data-label="Consumer behavior">Clear ownership/revoking state, send full heartbeat with <code>memberEpoch=0</code>, then start only assigned shards</td>
+</tr>
+<tr>
 <td data-label="Edge case">Consumer reports unassigned owned shard</td>
 <td data-label="Risk">Split ownership</td>
 <td data-label="Coordinator behavior">Reject or fence the stale report</td>
@@ -822,6 +843,11 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Producer behavior">Continue with cached route until refresh; refresh interval/cache TTL bounds propagation delay</td>
 </tr>
 <tr>
+<td data-label="Edge case">Coordinator scales in shards but producer has stale routing</td>
+<td data-label="Risk">Producer may target a removed shard</td>
+<td data-label="Producer behavior">Producer <code>XADD</code> uses <code>NOMKSTREAM</code>; missing removed shard keys fail instead of being recreated, routing cache is invalidated, and the default second attempt refreshes routing before retry</td>
+</tr>
+<tr>
 <td data-label="Edge case">Lower <code>metadataVersion</code> response</td>
 <td data-label="Risk">Redis metadata rollback or stale coordinator response</td>
 <td data-label="Producer behavior">Treat as metadata sync. Downgrade only when the coordinator explicitly returns current routing metadata</td>
@@ -834,7 +860,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <tr>
 <td data-label="Edge case">Publish fails after uncertain <code>XADD</code></td>
 <td data-label="Risk">Duplicate records on retry</td>
-<td data-label="Producer behavior">Keep default publish attempts conservative; application owns event idempotency</td>
+<td data-label="Producer behavior">Default retry is one refresh-and-retry attempt; application owns event idempotency</td>
 </tr>
 <tr>
 <td data-label="Edge case">Shard scale happens during produce</td>

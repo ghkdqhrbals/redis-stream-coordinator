@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MVP Scope, Tradeoffs, Risks, and Open Questions</title>
+    <title>Python Client Library</title>
     <style>
       * {
         box-sizing: border-box;
@@ -313,8 +313,8 @@
     <script>
       (() => {
         const targetLanguage = new URLSearchParams(window.location.search).get("tl");
-        if (targetLanguage === "en") {
-          const target = new URL("../../../docs/prd/07-mvp-risks-open-questions.html", window.location.href);
+        if (targetLanguage === "ko") {
+          const target = new URL("../../ko/docs/prd/15-python-client.html", window.location.href);
           target.hash = window.location.hash;
           window.location.replace(target);
         }
@@ -328,7 +328,7 @@
           <div class="site-title">Redis Stream Coordinator</div>
           <div class="site-subtitle">Design docs</div>
         </div>
-        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/07-mvp-risks-open-questions.html">English</a><span aria-hidden="true">/</span><a href="07-mvp-risks-open-questions.html" aria-current="true">한국어</a></div>
+        <div class="language-switch" aria-label="Language switch"><a href="15-python-client.html" aria-current="true">English</a><span aria-hidden="true">/</span><a href="../../ko/docs/prd/15-python-client.html">한국어</a></div>
       </div>
     </header>
     <div class="layout">
@@ -339,10 +339,10 @@
           <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
           <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
           <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
-          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
+          <a href="04-resharding-routing.html">Resharding, Routing, and Admin API</a>
           <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
           <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
-          <a href="07-mvp-risks-open-questions.html" aria-current="page">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
           <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
           <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
@@ -350,131 +350,117 @@
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
           <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
-          <a href="15-python-client.html">Python Client Library</a>
-          <a href="../operations-runbook.html">운영 Runbook</a>
-          <a href="../testing.html">테스트 가이드</a>
+          <a href="15-python-client.html" aria-current="page">Python Client Library</a>
+          <a href="../operations-runbook.html">Operations Runbook</a>
+          <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
         </nav>
       </aside>
       <main>
-<h1 id="mvp-scope-tradeoffs-risks-and-open-questions">MVP Scope, Tradeoffs, Risks, and Open Questions</h1>
-<h2 id="mvp-scope">MVP Scope</h2>
-<p>Included:</p>
+<h1 id="python-client-library">Python Client Library</h1>
+<p>The Python client lives under <code>clients/python</code> and is published as the <code>redisstream-coordinator</code> package. Its import namespace is <code>redisstream</code>.</p>
+<p>The first release is sync-first. An asyncio namespace can be added later without changing the coordinator protocol or the Redis Stream command semantics.</p>
+<h2 id="goals">Goals</h2>
 <ul>
-<li>Coordinator API control plane</li>
-<li>Coordinator Admin API create/scale</li>
-<li>Coordinator heartbeat API</li>
-<li>Basic Auth admin/password access control</li>
-<li>Monitoring API</li>
-<li>member heartbeat record</li>
-<li>member scale-out/scale-in sequence</li>
-<li>idle member expiration and cleanup</li>
-<li>group epoch, assignment epoch, member epoch</li>
-<li>server-side sticky partition assignment</li>
-<li>target assignment store</li>
-<li>current assignment reporting</li>
-<li>revoke before assign dependency handling</li>
-<li>resharding</li>
-<li>coordinator/member metrics</li>
-<li>coordinator Docker image path and external-Redis Compose profiles</li>
-<li>open source contribution, testing, security, release, and operations documentation</li>
+<li>Provide Python producer and consumer APIs that are wire-compatible with the coordinator server and the JVM starter.</li>
+<li>Keep official configuration small: coordinator base URL, Redis URL or Redis client, and auth token/login provider.</li>
+<li>Make listener concurrency behave like the JVM starter: <code>concurrency=N</code> creates N logical coordinator members.</li>
+<li>Keep message processing at-least-once and application-owned.</li>
+<li>Do not add coordinator endpoints only for Python. The library uses the existing <code>/coord/v1</code> APIs.</li>
 </ul>
-<p>Excluded:</p>
+<h2 id="public-api">Public API</h2>
+<pre><code class="language-python">from redisstream import RedisStreamCoordinator
+
+app = RedisStreamCoordinator(
+    coordinator_base_url=&quot;https://coordinator.example.com&quot;,
+    redis_url=&quot;redis://localhost:6379&quot;,
+)
+
+@app.stream_listener(
+    stream_prefix=&quot;create-order&quot;,
+    group_id=&quot;demo-workers&quot;,
+    concurrency=4,
+    poll_batch_size=10,
+)
+def handle(message):
+    # Run business processing first, then explicitly commit the Redis Stream record.
+    message.ack()
+
+publisher = app.publisher(&quot;create-order&quot;, &quot;demo-workers&quot;)
+publisher.publish(&quot;order-123&quot;, {&quot;eventId&quot;: &quot;evt-1&quot;, &quot;payload&quot;: &quot;...&quot;})
+
+app.start()
+</code></pre>
+<p>The package exports:</p>
 <ul>
-<li>Kafka protocol compatibility</li>
-<li>member application에 embedded된 coordinator mode</li>
-<li>Redis Stream message processing, handler execution, retry, DLQ</li>
-<li>pending recovery and idempotency marker implementation</li>
-<li>multiple concurrent migrations per stream prefix</li>
-<li>hosted admin control plane</li>
-<li>hot shard auto split</li>
-<li>Redis Cluster resharding automation</li>
-<li>single-processing guarantees</li>
-<li>producer global deduplication and cross-shard/cross-version event id deduplication</li>
+<li><code>RedisStreamCoordinator</code></li>
+<li><code>stream_listener</code></li>
+<li><code>CoordinatorClient</code></li>
+<li><code>ManagedConsumer</code></li>
+<li><code>RedisStreamMessage</code></li>
+<li><code>RedisStreamPublisher</code></li>
+<li><code>ProducerRoutingCache</code></li>
 </ul>
-<h2 id="tradeoffs">Tradeoffs</h2>
-<h3 id="coordinator-managed-assignment">Coordinator-Managed Assignment</h3>
-<p>Benefits:</p>
+<h2 id="consumer-contract">Consumer Contract</h2>
+<p><code>concurrency=N</code> creates N logical members in one Python process. The base member id is derived from <code>POD_IP</code>, hostname, then UUID fallback. For <code>N &gt; 1</code>, the runtime appends <code>-m0</code>, <code>-m1</code>, and so on. Each logical member has its own heartbeat state, Redis consumer name, assignment state, and polling loop.</p>
+<p>The heartbeat state machine follows the same statuses as the JVM starter:</p>
+<div class="table-scroll"><table class="responsive-table">
+<thead>
+<tr>
+<th>Status</th>
+<th>Python client behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td data-label="Status"><code>OK</code></td>
+<td data-label="Python client behavior">Replace local assigned/pending shard view and allow reads from assigned shards.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>RETRY</code></td>
+<td data-label="Python client behavior">Keep local state and retry later.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>SYNC_METADATA</code></td>
+<td data-label="Python client behavior">Correct local metadata version and do not start newly assigned shards yet.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>REVOKE_PENDING</code></td>
+<td data-label="Python client behavior">Continue drain/revoke behavior and do not start newly assigned shards yet.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>UNKNOWN_MEMBER_ID</code></td>
+<td data-label="Python client behavior">Stop local ownership and rejoin with <code>memberEpoch=0</code>.</td>
+</tr>
+<tr>
+<td data-label="Status"><code>FENCED_MEMBER_EPOCH</code></td>
+<td data-label="Python client behavior">Stop local ownership and rejoin with <code>memberEpoch=0</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<p>The built-in polling adapter uses Redis <code>XREADGROUP</code>. When one logical member owns multiple shards, polling rotates shard order so later shard indexes do not starve.</p>
+<p>The Python client does not auto-commit. Handler code explicitly calls:</p>
 <ul>
-<li>운영자가 target/current assignment를 한 곳에서 확인할 수 있다.</li>
-<li>revoke before assign 순서를 coordinator가 강제한다.</li>
-<li>member expiration과 fencing을 명확히 모델링할 수 있다.</li>
-<li>member client logic이 단순해진다.</li>
+<li><code>message.ack()</code> for <code>XACK</code></li>
+<li><code>message.ack_del()</code> for <code>XACKDEL</code></li>
+<li><code>message.nack()</code> for <code>XNACK</code></li>
 </ul>
-<p>Costs:</p>
+<p><code>XACKDEL</code> and <code>XNACK</code> are allowed only when Redis command support is detected. Unsupported commands raise a clear client exception.</p>
+<p><code>RedisStreamCoordinator.start()</code> starts registered listeners in background threads. <code>stop()</code> asks every logical member to stop and joins the listener threads. Invalid listener settings such as empty stream prefix, empty group id, zero concurrency, or non-positive poll batch size fail during configuration construction.</p>
+<h2 id="producer-contract">Producer Contract</h2>
+<p><code>ProducerRoutingCache</code> loads coordinator routing metadata and caches it for a bounded TTL. Routing uses the same Murmur3 32-bit hash and modulo-bias removal strategy as the JVM starter, so the same partition key and shard count map to the same shard in JVM and Python clients.</p>
+<p>Routing metadata is validated before it is used. If the coordinator returns a different stream prefix or consumer group, a negative shard count, or a positive shard count with no shard list, the producer fails fast instead of publishing to an ambiguous target.</p>
+<p><code>RedisStreamPublisher.publish(...)</code> uses:</p>
 <ul>
-<li>coordinator state store가 운영상 중요해진다.</li>
-<li>coordinator bug는 group 전체 assignment에 영향을 줄 수 있다.</li>
+<li>partition-key based route selection</li>
+<li><code>XADD NOMKSTREAM</code></li>
+<li>configurable <code>MAXLEN</code> and approximate trimming</li>
+<li>fail-closed behavior when routing has <code>targetShardCount=0</code> or no shard list</li>
+<li>cache invalidation and refresh retry when a stale route write fails</li>
 </ul>
-<h3 id="coordinator-api-control-plane">Coordinator API Control Plane</h3>
-<p>Benefits:</p>
-<ul>
-<li>shard count와 migration mutation 경로가 하나로 고정된다.</li>
-<li>member application YAML이 group metadata의 source of truth가 되지 않는다.</li>
-<li>운영자가 API와 Redis metadata에서 group 상태를 일관되게 확인할 수 있다.</li>
-</ul>
-<p>Costs:</p>
-<ul>
-<li>coordinator API 배포와 인증/인가를 별도로 운영해야 한다.</li>
-<li>coordinator API 장애 시 신규 mutation과 heartbeat reconciliation이 지연된다.</li>
-<li>coordinator API 장애 중에는 신규 heartbeat assignment 전달이 지연된다.</li>
-</ul>
-<h2 id="risks">Risks</h2>
-<ul>
-<li>target assignment write와 member current assignment 처리 순서가 꼬이면 stale member가 잘못된 owner로 남을 수 있다. Coordinator는 heartbeat ownership report를 target/current assignment 기준으로 검증하고 unauthorized ownership report를 fencing한다.</li>
-<li>member lease TTL이 너무 짧으면 일시적 네트워크 지연에도 EXPIRED 처리가 발생할 수 있다.</li>
-<li>Redis outage 시 coordinator control plane, stream data plane, optional provisioning이 영향받는다.</li>
-<li>assignment state가 손상되면 수동 복구 runbook이 필요하다.</li>
-<li>shard count migration 중 old/new key ordering이 깨질 수 있다.</li>
-<li>shard scale-out/in 중 producer가 같은 event id를 old routing metadata와 new routing metadata로 각각 publish하면 duplicate message가 발생할 수 있다. 중복에 민감한 workload는 scale 전 producer quiescence가 필요하다.</li>
-<li>여러 비즈니스 side effect를 Redis Stream ACK와 하나의 원자적 transaction으로 묶을 수 없으므로 단일 처리 보장은 프로젝트 보장으로 제공하지 않는다.</li>
-<li>public Docker image release에는 version tag, compatibility note, and smoke result가 함께 공개되어야 한다.</li>
-</ul>
-<h2 id="processing-guarantee-boundary">Processing Guarantee Boundary</h2>
-<p>기본 처리 보장은 at-least-once이다.</p>
-<p>Included scope:</p>
-<ul>
-<li>coordinator <code>memberEpoch</code> / <code>assignmentEpoch</code> 기반 stale owner fencing</li>
-<li>revoke-before-assign handoff</li>
-<li>pending recovery가 가능한 Redis Stream consumer group 사용</li>
-<li>duplicate-tolerant application 설계를 위한 shard/progress visibility</li>
-</ul>
-<p>Excluded scope:</p>
-<ul>
-<li>single delivery</li>
-<li>single handler invocation</li>
-<li>single business side effects</li>
-<li>producer global deduplication</li>
-<li>shard scale 중 old/new routing metadata를 가로지르는 global event id deduplication</li>
-</ul>
-<h2 id="maintainability-improvements">Maintainability Improvements</h2>
-<ul>
-<li>coordinator와 support module 간 compatibility는 <code>protocolVersion</code>으로 관리한다. 호환되지 않는 request/response 변경은 major version bump로 처리하고, optional field 추가만 같은 version에서 허용한다. 상세 정책은 <a href="11-versioning-compatibility.html"><code>11-versioning-compatibility.md</code></a>에서 관리한다.</li>
-<li>coordinator event loop에는 invariant checker를 둔다. target assignment 중복 owner, missing owner, stale member epoch을 감지하면 metric과 structured log를 남긴다.</li>
-<li><code>EXPIRED</code> member와 migration metadata는 삭제하지 않고 장기간 유지한다. 정리가 필요하면 별도 운영 작업으로 다룬다.</li>
-<li>Admin API mutation은 audit log를 필수로 남긴다. 운영자가 누가 언제 group metadata를 바꿨는지 추적할 수 있어야 한다.</li>
-<li>state transition, sticky assignment, heartbeat assignment deduplication은 table-driven test와 golden JSON fixture로 관리한다.</li>
-<li>runbook은 최소 세 가지를 제공한다: coordinator API unavailable, migration drain 지연, assignment invariant violation. Current runbook lives at <a href="../operations-runbook.html"><code>../operations-runbook.md</code></a>.</li>
-</ul>
-<h2 id="open-questions">Open Questions</h2>
-<ul>
-<li>pod IP context 기반 member id를 유지할지, coordinator가 registration ack와 함께 부여할지?</li>
-<li>shard 분배 가중치는 MVP에서 동일 가중치로 고정할지?</li>
-<li>Metadata update에 별도 audit/history stream을 둘지?</li>
-<li>KIP-848과 다른 잔여 gap은 <a href="08-kip848-implementation-coverage.html"><code>08-kip848-implementation-coverage.md</code></a>의 <code>Residual Gaps To Decide</code>에서 관리한다.</li>
-</ul>
-<h2 id="decision-needed">Decision Needed</h2>
-<ul>
-<li>MVP coordinator deployment: direct Coordinator API control plane</li>
-<li>MVP assignment: sticky partition 고정</li>
-<li>MVP member identity: pod-IP-context-derived member id</li>
-<li>MVP state store: Redis metadata hash + JSON aggregate + storeRevision CAS</li>
-<li>MVP access control: Basic Auth <code>admin/password</code></li>
-<li>MVP rebalance style: coordinator-driven incremental reconciliation</li>
-<li>MVP shard count source of truth: Coordinator Admin API로 생성/변경된 coordinator metadata</li>
-<li>MVP consumer concurrency source of truth: consumer deployment 또는 listener configuration. coordinator는 heartbeat로 들어온 logical member를 관찰한다.</li>
-<li>MVP coordinator deployment artifact: Java 24 Docker image plus Spring Boot jar</li>
-</ul>
+<p>Producers do not heartbeat. Routing refresh interval and publish retry bound propagation delay after shard scale-in/out.</p>
+<h2 id="processing-guarantee">Processing Guarantee</h2>
+<p>The Python library follows the project baseline: at-least-once processing. It does not provide exactly-once side effects, global event-id deduplication, DLQ policy, or handler retry policy. Applications own idempotency, deduplication, retry, DLQ, and compensation.</p>
       </main>
     </div>
   </body>

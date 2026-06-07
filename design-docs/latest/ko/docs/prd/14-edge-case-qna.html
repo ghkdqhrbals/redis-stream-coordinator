@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Edge Case Q&amp;A</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      :root {
+        color-scheme: light;
+        --fg: #172026;
+        --muted: #5f6c75;
+        --border: #d6dde3;
+        --panel: #f7f9fb;
+        --accent: #1428a0;
+        --code: #eef3f7;
+        --sidebar: #fbfcfd;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: clamp(0.875rem, 0.84rem + 0.12vw, 0.95rem);
+        color: var(--fg);
+        background: #ffffff;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .topbar {
+        width: min(100%, 1360px);
+        margin: 0 auto;
+        padding: 12px clamp(14px, 2.2vw, 24px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .site-title {
+        color: var(--fg);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .site-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+      .language-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+      .language-switch a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .language-switch a[aria-current="true"] {
+        color: var(--fg);
+        font-weight: 700;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: clamp(18px, 3vw, 32px);
+        width: min(100%, 1360px);
+        margin: 0 auto;
+        padding: clamp(14px, 2.6vw, 24px);
+        align-items: start;
+      }
+      .sidebar {
+        position: sticky;
+        top: 12px;
+        align-self: start;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding: 4px 12px 12px 0;
+        border-right: 1px solid var(--border);
+        background: var(--sidebar);
+      }
+      .doc-index {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 8px;
+      }
+      .doc-index a {
+        color: var(--accent);
+        display: block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-decoration: none;
+        overflow-wrap: normal;
+      }
+      .doc-index a:hover,
+      .doc-index a[aria-current="page"] {
+        background: var(--code);
+      }
+      .index-title {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      main {
+        min-width: 0;
+        max-width: 100%;
+        padding-bottom: 56px;
+      }
+      h1, h2, h3, h4 {
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      h1 {
+        font-size: clamp(1.45rem, 1.2rem + 0.9vw, 1.9rem);
+        margin-top: 0;
+        margin-bottom: 0.8rem;
+      }
+      h2 {
+        font-size: 1.3rem;
+        margin-top: 1.65rem;
+        margin-bottom: 0.65rem;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.45rem;
+      }
+      h4 {
+        font-size: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 0.4rem;
+      }
+      p, ul, ol {
+        margin-top: 0.55rem;
+        margin-bottom: 0.75rem;
+      }
+      a {
+        color: var(--accent);
+        overflow-wrap: anywhere;
+      }
+      .table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.8rem 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .responsive-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 0.93em;
+        table-layout: auto;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: top;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      .responsive-table th,
+      .responsive-table td {
+        white-space: nowrap;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--code);
+        border-radius: 4px;
+        padding: 0.1rem 0.25rem;
+        overflow-wrap: anywhere;
+      }
+      .responsive-table code {
+        white-space: nowrap;
+        overflow-wrap: normal;
+      }
+      pre {
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--code);
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.93em;
+      }
+      pre code {
+        padding: 0;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 0.75rem 0;
+        padding: 0.25rem 0.8rem;
+        border-left: 4px solid var(--accent);
+        color: var(--muted);
+        background: var(--panel);
+      }
+      img, svg {
+        max-width: 100%;
+        height: auto;
+      }
+      @media (max-width: 720px) {
+        .layout {
+          display: block;
+        }
+        .topbar {
+          display: block;
+        }
+        .language-switch {
+          margin-top: 8px;
+        }
+        .sidebar {
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 18px;
+          padding: 0 0 14px;
+        }
+        .doc-index {
+          max-height: 220px;
+          overflow: auto;
+        }
+        .responsive-table,
+        .responsive-table thead,
+        .responsive-table tbody,
+        .responsive-table tr,
+        .responsive-table th,
+        .responsive-table td {
+          display: block;
+          width: 100%;
+        }
+        .table-scroll {
+          overflow: visible;
+          border: 0;
+          border-radius: 0;
+        }
+        .responsive-table {
+          border: 1px solid var(--border);
+        }
+        .responsive-table thead {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .responsive-table tr + tr {
+          border-top: 2px solid var(--border);
+        }
+        .responsive-table td {
+          display: grid;
+          grid-template-columns: minmax(6.75rem, 32%) minmax(0, 1fr);
+          gap: 8px;
+          border: 0;
+          border-top: 1px solid var(--border);
+          min-width: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+        .responsive-table td:first-child {
+          border-top: 0;
+        }
+        .responsive-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          font-weight: 600;
+          overflow-wrap: anywhere;
+        }
+        pre {
+          white-space: pre-wrap;
+        }
+        pre code {
+          white-space: inherit;
+        }
+      }
+      @media (max-width: 480px) {
+        .wrap {
+          padding-top: 12px;
+          padding-bottom: 12px;
+        }
+        nav {
+          display: block;
+        }
+        nav a {
+          display: block;
+          margin-bottom: 8px;
+        }
+        .responsive-table td {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+      }
+      </style>
+
+    <script>
+      (() => {
+        const targetLanguage = new URLSearchParams(window.location.search).get("tl");
+        if (targetLanguage === "en") {
+          const target = new URL("../../../docs/prd/14-edge-case-qna.html", window.location.href);
+          target.hash = window.location.hash;
+          window.location.replace(target);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <div>
+          <div class="site-title">Redis Stream Coordinator</div>
+          <div class="site-subtitle">Design docs</div>
+        </div>
+        <div class="language-switch" aria-label="Language switch"><a href="../../../docs/prd/14-edge-case-qna.html">English</a><span aria-hidden="true">/</span><a href="14-edge-case-qna.html" aria-current="true">한국어</a></div>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Design document index">
+        <div class="index-title">Pages</div>
+        <nav class="doc-index" aria-label="Design document navigation">
+          <a href="../PRD.html">Redis Stream Coordinator Design</a>
+          <a href="01-context-goals.html">Context, Goals, Non-Goals</a>
+          <a href="02-coordinator-architecture.html">Coordinator Architecture</a>
+          <a href="03-group-assignment-model.html">Group Metadata and Assignment Model</a>
+          <a href="04-resharding-routing.html">리샤딩, 라우팅, Admin API</a>
+          <a href="05-processing-reliability.html">Member Data-Plane Boundary</a>
+          <a href="06-data-config-observability.html">Coordinator Data, Configuration, and Observability</a>
+          <a href="07-mvp-risks-open-questions.html">MVP Scope, Tradeoffs, Risks, and Open Questions</a>
+          <a href="08-kip848-implementation-coverage.html">KIP-848 Implementation Coverage</a>
+          <a href="09-api-endpoints.html">Coordinator API Endpoints</a>
+          <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
+          <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
+          <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html" aria-current="page">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
+          <a href="../operations-runbook.html">운영 Runbook</a>
+          <a href="../testing.html">테스트 가이드</a>
+          <a href="../../api.html">API Reference</a>
+        </nav>
+      </aside>
+      <main>
+<h1 id="edge-case-qa">Edge Case Q&amp;A</h1>
+<p>이 문서는 운영 중 자주 나오는 엣지케이스를 Q&amp;A 형식으로 모아둔다. 상세 state-machine 규칙은 <a href="12-failure-modes-edge-cases.html">Failure Modes and Edge Cases</a>에 있고, 이 문서는 빠르게 상황별 판단을 확인하기 위한 페이지이다.</p>
+<h2 id="coordinator">Coordinator 가용성</h2>
+<h3 id="q-coordinator">Q. Coordinator가 짧게 사라지면 어떻게 되나?</h3>
+<p>Consumer는 local assignment lease가 유효한 동안만 기존 assigned shard를 계속 처리한다. Producer는 routing cache lease가 유효한 동안만 cached route로 publish한다. Lease가 만료되면 stale ownership 또는 무기한 stale routing을 쓰지 않고 fail closed한다.</p>
+<h3 id="q-coordinator-crash-rolling-update-pod">Q. Coordinator crash 또는 rolling update 뒤 새 pod가 뜨면 어디서 이어가나?</h3>
+<p>새 pod는 이전 stack frame을 이어받지 않는다. Redis에 기록된 group metadata key를 load하고, mutation 전 Redis mutex를 획득한 뒤, metadata에 기록된 workflow state만 advance한다.</p>
+<h3 id="q-rolling-update-coordinator-pod-2">Q. Rolling update 중 coordinator pod가 순간적으로 2개 떠도 안전한가?</h3>
+<p>두 pod 모두 같은 Redis mutex와 <code>storeRevision</code> compare-and-set을 사용한다. 먼저 commit한 pod의 write가 저장되고, 늦은 pod는 reload 후 retry하거나 retryable conflict를 반환한다. 사용자가 직접 single-active pod를 보장해야 하는 구조는 아니다.</p>
+<h3 id="q-old-pod-traffic">Q. 종료 중인 old pod가 traffic을 받으면 어떻게 되나?</h3>
+<p>Terminating mode 이후 신규 critical-section 작업은 retryable coordinator-terminating error를 반환한다. 이미 local gate를 통과한 짧은 in-flight critical section은 Redis write와 mutex release를 완료할 수 있도록 끝까지 실행된다.</p>
+<h2 id="member-rebalance">Member 만료와 Rebalance</h2>
+<h3 id="q-consumer-member-heartbeat">Q. 모든 consumer member의 heartbeat가 끊기면 어떻게 되나?</h3>
+<p>Event loop가 member lease TTL 이후 member를 <code>EXPIRED</code>로 표시하고, metadata/group epoch를 증가시키고, target assignment를 비운 뒤 group을 <code>EMPTY</code>로 바꾼다. Expired member record는 관측성과 stale heartbeat fencing을 위해 잠시 남고, 이후 stale-member cleanup으로 제거될 수 있다.</p>
+<h3 id="q-owner-revoke-shard-owner">Q. 이전 owner가 revoke하기 전에 shard가 새 owner에게 넘어갈 수 있나?</h3>
+<p>이전 owner가 live 상태이면 안 된다. Coordinator는 이전 owner가 <code>REVOKED</code>를 보고하거나, member lease TTL로 expire되거나, rebalance timeout으로 fence되기 전까지 target owner에게 해당 shard를 <code>pending</code>으로만 내려준다.</p>
+<h3 id="q-consumer-drain-coordinator">Q. Consumer가 DRAIN을 받은 뒤 coordinator가 죽으면 다시 읽어도 되나?</h3>
+<p>안 된다. Shard가 local revoking state에 들어가면 heartbeat가 실패한다는 이유만으로 read를 재개하면 안 된다. Consumer는 local in-flight work를 끝내고 <code>revokingShards</code>로 heartbeat retry를 계속하다가 coordinator가 새 assignment를 내려줄 때만 다시 읽을 수 있다.</p>
+<h3 id="q-consumer-draining-shard">Q. Consumer가 draining 중 죽으면 shard가 영원히 막히나?</h3>
+<p>아니다. Coordinator는 lease 또는 rebalance timeout 이후 해당 member를 expire/fence한다. 그 뒤 recorded target assignment 기준으로 shard를 assign할 수 있다. 이 경우 duplicate processing은 가능하며 at-least-once 보장 경계에 포함된다.</p>
+<h2 id="scale-in-shard">Scale-In과 제거 대상 Shard</h2>
+<h3 id="q-live-member-drain-targetshardcount0">Q. Live member가 없는 drain 문제는 <code>targetShardCount=0</code>만의 문제인가?</h3>
+<p>아니다. 모든 scale-in에 적용된다. 예를 들어 <code>10 -&gt; 1</code> scale-in에서도 모든 live member가 revoke ack 전에 expire되면 같은 문제가 발생한다. Coordinator는 heartbeat 대상이 없다는 이유만으로 migration을 <code>ACTIVE</code>에 고정하면 안 된다.</p>
+<h3 id="q-scale-in-member-expire-coordinator">Q. Scale-in 중 모든 member가 expire되면 coordinator는 무엇을 하나?</h3>
+<p>Revoke ack를 보낼 live member가 없으므로 consumer-level revoke wait를 생략한다. Migration은 Redis-level drain check로 넘어가고, 제거 대상 shard stream의 모든 Redis consumer group이 <code>pending=0</code>과 known <code>lag=0</code>을 보고할 때만 완료된다.</p>
+<h3 id="q-live-owner-shard-retired">Q. Live owner가 없으면 제거 대상 shard를 바로 retired 처리해도 되나?</h3>
+<p>안 된다. Live owner가 없다는 것은 heartbeat로 revoke를 받을 대상이 없다는 뜻일 뿐, Redis Stream data가 모두 drain됐다는 증거는 아니다. Removed shard는 Redis consumer-group evidence가 pending entry와 remaining known lag가 없음을 증명한 뒤에만 retired 처리한다.</p>
+<h3 id="q-redis-shard-group-lagnull">Q. Redis가 제거 대상 shard group에 대해 <code>lag=null</code>을 반환하면?</h3>
+<p>Coordinator는 drain 완료가 증명되지 않았다고 보고 migration을 <code>DRAINING</code>에 유지한다. 자동 완료를 기대하려면 <code>ENTRIESREAD</code> tracking을 보존하고, Redis가 lag를 계산할 수 없게 만드는 delete/trim 패턴을 피해야 한다.</p>
+<h3 id="q-scale-in-shard">Q. Scale-in 대상 shard에 남아 있던 메시지는 어떻게 되나?</h3>
+<p>Coordinator가 다른 shard stream으로 메시지를 이동하지 않는다. Live consumer가 있으면 기존 consumer가 해당 record를 drain한다. Live consumer가 없으면 coordinator는 Redis group lag와 pending count가 제거 대상 stream이 drain됐음을 증명할 때까지 기다린다.</p>
+<h3 id="q-targetshardcount0">Q. <code>targetShardCount=0</code>이면 무엇이 달라지나?</h3>
+<p>Producer routing은 결국 <code>shardCount=0</code>과 빈 shard list를 반환한다. 하지만 removed shard stream retired 판단은 다른 scale-in과 동일하게 Redis-level drain check를 통과해야 한다.</p>
+<h2 id="producer-routing">Producer Routing</h2>
+<h3 id="q-producer-heartbeat">Q. Producer도 heartbeat를 보내나?</h3>
+<p>아니다. Producer routing은 pull 기반이다. Producer는 coordinator에서 routing metadata를 refresh하고 bounded lease 동안 cache한다.</p>
+<h3 id="q-python-producerconsumer-routing-heartbeat">Q. Python producer/consumer는 다른 routing 또는 heartbeat 규칙을 따르는가?</h3>
+<p>아니다. Python client는 JVM starter와 동일한 coordinator heartbeat status, listener concurrency의 logical-member split, Murmur3 32-bit routing, modulo-bias 제거, <code>XADD NOMKSTREAM</code> stale-route 보호를 따른다.</p>
+<h3 id="q-scale-in-producer-stale-routing">Q. Scale-in 이후 producer가 stale routing을 들고 있으면?</h3>
+<p>Publisher는 Redis <code>XADD NOMKSTREAM</code>을 사용한다. 제거된 stream key를 stale route로 쓰려고 하면 Redis가 stream key를 재생성하지 않고 실패한다. 이때 routing cache를 invalidate하고 coordinator에서 새 routing을 받은 뒤 retry한다.</p>
+<h3 id="q-partition-key-resharding-shard">Q. 같은 partition key가 resharding 이후 다른 shard로 갈 수 있나?</h3>
+<p>그렇다. Routing determinism은 같은 routing protocol, 같은 shard count, 같은 partition key 안에서만 보장된다. Shard count가 바뀌면 routing domain이 바뀐다.</p>
+<h3 id="q-resharding-event-id-shard">Q. Resharding 중 같은 event id가 두 shard에 쓰일 수 있나?</h3>
+<p>그럴 수 있다. Producer는 shard-level idempotent XADD를 제공할 수 있지만 old/new shard layout 전체에 걸친 global event-id deduplication은 제공하지 않는다. 중복에 민감한 workload는 shard count 변경 전 producer를 멈추고 in-flight publish retry를 drain해야 한다.</p>
+<h2 id="metadata-version-correction">Metadata와 Version Correction</h2>
+<h3 id="q-client-redis-metadata-version">Q. Client가 Redis보다 높은 metadata version을 보고하면?</h3>
+<p>Redis가 source of truth이다. Coordinator는 metadata correction round를 시작하고, consumer가 Redis에 기록된 metadata version으로 heartbeat할 때까지 <code>SYNC_METADATA</code>를 반환한다.</p>
+<h3 id="q-coordinator-consumer-report-redis-metadata">Q. Coordinator가 consumer report로 Redis metadata를 재구성하나?</h3>
+<p>아니다. Consumer report는 권위 있는 source of truth가 아니다. Coordinator는 reconciliation과 fencing에 consumer report를 사용하지만, stale client report로 metadata를 재구성하지 않는다.</p>
+<h3 id="q-redis-metadata">Q. Redis metadata가 삭제되거나 깨지면?</h3>
+<p>Coordinator는 fail closed한다. Monitoring projection, consumer report, producer cache에서 source-of-truth state를 추론해 복구하지 않는다.</p>
+<h2 id="processing-guarantee">Processing Guarantee</h2>
+<h3 id="q-exactly-once-processing">Q. Exactly-once processing을 제공하나?</h3>
+<p>아니다. 기본 보장은 at-least-once이다. Redis Stream ACK와 임의의 business side effect, 예를 들어 DB write, Redis write, HTTP call, 외부 API 호출을 하나의 원자적 transaction으로 묶을 수 없기 때문이다.</p>
+<h3 id="q-idempotency-duplicate-side-effect">Q. Idempotency와 duplicate side-effect 방지는 누가 담당하나?</h3>
+<p>애플리케이션이 담당한다. Domain idempotency key, DB unique constraint, deduplication table, compensation, application-specific retry policy를 사용해야 한다.</p>
+<h3 id="q-coordinator-redis-stream-ackdelete">Q. Coordinator가 Redis Stream 메시지를 읽거나 ack/delete하나?</h3>
+<p>아니다. Coordinator는 control plane이다. Message read, handler 실행, ack/ack-delete/nack, retry, DLQ, business idempotency는 member data plane 책임이다.</p>
+      </main>
+    </div>
+  </body>
+</html>

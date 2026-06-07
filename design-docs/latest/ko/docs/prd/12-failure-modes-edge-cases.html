@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html" aria-current="page">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
           <a href="../../api.html">API Reference</a>
@@ -589,6 +592,10 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Expected outcome">Coordinator는 member lease TTL 또는 rebalance timeout 이후 A를 expire/fence하고 reassignment를 허용한다. Duplicate processing은 가능하며 at-least-once 범위이다</td>
 </tr>
 <tr>
+<td data-label="Failure point">Scale-in 중 live member가 모두 expire됨</td>
+<td data-label="Expected outcome">revoke ack를 보낼 heartbeat 대상이 없다. Coordinator는 migration을 Redis-level drain check로 진행하고, 제거 대상 shard의 모든 Redis group이 <code>pending=0</code>과 known <code>lag=0</code>을 보고할 때만 완료한다</td>
+</tr>
+<tr>
 <td data-label="Failure point">A가 DRAIN 후 local revoking memory 없이 재시작</td>
 <td data-label="Expected outcome">A는 <code>memberEpoch=0</code>으로 rejoin한다. Coordinator는 Redis에 기록된 target/current state 기준으로 rejoin을 검증하고, 필요하면 fencing 또는 full reconciliation을 요구한다</td>
 </tr>
@@ -646,6 +653,14 @@ coordinator assigns shard S to the new target only after release is accepted
 <pre><code class="language-text">1 coordinator -&gt; 0 reachable coordinators -&gt; 1 coordinator
 </code></pre>
 <p>Coordinator는 Kubernetes readiness, service endpoint propagation, external load balancer를 직접 제어하지 않는다. Coordinator가 소유하는 것은 process-local terminating state와 Redis critical section이다.</p>
+<p>구현 guardrail:</p>
+<ul>
+<li><code>CoordinatorShutdownGate</code>는 Spring context shutdown 시 terminating mode로 진입한다.</li>
+<li><code>@CriticalSection</code> service method는 local monitor를 잡은 뒤 shutdown gate를 통과하고, 이후 Redis mutex를 획득한다.</li>
+<li>terminating mode 이후 들어오는 heartbeat/admin mutation은 <code>503 COORDINATOR_TERMINATING</code>을 반환하고 다른 coordinator instance로 retry되도록 한다.</li>
+<li>이미 진입한 짧은 critical section은 Redis write와 mutex release를 완료할 수 있도록 끝까지 실행한다.</li>
+<li>Event-loop tick은 terminating mode 이후 state transition scheduling을 중단한다.</li>
+</ul>
 <div class="table-scroll"><table class="responsive-table">
 <thead>
 <tr>
@@ -758,6 +773,12 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Consumer 동작">coordinator가 반환하지 않은 shard 중단</td>
 </tr>
 <tr>
+<td data-label="Edge case">Coordinator가 <code>UNKNOWN_MEMBER_ID</code> 반환</td>
+<td data-label="위험">Consumer가 stale epoch을 계속 보내 assignment를 받지 못함</td>
+<td data-label="Coordinator 동작">stale heartbeat는 ownership 없이 거절하고, 같은 member가 <code>memberEpoch=0</code>으로 다시 오면 rejoin으로 수락</td>
+<td data-label="Consumer 동작">ownership/revoking state를 비우고 <code>memberEpoch=0</code> full heartbeat 전송, 이후 assigned shard만 시작</td>
+</tr>
+<tr>
 <td data-label="Edge case">consumer가 unassigned shard를 owned로 보고</td>
 <td data-label="위험">split ownership</td>
 <td data-label="Coordinator 동작">stale report 거절 또는 fence</td>
@@ -825,6 +846,11 @@ coordinator assigns shard S to the new target only after release is accepted
 <td data-label="Producer 동작">refresh 전까지 cached route 사용. refresh interval/cache TTL이 전파 지연 상한</td>
 </tr>
 <tr>
+<td data-label="Edge case">coordinator가 shard를 scale-in했지만 producer routing이 stale</td>
+<td data-label="위험">producer가 제거된 shard를 target으로 선택할 수 있음</td>
+<td data-label="Producer 동작">producer <code>XADD</code>는 <code>NOMKSTREAM</code>을 사용한다. 제거된 shard key가 없으면 stream을 재생성하지 않고 실패하며 routing cache를 invalidate하고, 기본 두 번째 attempt가 routing을 refresh한 뒤 retry한다</td>
+</tr>
+<tr>
 <td data-label="Edge case">낮은 <code>metadataVersion</code> 응답</td>
 <td data-label="위험">Redis metadata rollback 또는 stale coordinator response</td>
 <td data-label="Producer 동작">coordinator가 명시적으로 current routing metadata를 반환할 때만 downgrade한다</td>
@@ -837,7 +863,7 @@ coordinator assigns shard S to the new target only after release is accepted
 <tr>
 <td data-label="Edge case">불확실한 <code>XADD</code> 이후 publish 실패</td>
 <td data-label="위험">retry 시 duplicate record</td>
-<td data-label="Producer 동작">기본 publish attempt는 보수적으로 유지, application event idempotency 필요</td>
+<td data-label="Producer 동작">기본 retry는 refresh 후 1회 재시도이며, application event idempotency 필요</td>
 </tr>
 <tr>
 <td data-label="Edge case">produce 중 shard scale</td>

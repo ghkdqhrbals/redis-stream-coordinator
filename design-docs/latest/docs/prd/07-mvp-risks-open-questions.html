@@ -348,6 +348,9 @@
           <a href="10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
@@ -404,7 +407,7 @@
 <h3 id="admin-api-as-source-of-truth">Admin API as Source of Truth</h3>
 <p>Benefits:</p>
 <ul>
-<li>Shard count, consumer concurrency, and resharding mutations use one path.</li>
+<li>Shard count and resharding mutations use one path.</li>
 <li>Member startup YAML cannot accidentally mutate group metadata.</li>
 <li>Operators can audit every metadata mutation.</li>
 </ul>
@@ -481,7 +484,7 @@
 <li>MVP assignment strategy: sticky partition assignment.</li>
 <li>MVP processing guarantee: at-least-once.</li>
 <li>MVP shard count source of truth: coordinator metadata created or changed through Admin API.</li>
-<li>MVP consumer <code>maxConcurrency</code> source of truth: coordinator consumer concurrency policy.</li>
+<li>MVP consumer concurrency source of truth: consumer deployment or listener configuration. The coordinator observes resulting logical members through heartbeat.</li>
 <li>MVP coordination safety: Redis metadata key, Redis mutex, and store revision compare-and-set.</li>
 <li>MVP metrics ownership: coordinator metrics only for shared ownership/routing/progress state.</li>
 </ul>

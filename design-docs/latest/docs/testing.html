@@ -348,6 +348,9 @@
           <a href="prd/10-redisstream-spring-boot-starter.html">RedisStream Spring Boot Starter and Integration Contract</a>
           <a href="prd/11-versioning-compatibility.html">Versioning and Compatibility Policy</a>
           <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
+          <a href="prd/13-terraform-governance.html">Terraform and GitOps Governance</a>
+          <a href="prd/14-edge-case-qna.html">Edge Case Q&amp;A</a>
+          <a href="prd/15-python-client.html">Python Client Library</a>
           <a href="operations-runbook.html">Operations Runbook</a>
           <a href="testing.html" aria-current="page">Testing Guide</a>
           <a href="../api.html">API Reference</a>
@@ -371,48 +374,15 @@
 python3 .github/scripts/test_docker_distribution.py
 </code></pre>
 <h2 id="redis-integration-tests">Redis Integration Tests</h2>
-<p>Redis integration tests are disabled by default. Start the local Redis Cluster first:</p>
-<pre><code class="language-bash">docker compose up -d
+<p>Redis integration tests are disabled by default. They require an external Redis Cluster:</p>
+<pre><code class="language-bash">export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
+export AWS_REDIS_PASSWORD='your-redis-password'
 </code></pre>
 <p>Then run:</p>
 <pre><code class="language-bash">REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
   --tests '*RedisCoordinatorStateStoreIntegrationTest' \
   --tests '*RedisStreamProvisioningIntegrationTest'
 </code></pre>
-<h2 id="local-end-to-end-smoke">Local End-To-End Smoke</h2>
-<p>Use the no-persistence E2E Redis Cluster when you want to run the coordinator and sample consumer pods locally without touching the default Compose volumes:</p>
-<pre><code class="language-bash">docker compose -f compose.e2e.yaml -p rsc-e2e up -d
-</code></pre>
-<p>Run the coordinator against the E2E cluster:</p>
-<pre><code class="language-bash">COORDINATOR_STORE_TYPE=redis \
-COORDINATOR_STREAMS_PROVISIONING_ENABLED=true \
-SPRING_DATA_REDIS_CLUSTER_NODES=localhost:7101,localhost:7102,localhost:7103 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_ADVERTISED_PORT=7101 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_CONNECT_HOST=127.0.0.1 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_0_CONNECT_PORT=7101 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_1_ADVERTISED_PORT=7102 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_1_CONNECT_HOST=127.0.0.1 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_1_CONNECT_PORT=7102 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_ADVERTISED_PORT=7103 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_CONNECT_HOST=127.0.0.1 \
-COORDINATOR_REDIS_CLUSTER_NODE_MAPPINGS_2_CONNECT_PORT=7103 \
-./gradlew :coordinator-server:bootRun
-</code></pre>
-<p>Create a group, then run two sample consumer pods:</p>
-<pre><code class="language-bash">SERVER_PORT=18081 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
-REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
-  ./gradlew :samples:consumer-pod:bootRun
-
-SERVER_PORT=18082 STREAM_PREFIX=create-order CONSUMER_GROUP_NAME=demo-workers \
-REDIS_CLUSTER_NODE_1=localhost:7101 REDIS_CLUSTER_NODE_2=localhost:7102 REDIS_CLUSTER_NODE_3=localhost:7103 \
-  ./gradlew :samples:consumer-pod:bootRun
-</code></pre>
-<p>The sample exposes:</p>
-<ul>
-<li><code>GET /sample/status</code></li>
-<li><code>GET /sample/events</code></li>
-<li><code>POST /sample/publish</code></li>
-</ul>
 <h2 id="docker-pod-smoke">Docker Pod Smoke</h2>
 <p>Use <code>compose.pods.yaml</code> to run the pod topology against an external Redis Cluster:</p>
 <pre><code class="language-bash">export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
