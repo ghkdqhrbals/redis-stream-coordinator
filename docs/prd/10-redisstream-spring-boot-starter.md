@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`com.redisstream:redisstream-spring-boot-starter` provides the runtime pieces that application developers need to connect to Redis Stream Coordinator.
+`io.github.ghkdqhrbals:redisstream-spring-boot-starter` provides the runtime pieces that application developers need to connect to Redis Stream Coordinator.
 
 The starter intentionally does not hide the processing model. Applications can use the shard lifecycle API directly or opt into the built-in Redis Stream polling adapter.
 

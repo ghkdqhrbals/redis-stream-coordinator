@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.spring) apply false
     alias(libs.plugins.spring.boot) apply false
+    alias(libs.plugins.maven.publish) apply false
 }
 
 tasks.named<org.gradle.api.tasks.wrapper.Wrapper>("wrapper") {
@@ -21,7 +22,7 @@ fun org.gradle.api.Project.ensurePrepareKotlinBuildScriptModelTask() {
 ensurePrepareKotlinBuildScriptModelTask()
 
 subprojects {
-    group = "com.redisstream"
+    group = "io.github.ghkdqhrbals"
     version = providers.gradleProperty("projectVersion").get()
 
     tasks.register("wrapper") {

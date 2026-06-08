@@ -54,7 +54,7 @@ See [Versioning and Compatibility Policy](docs/prd/11-versioning-compatibility.m
 Applications can implement `CoordinatorShardLifecycle` directly and keep ownership of actual Redis Stream reads, handler execution, `XACK`, retry, DLQ, and idempotency.
 
 ```kotlin
-implementation("com.redisstream:redisstream-spring-boot-starter:<version>")
+implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:<version>")
 ```
 
 For the built-in Redis Stream polling adapter, the simplest path is `@StreamConfiguration` plus `@StreamListener`:
@@ -234,6 +234,29 @@ During Spring bean initialization, both managed consumers and stream producers v
 * [Contributing](CONTRIBUTING.md)
 * [Security Policy](SECURITY.md)
 * [Changelog](CHANGELOG.md)
+
+## Maven Central
+
+The public Maven coordinates use the verified GitHub namespace:
+
+```kotlin
+implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.2.0")
+```
+
+Published library artifacts:
+
+* `io.github.ghkdqhrbals:redisstream-core`
+* `io.github.ghkdqhrbals:redisstream-spring-boot-starter`
+
+The Kotlin package namespace remains `com.redisstream`. Maven `groupId` and Kotlin package names do not need to match.
+
+Maven Central publishing is manual through the `Maven Central` GitHub Actions workflow. Required repository secrets:
+
+* `MAVEN_CENTRAL_USERNAME`
+* `MAVEN_CENTRAL_PASSWORD`
+* `MAVEN_CENTRAL_SIGNING_KEY`
+* `MAVEN_CENTRAL_SIGNING_KEY_ID`
+* `MAVEN_CENTRAL_SIGNING_PASSWORD`
 
 ## Docker Quick Start
 

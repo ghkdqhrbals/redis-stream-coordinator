@@ -2,7 +2,7 @@
 
 ## 목표
 
-`com.redisstream:redisstream-spring-boot-starter`는 애플리케이션이 Redis Stream Coordinator에 연결하기 위해 필요한 런타임 구성요소를 제공한다.
+`io.github.ghkdqhrbals:redisstream-spring-boot-starter`는 애플리케이션이 Redis Stream Coordinator에 연결하기 위해 필요한 런타임 구성요소를 제공한다.
 
 Coordinator 서버는 control plane이다. 애플리케이션은 starter를 통해 coordinator group에 join하고, heartbeat를 보내고, shard assignment를 받고, local shard worker를 시작하거나 중지하며, revoke/drain progress를 보고한다.
 
