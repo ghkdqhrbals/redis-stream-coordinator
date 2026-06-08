@@ -1,7 +1,9 @@
 package com.redisstream.producer
 
 import com.redisstream.RedisStreamCommandsTemplate
+import com.redisstream.consumer.CoordinatorClient
 import org.springframework.data.redis.connection.RedisConnectionFactory
+import java.time.Duration
 
 data class PublishedRedisStreamMessage(
     val streamKey: String,
@@ -96,6 +98,93 @@ class RoutingRedisStreamPublisher(
         }
         throw lastError ?: IllegalStateException("Redis Stream publish failed")
     }
+}
+
+class StreamProducer(
+    routingCache: ProducerRoutingCache,
+    writer: RedisStreamWriter,
+    maxAttempts: Int = 2,
+) : RedisStreamPublisher {
+    constructor(
+        properties: ProducerRoutingProperties,
+        client: CoordinatorClient,
+        writer: RedisStreamWriter,
+    ) : this(
+        routingCache = ProducerRoutingCache(
+            streamPrefix = properties.streamPrefix,
+            consumerGroupName = properties.consumerGroupName,
+            client = client,
+            refreshInterval = properties.routingRefreshInterval,
+        ).also { it.validateInitialRouting() },
+        writer = writer,
+        maxAttempts = properties.publishMaxAttempts,
+    )
+
+    constructor(
+        properties: ProducerRoutingProperties,
+        client: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+        xadd: RedisStreamXAddConfiguration = RedisStreamXAddConfiguration(
+            maxLen = properties.xadd.maxLen,
+            approximateTrimming = properties.xadd.approximateTrimming,
+        ),
+    ) : this(
+        properties = properties,
+        client = client,
+        writer = SpringDataRedisStreamWriter(redisConnectionFactory, xadd),
+    )
+
+    constructor(
+        streamPrefix: String,
+        consumerGroupName: String,
+        client: CoordinatorClient,
+        writer: RedisStreamWriter,
+        routingRefreshInterval: Duration = Duration.ofSeconds(30),
+        publishMaxAttempts: Int = 2,
+    ) : this(
+        properties = ProducerRoutingProperties.producer(streamPrefix, consumerGroupName) {
+            this.routingRefreshInterval = routingRefreshInterval
+            this.publishMaxAttempts = publishMaxAttempts
+        },
+        client = client,
+        writer = writer,
+    )
+
+    constructor(
+        streamPrefix: String,
+        consumerGroupName: String,
+        client: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+        routingRefreshInterval: Duration = Duration.ofSeconds(30),
+        publishMaxAttempts: Int = 2,
+        xadd: RedisStreamXAddConfiguration = RedisStreamXAddConfiguration(),
+    ) : this(
+        streamPrefix = streamPrefix,
+        consumerGroupName = consumerGroupName,
+        client = client,
+        writer = SpringDataRedisStreamWriter(redisConnectionFactory, xadd),
+        routingRefreshInterval = routingRefreshInterval,
+        publishMaxAttempts = publishMaxAttempts,
+    )
+
+    private val delegate = RoutingRedisStreamPublisher(
+        routingCache = routingCache,
+        writer = writer,
+        maxAttempts = maxAttempts,
+    )
+
+    /**
+     * Publishes through the configured coordinator-managed routing cache.
+     *
+     * Define one Spring bean per logical stream and inject it with @Qualifier when an application
+     * produces to multiple stream prefixes.
+     */
+    override fun publish(
+        partitionKey: String,
+        fields: Map<String, String>,
+        options: RedisStreamPublishOptions,
+    ): PublishedRedisStreamMessage =
+        delegate.publish(partitionKey, fields, options)
 }
 
 interface RedisStreamWriter {

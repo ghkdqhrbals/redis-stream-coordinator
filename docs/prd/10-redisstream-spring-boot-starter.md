@@ -215,28 +215,36 @@ Producer applications also use only the shared coordinator endpoint in YAML. Rou
 ```kotlin
 @Configuration(proxyBeanMethods = false)
 class OrdersProducerConfiguration {
-    @Bean
-    fun ordersProducerProperties(): ProducerRoutingProperties =
-        ProducerRoutingProperties.producer(
+    @Bean("ordersStreamProducer")
+    fun ordersStreamProducer(
+        coordinatorClient: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+    ): StreamProducer =
+        StreamProducer(
             streamPrefix = "orders",
             consumerGroupName = "orders-consumer",
-        ) {
-            routingRefreshInterval = Duration.ofSeconds(5)
-            publishMaxAttempts = 2
-            xadd.maxLen = 100_000
-            xadd.approximateTrimming = true
-        }
+            client = coordinatorClient,
+            redisConnectionFactory = redisConnectionFactory,
+            routingRefreshInterval = Duration.ofSeconds(5),
+            publishMaxAttempts = 2,
+            xadd = RedisStreamXAddConfiguration(
+                maxLen = 100_000,
+                approximateTrimming = true,
+            ),
+        )
 }
 ```
 
-When a `ProducerRoutingCache` bean is created, it performs the same initial metadata validation and seeds the local routing cache. Missing prefix/group shard metadata is a startup error, not a first-publish error.
+Applications can define multiple `StreamProducer` beans in the same process. Each producer bean owns its own stream prefix, consumer group name, routing cache, XADD options, and publish retry settings. Application services must inject the required producer by bean name or `@Qualifier`; relying on a single unqualified producer is only appropriate for applications with one producer.
+
+When a `StreamProducer` bean is created, it performs the same initial metadata validation and seeds the local routing cache. Missing prefix/group shard metadata is a startup error, not a first-publish error.
 
 The producer does not send heartbeats. Shard additions and shard-count changes reach producers through periodic routing metadata refresh. `routingRefreshInterval` bounds normal propagation delay; the routing cache lease bounds how long a producer may keep publishing without a successful coordinator refresh. If the cache lease expires and refresh still fails, publish must fail closed instead of using stale routing indefinitely.
 
-Applications publish through `RedisStreamPublisher`:
+Applications publish through the selected `StreamProducer`:
 
 ```kotlin
-redisStreamPublisher.publish(
+ordersStreamProducer.publish(
     partitionKey = "order-123",
     fields = mapOf("eventId" to "evt-1", "payload" to "..."),
 )

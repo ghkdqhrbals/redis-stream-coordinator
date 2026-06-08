@@ -1,6 +1,7 @@
 package com.redisstream.samples.publisherpod
 
-import com.redisstream.producer.RedisStreamPublisher
+import com.redisstream.producer.StreamProducer
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.http.HttpStatus
 import org.springframework.scheduling.annotation.Scheduled
@@ -101,7 +102,8 @@ class PublisherPodState {
 @Component
 class ScheduledSamplePublisher(
     private val properties: PublisherPodProperties,
-    private val publisher: RedisStreamPublisher,
+    @Qualifier("sampleStreamProducer")
+    private val publisher: StreamProducer,
     private val state: PublisherPodState,
 ) {
     private val sequence = AtomicLong()
@@ -146,7 +148,8 @@ class ScheduledSamplePublisher(
 @RequestMapping("/sample")
 class PublisherPodController(
     private val properties: PublisherPodProperties,
-    private val publisher: RedisStreamPublisher,
+    @Qualifier("sampleStreamProducer")
+    private val publisher: StreamProducer,
     private val state: PublisherPodState,
 ) {
     @GetMapping("/status")

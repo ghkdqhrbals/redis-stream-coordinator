@@ -10,6 +10,8 @@ import com.redisstream.consumer.ProducerRoutingShard
 import org.mockito.Mockito
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -92,7 +94,32 @@ class ProducerRoutingAutoConfigurationTest {
             )
             .run { context ->
                 assertTrue(context.containsBean("redisStreamWriter"))
-                assertTrue(context.containsBean("redisStreamPublisher"))
+                assertTrue(context.containsBean("streamProducer"))
+                assertEquals(
+                    context.getBean(StreamProducer::class.java),
+                    context.getBean(RedisStreamPublisher::class.java),
+                )
+            }
+    }
+
+    @Test
+    fun `applications can declare multiple named stream producer beans`() {
+        contextRunner
+            .withUserConfiguration(NamedStreamProducerConfiguration::class.java)
+            .withBean(CoordinatorClient::class.java, {
+                RoutingByGroupCoordinatorClient(
+                    routingResponse(streamPrefix = "orders", consumerGroup = "orders-consumer"),
+                    routingResponse(streamPrefix = "payments", consumerGroup = "payments-consumer"),
+                )
+            })
+            .withBean(RedisStreamWriter::class.java, {
+                CapturingRedisStreamWriter()
+            })
+            .run { context ->
+                assertFalse(context.containsBean("streamProducer"))
+                assertTrue(context.containsBean("ordersStreamProducer"))
+                assertTrue(context.containsBean("paymentsStreamProducer"))
+                assertEquals(2, context.getBeanNamesForType(StreamProducer::class.java).size)
             }
     }
 
@@ -115,6 +142,33 @@ class ProducerRoutingAutoConfigurationTest {
     }
 }
 
+@Configuration(proxyBeanMethods = false)
+private class NamedStreamProducerConfiguration {
+    @Bean("ordersStreamProducer")
+    fun ordersStreamProducer(
+        client: CoordinatorClient,
+        writer: RedisStreamWriter,
+    ): StreamProducer =
+        StreamProducer(
+            streamPrefix = "orders",
+            consumerGroupName = "orders-consumer",
+            client = client,
+            writer = writer,
+        )
+
+    @Bean("paymentsStreamProducer")
+    fun paymentsStreamProducer(
+        client: CoordinatorClient,
+        writer: RedisStreamWriter,
+    ): StreamProducer =
+        StreamProducer(
+            streamPrefix = "payments",
+            consumerGroupName = "payments-consumer",
+            client = client,
+            writer = writer,
+        )
+}
+
 private class RoutingOnlyCoordinatorClient(
     private val routing: ProducerRoutingResponse,
 ) : CoordinatorClient {
@@ -130,19 +184,44 @@ private class RoutingOnlyCoordinatorClient(
         routing
 }
 
+private class RoutingByGroupCoordinatorClient(
+    vararg responses: ProducerRoutingResponse,
+) : CoordinatorClient {
+    private val responsesByGroup = responses.associateBy { it.streamPrefix to it.consumerGroup }
+
+    override fun heartbeat(
+        streamPrefix: String,
+        consumerGroup: String,
+        memberId: String,
+        request: HeartbeatRequest,
+    ): HeartbeatResponse =
+        error("heartbeat is not used in this test")
+
+    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+        responsesByGroup[streamPrefix to consumerGroup]
+            ?: error("No routing response for stream=$streamPrefix group=$consumerGroup")
+}
+
+private class CapturingRedisStreamWriter : RedisStreamWriter {
+    override fun add(streamKey: String, fields: Map<String, String>): String =
+        "1-0"
+}
+
 private fun routingResponse(
+    streamPrefix: String = "orders",
+    consumerGroup: String = "orders-consumer",
     shardCount: Int = 2,
 ): ProducerRoutingResponse =
     ProducerRoutingResponse(
-        streamPrefix = "orders",
-        consumerGroup = "orders-consumer",
+        streamPrefix = streamPrefix,
+        consumerGroup = consumerGroup,
         metadataVersion = 1,
-                shardCount = shardCount,
-        streamKeyPattern = "orders:{shardIndex}",
+        shardCount = shardCount,
+        streamKeyPattern = "$streamPrefix:{shardIndex}",
         shards = (0 until shardCount).map { shardIndex ->
             ProducerRoutingShard(
                 shardIndex = shardIndex,
-                streamKey = "orders:$shardIndex",
+                streamKey = "$streamPrefix:$shardIndex",
                 redisSlot = shardIndex,
             )
         },

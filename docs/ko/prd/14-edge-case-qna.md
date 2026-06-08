@@ -70,10 +70,6 @@ Producer routing은 결국 `shardCount=0`과 빈 shard list를 반환한다. 하
 
 아니다. Producer routing은 pull 기반이다. Producer는 coordinator에서 routing metadata를 refresh하고 bounded lease 동안 cache한다.
 
-### Q. Python producer/consumer는 다른 routing 또는 heartbeat 규칙을 따르는가?
-
-아니다. Python client는 JVM starter와 동일한 coordinator heartbeat status, listener concurrency의 logical-member split, Murmur3 32-bit routing, modulo-bias 제거, `XADD NOMKSTREAM` stale-route 보호를 따른다.
-
 ### Q. Scale-in 이후 producer가 stale routing을 들고 있으면?
 
 Publisher는 Redis `XADD NOMKSTREAM`을 사용한다. 제거된 stream key를 stale route로 쓰려고 하면 Redis가 stream key를 재생성하지 않고 실패한다. 이때 routing cache를 invalidate하고 coordinator에서 새 routing을 받은 뒤 retry한다.

@@ -70,10 +70,6 @@ Producer routing eventually returns `shardCount=0` and an empty shard list. Remo
 
 No. Producer routing is pull-based. The producer refreshes routing metadata from the coordinator and caches it for a bounded lease.
 
-### Q. Does the Python producer/consumer follow different routing or heartbeat rules?
-
-No. The Python client uses the same coordinator heartbeat statuses, logical-member split for listener concurrency, Murmur3 32-bit routing, modulo-bias removal, and `XADD NOMKSTREAM` stale-route protection as the JVM starter.
-
 ### Q. What if a producer has stale routing after scale-in?
 
 The publisher uses Redis `XADD NOMKSTREAM` so a removed stream key is not recreated accidentally. If a stale write targets a removed shard key, the attempt fails, the routing cache is invalidated, and the producer refreshes routing before retrying.

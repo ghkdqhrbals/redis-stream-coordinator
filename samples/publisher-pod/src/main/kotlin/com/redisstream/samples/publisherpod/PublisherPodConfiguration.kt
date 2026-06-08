@@ -1,9 +1,8 @@
 package com.redisstream.samples.publisherpod
 
-import com.redisstream.producer.ProducerRoutingProperties
+import com.redisstream.consumer.CoordinatorClient
 import com.redisstream.producer.RedisStreamXAddConfiguration
-import com.redisstream.producer.RedisStreamWriter
-import com.redisstream.producer.SpringDataRedisStreamWriter
+import com.redisstream.producer.StreamProducer
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
@@ -12,28 +11,22 @@ import java.time.Duration
 
 @Configuration(proxyBeanMethods = false)
 class PublisherPodConfiguration {
-    @Bean
-    fun sampleProducerRoutingProperties(environment: Environment): ProducerRoutingProperties =
-        ProducerRoutingProperties.producer(
+    @Bean("sampleStreamProducer")
+    fun sampleStreamProducer(
+        environment: Environment,
+        coordinatorClient: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+    ): StreamProducer =
+        StreamProducer(
             streamPrefix = environment.string("STREAM_PREFIX", "create-order"),
             consumerGroupName = environment.string("CONSUMER_GROUP_NAME", environment.string("CONSUMER_GROUP", "demo-workers")),
-        ) {
-            routingRefreshInterval = environment.duration("PRODUCER_ROUTING_REFRESH_INTERVAL", Duration.ofSeconds(2))
-            publishMaxAttempts = environment.int("PRODUCER_PUBLISH_MAX_ATTEMPTS", 2)
-            xadd.maxLen = environment.long("PUBLISHER_XADD_MAX_LEN", 10_000_000)
-            xadd.approximateTrimming = environment.boolean("PUBLISHER_XADD_APPROXIMATE_TRIMMING", true)
-        }
-
-    @Bean
-    fun sampleRedisStreamWriter(
-        redisConnectionFactory: RedisConnectionFactory,
-        properties: ProducerRoutingProperties,
-    ): RedisStreamWriter =
-        SpringDataRedisStreamWriter(
+            client = coordinatorClient,
             redisConnectionFactory = redisConnectionFactory,
+            routingRefreshInterval = environment.duration("PRODUCER_ROUTING_REFRESH_INTERVAL", Duration.ofSeconds(2)),
+            publishMaxAttempts = environment.int("PRODUCER_PUBLISH_MAX_ATTEMPTS", 2),
             xadd = RedisStreamXAddConfiguration(
-                maxLen = properties.xadd.maxLen,
-                approximateTrimming = properties.xadd.approximateTrimming,
+                maxLen = environment.long("PUBLISHER_XADD_MAX_LEN", 10_000_000),
+                approximateTrimming = environment.boolean("PUBLISHER_XADD_APPROXIMATE_TRIMMING", true),
             ),
         )
 }

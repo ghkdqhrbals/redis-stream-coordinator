@@ -20,8 +20,7 @@ The reason for this module is practical: Redis Stream is useful as a lightweight
 12. [Failure Modes and Edge Cases](prd/12-failure-modes-edge-cases.md)
 13. [Terraform and GitOps Governance](prd/13-terraform-governance.md)
 14. [Edge Case Q&A](prd/14-edge-case-qna.md)
-15. [Python Client Library](prd/15-python-client.md)
-16. [Scalar API Reference](../api.html)
+15. [Scalar API Reference](../api.html)
 
 ## Why This Exists
 
@@ -73,7 +72,6 @@ The system is designed for Redis Stream workloads that need to avoid single-stre
 * Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.
 * Spring Boot applications can integrate by adding the starter and using `@StreamListener`, implementing `CoordinatorShardLifecycle`, or using the built-in Redis Stream polling handler.
 * Annotation listener concurrency creates independent coordinator members, so `concurrency = 4` joins as four member IDs rather than one member with four local shard pollers.
-* Python applications can integrate with the sync-first `redisstream-coordinator` package while sharing the same heartbeat, assignment, routing, and Redis command semantics as the JVM starter.
 * Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.
 
 ## Guarantee Boundaries

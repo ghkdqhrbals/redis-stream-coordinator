@@ -1,6 +1,6 @@
 package com.redisstream.samples.consumerpod
 
-import com.redisstream.producer.RedisStreamPublisher
+import com.redisstream.producer.StreamProducer
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.core.env.Environment
 import org.springframework.http.HttpStatus
@@ -42,7 +42,7 @@ data class PublishSampleResponse(
 class SampleConsumerPodController(
     environment: Environment,
     private val eventLog: ConsumerPodEventLog,
-    private val publisher: ObjectProvider<RedisStreamPublisher>,
+    private val publisher: ObjectProvider<StreamProducer>,
 ) {
     private val memberId = defaultSampleMemberId()
     private val listeners = listOf(
@@ -91,7 +91,7 @@ class SampleConsumerPodController(
         val fields = request.fields.ifEmpty {
             mapOf("payload" to (request.payload ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "payload or fields is required")))
         }
-        val message = (publisher.ifAvailable ?: throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "RedisStreamPublisher is not configured"))
+        val message = (publisher.ifAvailable ?: throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "StreamProducer is not configured"))
             .publish(request.partitionKey, fields)
         return PublishSampleResponse(
             streamKey = message.streamKey,
