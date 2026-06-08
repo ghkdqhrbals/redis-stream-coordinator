@@ -350,7 +350,6 @@
           <a href="prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="prd/13-terraform-governance.html">Terraform and GitOps Governance</a>
           <a href="prd/14-edge-case-qna.html">Edge Case Q&amp;A</a>
-          <a href="prd/15-python-client.html">Python Client Library</a>
           <a href="operations-runbook.html">운영 Runbook</a>
           <a href="testing.html">테스트 가이드</a>
           <a href="../api.html">API Reference</a>
@@ -376,7 +375,6 @@
 <li><a href="prd/12-failure-modes-edge-cases.html">Failure Modes and Edge Cases</a></li>
 <li><a href="prd/13-terraform-governance.html">Terraform and GitOps Governance</a></li>
 <li><a href="prd/14-edge-case-qna.html">Edge Case Q&amp;A</a></li>
-<li><a href="prd/15-python-client.html">Python Client Library</a></li>
 <li><a href="../api.html">Scalar API Reference</a></li>
 </ol>
 <h2 id="_1">왜 이 프로젝트가 필요한가</h2>
@@ -421,7 +419,6 @@
 <li>operator는 monitoring API로 group epoch, assignment epoch, member epoch, target/current assignment, revoke progress, migration progress를 확인할 수 있다.</li>
 <li>application developer는 starter dependency와 <code>@StreamListener</code>, <code>CoordinatorShardLifecycle</code>, built-in Redis Stream polling handler 중 하나로 coordinator heartbeat, assignment, revoke, fencing 처리를 연동할 수 있다.</li>
 <li>Annotation listener의 <code>concurrency = 4</code>는 하나의 member가 local poller 네 개를 가지는 모드가 아니라, 네 개의 member ID로 join하는 모드이다.</li>
-<li>Python application은 sync-first <code>redisstream-coordinator</code> 패키지로 연동할 수 있고, heartbeat, assignment, routing, Redis command semantics는 JVM starter와 동일하게 유지한다.</li>
 <li>minor 버전 업그레이드는 N/N-1 client와 server가 동시에 동작하는 rolling upgrade를 지원한다.</li>
 </ul>
 <h2 id="guarantee-boundaries">Guarantee Boundaries</h2>

@@ -350,7 +350,6 @@
           <a href="docs/prd/12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="docs/prd/13-terraform-governance.html">Terraform and GitOps Governance</a>
           <a href="docs/prd/14-edge-case-qna.html">Edge Case Q&amp;A</a>
-          <a href="docs/prd/15-python-client.html">Python Client Library</a>
           <a href="docs/operations-runbook.html">Operations Runbook</a>
           <a href="docs/testing.html">Testing Guide</a>
           <a href="api.html">API Reference</a>
@@ -376,7 +375,6 @@
 <li><a href="docs/prd/12-failure-modes-edge-cases.html">Failure Modes and Edge Cases</a></li>
 <li><a href="docs/prd/13-terraform-governance.html">Terraform and GitOps Governance</a></li>
 <li><a href="docs/prd/14-edge-case-qna.html">Edge Case Q&amp;A</a></li>
-<li><a href="docs/prd/15-python-client.html">Python Client Library</a></li>
 <li><a href="api.html">Scalar API Reference</a></li>
 </ol>
 <h2 id="why-this-exists">Why This Exists</h2>
@@ -421,7 +419,6 @@
 <li>Duplicate-sensitive workloads can stop producers, drain in-flight publish attempts, perform resharding, refresh routing metadata, and resume publishing.</li>
 <li>Spring Boot applications can integrate by adding the starter and using <code>@StreamListener</code>, implementing <code>CoordinatorShardLifecycle</code>, or using the built-in Redis Stream polling handler.</li>
 <li>Annotation listener concurrency creates independent coordinator members, so <code>concurrency = 4</code> joins as four member IDs rather than one member with four local shard pollers.</li>
-<li>Python applications can integrate with the sync-first <code>redisstream-coordinator</code> package while sharing the same heartbeat, assignment, routing, and Redis command semantics as the JVM starter.</li>
 <li>Minor version upgrades support N/N-1 client/server coexistence during rolling upgrades.</li>
 </ul>
 <h2 id="guarantee-boundaries">Guarantee Boundaries</h2>

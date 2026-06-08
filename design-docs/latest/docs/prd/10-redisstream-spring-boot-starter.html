@@ -350,7 +350,6 @@
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
           <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
-          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">Operations Runbook</a>
           <a href="../testing.html">Testing Guide</a>
           <a href="../../api.html">API Reference</a>
@@ -574,23 +573,30 @@ class OrdersMessageHandler : RedisStreamMessageHandler {
 <p>Producer applications also use only the shared coordinator endpoint in YAML. Routing identity and producer behavior are code-defined:</p>
 <pre><code class="language-kotlin">@Configuration(proxyBeanMethods = false)
 class OrdersProducerConfiguration {
-    @Bean
-    fun ordersProducerProperties(): ProducerRoutingProperties =
-        ProducerRoutingProperties.producer(
+    @Bean(&quot;ordersStreamProducer&quot;)
+    fun ordersStreamProducer(
+        coordinatorClient: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+    ): StreamProducer =
+        StreamProducer(
             streamPrefix = &quot;orders&quot;,
             consumerGroupName = &quot;orders-consumer&quot;,
-        ) {
-            routingRefreshInterval = Duration.ofSeconds(5)
-            publishMaxAttempts = 2
-            xadd.maxLen = 100_000
-            xadd.approximateTrimming = true
-        }
+            client = coordinatorClient,
+            redisConnectionFactory = redisConnectionFactory,
+            routingRefreshInterval = Duration.ofSeconds(5),
+            publishMaxAttempts = 2,
+            xadd = RedisStreamXAddConfiguration(
+                maxLen = 100_000,
+                approximateTrimming = true,
+            ),
+        )
 }
 </code></pre>
-<p>When a <code>ProducerRoutingCache</code> bean is created, it performs the same initial metadata validation and seeds the local routing cache. Missing prefix/group shard metadata is a startup error, not a first-publish error.</p>
+<p>Applications can define multiple <code>StreamProducer</code> beans in the same process. Each producer bean owns its own stream prefix, consumer group name, routing cache, XADD options, and publish retry settings. Application services must inject the required producer by bean name or <code>@Qualifier</code>; relying on a single unqualified producer is only appropriate for applications with one producer.</p>
+<p>When a <code>StreamProducer</code> bean is created, it performs the same initial metadata validation and seeds the local routing cache. Missing prefix/group shard metadata is a startup error, not a first-publish error.</p>
 <p>The producer does not send heartbeats. Shard additions and shard-count changes reach producers through periodic routing metadata refresh. <code>routingRefreshInterval</code> bounds normal propagation delay; the routing cache lease bounds how long a producer may keep publishing without a successful coordinator refresh. If the cache lease expires and refresh still fails, publish must fail closed instead of using stale routing indefinitely.</p>
-<p>Applications publish through <code>RedisStreamPublisher</code>:</p>
-<pre><code class="language-kotlin">redisStreamPublisher.publish(
+<p>Applications publish through the selected <code>StreamProducer</code>:</p>
+<pre><code class="language-kotlin">ordersStreamProducer.publish(
     partitionKey = &quot;order-123&quot;,
     fields = mapOf(&quot;eventId&quot; to &quot;evt-1&quot;, &quot;payload&quot; to &quot;...&quot;),
 )

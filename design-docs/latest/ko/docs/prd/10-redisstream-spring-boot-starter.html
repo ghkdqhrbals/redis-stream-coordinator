@@ -350,7 +350,6 @@
           <a href="12-failure-modes-edge-cases.html">Failure Handling and Edge Case Design</a>
           <a href="13-terraform-governance.html">Terraform and GitOps Governance</a>
           <a href="14-edge-case-qna.html">Edge Case Q&amp;A</a>
-          <a href="15-python-client.html">Python Client Library</a>
           <a href="../operations-runbook.html">운영 Runbook</a>
           <a href="../testing.html">테스트 가이드</a>
           <a href="../../api.html">API Reference</a>
@@ -583,23 +582,30 @@ class OrdersMessageHandler : RedisStreamMessageHandler {
 <p>Producer도 YAML에는 shared coordinator endpoint만 둔다. Routing identity와 producer 동작은 코드에서 설정한다.</p>
 <pre><code class="language-kotlin">@Configuration(proxyBeanMethods = false)
 class OrdersProducerConfiguration {
-    @Bean
-    fun ordersProducerProperties(): ProducerRoutingProperties =
-        ProducerRoutingProperties.producer(
+    @Bean(&quot;ordersStreamProducer&quot;)
+    fun ordersStreamProducer(
+        coordinatorClient: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+    ): StreamProducer =
+        StreamProducer(
             streamPrefix = &quot;orders&quot;,
             consumerGroupName = &quot;orders-consumer&quot;,
-        ) {
-            routingRefreshInterval = Duration.ofSeconds(30)
-            publishMaxAttempts = 2
-            xadd.maxLen = 10_000_000
-            xadd.approximateTrimming = true
-        }
+            client = coordinatorClient,
+            redisConnectionFactory = redisConnectionFactory,
+            routingRefreshInterval = Duration.ofSeconds(30),
+            publishMaxAttempts = 2,
+            xadd = RedisStreamXAddConfiguration(
+                maxLen = 10_000_000,
+                approximateTrimming = true,
+            ),
+        )
 }
 </code></pre>
-<p><code>ProducerRoutingCache</code> bean도 생성 시 같은 초기 metadata validation을 수행하고 local routing cache를 채운다. Prefix/group shard metadata가 없는 상태는 첫 publish 시점의 에러가 아니라 startup error이다.</p>
+<p>하나의 애플리케이션은 여러 <code>StreamProducer</code> bean을 가질 수 있다. 각 producer bean은 자기 stream prefix, consumer group name, routing cache, XADD 옵션, publish retry 설정을 독립적으로 가진다. 애플리케이션 서비스는 필요한 producer를 bean name 또는 <code>@Qualifier</code>로 주입해야 한다. Unqualified 단일 producer 주입은 producer가 하나뿐인 애플리케이션에서만 적합하다.</p>
+<p><code>StreamProducer</code> bean도 생성 시 같은 초기 metadata validation을 수행하고 local routing cache를 채운다. Prefix/group shard metadata가 없는 상태는 첫 publish 시점의 에러가 아니라 startup error이다.</p>
 <p>Producer는 heartbeat를 보내지 않는다. Shard 추가와 shard count 변경은 주기적 routing metadata refresh로 producer에 전파된다. <code>routingRefreshInterval</code>은 일반적인 전파 지연 상한이고, routing cache lease는 coordinator refresh 없이 producer가 계속 publish할 수 있는 최대 시간이다. Cache lease가 만료된 뒤에도 refresh가 실패하면 stale routing을 무기한 사용하지 않고 publish를 fail closed해야 한다.</p>
-<p>애플리케이션은 <code>RedisStreamPublisher</code>로 publish한다.</p>
-<pre><code class="language-kotlin">redisStreamPublisher.publish(
+<p>애플리케이션은 선택한 <code>StreamProducer</code>로 publish한다.</p>
+<pre><code class="language-kotlin">ordersStreamProducer.publish(
     partitionKey = &quot;order-123&quot;,
     fields = mapOf(&quot;eventId&quot; to &quot;evt-1&quot;, &quot;payload&quot; to &quot;...&quot;),
 )
