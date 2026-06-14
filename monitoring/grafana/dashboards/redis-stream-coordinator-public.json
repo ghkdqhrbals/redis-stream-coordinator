@@ -29,6 +29,17 @@
       "title": "API Performance",
       "type": "link",
       "url": "/d/redis-stream-coordinator-api/redis-stream-coordinator-api"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Admin Console",
+      "type": "link",
+      "url": "https://coordinator.ghkdqhrbals.org/console/admin.html"
     }
   ],
   "panels": [

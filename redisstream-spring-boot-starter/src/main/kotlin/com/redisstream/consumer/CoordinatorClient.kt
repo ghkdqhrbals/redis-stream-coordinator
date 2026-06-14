@@ -16,7 +16,7 @@ interface CoordinatorClient {
     /**
      * Fetches producer routing metadata for the coordinator-managed shard count.
      */
-    fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse
+    fun producerRouting(streamPrefix: String): ProducerRoutingResponse
 }
 
 class RestClientCoordinatorClient(
@@ -46,9 +46,9 @@ class RestClientCoordinatorClient(
     /**
      * Calls the coordinator producer-routing endpoint using Spring RestClient.
      */
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
         restClient.get()
-            .uri("/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing", streamPrefix, consumerGroup)
+            .uri("/coord/v1/streams/{streamPrefix}/producer-routing", streamPrefix)
             .retrieve()
             .body(ProducerRoutingResponse::class.java)
             ?: error("Coordinator producer routing response body was empty")

@@ -100,7 +100,6 @@ data class ProducerRoutingShard(
 
 data class ProducerRoutingResponse(
     val streamPrefix: String,
-    val consumerGroup: String,
     val metadataVersion: Long,
     val shardCount: Int,
     val streamKeyPattern: String,

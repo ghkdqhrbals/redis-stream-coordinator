@@ -431,8 +431,6 @@ data class ProducerRoutingShard(
 data class ProducerRoutingResponse(
     @field:Schema(description = "Sharded Redis Stream prefix used to build physical stream keys such as create-order:4.", example = "create-order")
     val streamPrefix: String,
-    @field:Schema(description = "Redis Stream consumer group name.", example = "demo-workers")
-    val consumerGroup: String,
     @field:Schema(description = "Metadata version used for this routing view.", example = "7")
     val metadataVersion: Long,
     @field:Schema(description = "Physical shard count.", example = "20")

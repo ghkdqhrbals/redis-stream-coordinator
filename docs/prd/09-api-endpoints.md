@@ -83,7 +83,7 @@ Common status codes:
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}` | Create a stream shard group. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Read group metadata. | no |
 | Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Delete inactive group metadata. | yes |
-| Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing` | Read producer routing metadata. | no |
+| Admin | `GET` | `/coord/v1/streams/{streamPrefix}/producer-routing` | Read stream producer routing metadata. | no |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/scale` | Start stream-wide shard scale-out or scale-in. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | Read one migration. | no |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | Request migration rollback. | yes |
@@ -175,7 +175,7 @@ Failure behavior:
 ### Get Producer Routing Metadata
 
 ```http
-GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+GET /coord/v1/streams/{streamPrefix}/producer-routing
 ```
 
 Returns read-only metadata required by producers to route partition keys to Redis Stream shard keys. This endpoint does not create streams, change shard counts, or mutate assignment.
@@ -187,7 +187,9 @@ shardIndex = routeV1(partitionKey, shardCount)
 streamKey = format(streamKeyPattern, shardIndex)
 ```
 
-Routing is deterministic only for the returned `shardCount`, routing protocol, and partition key. After shard scale-out or scale-in, the same partition key can route to a different stream key.
+`routeV1` applies only when the application supplies a non-null partition key. If the Spring Boot producer receives `partitionKey = null`, it uses client-side load distribution across the active shard list returned by this endpoint.
+
+Routing is deterministic only for the returned `shardCount`, routing protocol, and non-null partition key. After shard scale-out or scale-in, the same partition key can route to a different stream key. Null-key load distribution does not provide per-key affinity.
 
 Response: `200 OK` with `ProducerRoutingResponse`.
 

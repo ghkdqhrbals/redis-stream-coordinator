@@ -117,7 +117,7 @@ Terraform read operations should call coordinator source-of-truth APIs:
 
 ```http
 GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
-GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+GET /coord/v1/streams/{streamPrefix}/producer-routing
 ```
 
 The provider should treat these fields as managed desired state:

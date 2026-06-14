@@ -84,11 +84,10 @@ class CoordinatorManagedConsumer(
     @Synchronized
     fun validateInitialRouting(): ProducerRoutingResponse {
         validateLocalConfiguration()
-        return client.producerRouting(properties.streamPrefix, properties.consumerGroupName)
+        return client.producerRouting(properties.streamPrefix)
             .also {
                 CoordinatorRoutingMetadataValidator.validate(
                     streamPrefix = properties.streamPrefix,
-                    consumerGroupName = properties.consumerGroupName,
                     metadata = it,
                 )
             }

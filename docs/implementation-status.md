@@ -10,7 +10,7 @@ The repository currently contains three production Gradle modules:
 | --- | --- | --- |
 | `coordinator-server` | MVP implemented | Spring Boot control plane for group metadata, heartbeat reconciliation, assignment, migration, monitoring, ACL, audit, centralized metrics, and Redis-backed state. |
 | `redisstream-core` | Implemented | Shared coordination version contract and versioned timing defaults for coordinator and support modules. |
-| `com.redisstream:redisstream-spring-boot-starter` | MVP implemented | Spring Boot integration layer for consumer heartbeat lifecycle, shard callbacks, Redis Stream polling, producer routing, publishing, graceful leave, and coordinator progress reporting. |
+| `io.github.ghkdqhrbals:redisstream-spring-boot-starter` | MVP implemented | Spring Boot integration layer for consumer heartbeat lifecycle, shard callbacks, Redis Stream polling, producer routing, publishing, graceful leave, and coordinator progress reporting. |
 
 Overall status:
 

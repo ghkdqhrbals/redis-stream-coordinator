@@ -1,8 +1,10 @@
 [versions]
 kotlin = "2.2.21"
 springBoot = "4.0.6"
+mavenPublish = "0.36.0"
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }

@@ -224,14 +224,14 @@ class CoordinatorGroupedWorkflowTest {
         fun `scale updates producer routing metadata`() {
             val service = service()
             service.createGroup("category-upscale-routing", "orders-consumer", createGroupRequest(initialShardCount = 2))
-            val before = service.producerRouting("category-upscale-routing", "orders-consumer")
+            val before = service.producerRouting("category-upscale-routing")
 
             service.scaleGroup(
                 "category-upscale-routing",
                 "orders-consumer",
                 ScaleGroupRequest(targetShardCount = 5, requestedBy = "test", reason = "route target shard count"),
             )
-            val after = service.producerRouting("category-upscale-routing", "orders-consumer")
+            val after = service.producerRouting("category-upscale-routing")
             val group = service.getGroup("category-upscale-routing", "orders-consumer")
 
                                     assertEquals(5, after.shardCount)

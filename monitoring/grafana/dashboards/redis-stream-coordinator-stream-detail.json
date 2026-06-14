@@ -41,6 +41,17 @@
       "title": "API Performance",
       "type": "link",
       "url": "/d/redis-stream-coordinator-api/redis-stream-coordinator-api"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Admin Console",
+      "type": "link",
+      "url": "https://coordinator.ghkdqhrbals.org/console/admin.html"
     }
   ],
   "panels": [
@@ -533,6 +544,96 @@
     },
     {
       "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": true,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "shardIndex",
+              "text": "Shard",
+              "type": "number"
+            },
+            {
+              "selector": "streamKey",
+              "text": "Stream Key",
+              "type": "string"
+            },
+            {
+              "selector": "redisSlot",
+              "text": "Redis Slot",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
+          },
+          "format": "table",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "shards",
+          "source": "url",
+          "type": "json",
+          "url": "/coord/v1/streams/$streamPrefix/producer-routing",
+          "url_options": {
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Producer Routing Shards",
+      "type": "table"
+    },
+    {
+      "datasource": {
         "type": "prometheus",
         "uid": "rsc-prometheus"
       },
@@ -591,7 +692,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 17
+        "y": 23
       },
       "id": 5,
       "options": {
@@ -687,7 +788,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 17
+        "y": 23
       },
       "id": 6,
       "options": {
@@ -783,7 +884,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 17
+        "y": 23
       },
       "id": 18,
       "options": {
@@ -850,7 +951,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 25,
+        "y": 31,
         "w": 24,
         "h": 8
       },
@@ -1072,7 +1173,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -1165,7 +1266,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 33,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -1259,7 +1360,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 41,
+        "y": 47,
         "w": 12,
         "h": 8
       },
@@ -1344,7 +1445,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 49,
+        "y": 55,
         "w": 24,
         "h": 8
       },
@@ -1477,7 +1578,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 57,
+        "y": 63,
         "w": 24,
         "h": 8
       },
@@ -1649,7 +1750,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 65,
+        "y": 71,
         "w": 24,
         "h": 8
       },
@@ -1873,7 +1974,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 73
+        "y": 79
       },
       "id": 19,
       "options": {
@@ -1970,7 +2071,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 73
+        "y": 79
       },
       "id": 20,
       "options": {

@@ -385,8 +385,8 @@ private class RoutingOnlyCoordinatorClient(
     ): HeartbeatResponse =
         error("heartbeat is not used in this test")
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
-        routing.forGroup(streamPrefix, consumerGroup)
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
+        routing.forStream(streamPrefix)
 }
 
 private data class RecordedHeartbeat(
@@ -425,8 +425,8 @@ private class RecordingCoordinatorClient(
         )
     }
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
-        routing.forGroup(streamPrefix, consumerGroup)
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
+        routing.forStream(streamPrefix)
 }
 
 private class NoopSmartLifecycle : SmartLifecycle {
@@ -441,12 +441,10 @@ private class NoopSmartLifecycle : SmartLifecycle {
 
 private fun routingResponse(
     streamPrefix: String = "orders",
-    consumerGroup: String = "orders-consumer",
     shardCount: Int = 2,
 ): ProducerRoutingResponse =
     ProducerRoutingResponse(
         streamPrefix = streamPrefix,
-        consumerGroup = consumerGroup,
         metadataVersion = 1,
         shardCount = shardCount,
         streamKeyPattern = "$streamPrefix:{shardIndex}",
@@ -459,14 +457,11 @@ private fun routingResponse(
         },
     )
 
-private fun ProducerRoutingResponse.forGroup(
-    streamPrefix: String,
-    consumerGroup: String,
-): ProducerRoutingResponse =
-    if (this.streamPrefix == streamPrefix && this.consumerGroup == consumerGroup) {
+private fun ProducerRoutingResponse.forStream(streamPrefix: String): ProducerRoutingResponse =
+    if (this.streamPrefix == streamPrefix) {
         this
     } else {
-        routingResponse(streamPrefix = streamPrefix, consumerGroup = consumerGroup, shardCount = shardCount)
+        routingResponse(streamPrefix = streamPrefix, shardCount = shardCount)
     }
 
 private fun Throwable.hasCauseMessage(fragment: String): Boolean =

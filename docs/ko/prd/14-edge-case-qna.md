@@ -70,10 +70,6 @@ Producer routing은 결국 `shardCount=0`과 빈 shard list를 반환한다. 하
 
 아니다. Producer routing은 pull 기반이다. Producer는 coordinator에서 routing metadata를 refresh하고 bounded lease 동안 cache한다.
 
-### Q. Python producer/consumer는 다른 routing 또는 heartbeat 규칙을 따르는가?
-
-아니다. Python client는 JVM starter와 동일한 coordinator heartbeat status, listener concurrency의 logical-member split, Murmur3 32-bit routing, modulo-bias 제거, `XADD NOMKSTREAM` stale-route 보호를 따른다.
-
 ### Q. Scale-in 이후 producer가 stale routing을 들고 있으면?
 
 Publisher는 Redis `XADD NOMKSTREAM`을 사용한다. 제거된 stream key를 stale route로 쓰려고 하면 Redis가 stream key를 재생성하지 않고 실패한다. 이때 routing cache를 invalidate하고 coordinator에서 새 routing을 받은 뒤 retry한다.
@@ -81,6 +77,10 @@ Publisher는 Redis `XADD NOMKSTREAM`을 사용한다. 제거된 stream key를 st
 ### Q. 같은 partition key가 resharding 이후 다른 shard로 갈 수 있나?
 
 그렇다. Routing determinism은 같은 routing protocol, 같은 shard count, 같은 partition key 안에서만 보장된다. Shard count가 바뀌면 routing domain이 바뀐다.
+
+### Q. Producer publish에서 `partitionKey = null`은 무슨 의미인가?
+
+Key-based routing이 아니라 load distribution을 의미한다. Producer는 해당 instance의 active shard list 안에서 shard를 선택하며 per-key affinity나 ordering을 제공하지 않는다. Business entity별 record가 같은 shard에 머물 필요가 없는 event에만 사용해야 한다.
 
 ### Q. Resharding 중 같은 event id가 두 shard에 쓰일 수 있나?
 

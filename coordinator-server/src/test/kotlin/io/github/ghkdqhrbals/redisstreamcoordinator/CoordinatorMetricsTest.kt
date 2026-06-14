@@ -147,16 +147,16 @@ class CoordinatorMetricsTest {
         val service = service(MicrometerCoordinatorMetrics(registry, properties, clock))
 
         service.createGroup("metrics-routing", "orders-consumer", createGroupRequest(initialShardCount = 2))
-        service.producerRouting("metrics-routing", "orders-consumer")
+        service.producerRouting("metrics-routing")
         assertFailsWith<RuntimeException> {
-            service.producerRouting("metrics-routing", "missing-group")
+            service.producerRouting("missing-stream")
         }
 
         assertEquals(
             1.0,
             registry.get("redis_stream_coord_producer_routing_request_total")
                 .tag("stream", "metrics-routing")
-                .tag("group", "orders-consumer")
+                .tag("group", "stream")
                 .tag("status", "SUCCESS")
                 .counter()
                 .count(),
@@ -164,8 +164,8 @@ class CoordinatorMetricsTest {
         assertEquals(
             1.0,
             registry.get("redis_stream_coord_producer_routing_request_total")
-                .tag("stream", "metrics-routing")
-                .tag("group", "missing-group")
+                .tag("stream", "missing-stream")
+                .tag("group", "stream")
                 .tag("status", "ERROR")
                 .counter()
                 .count(),

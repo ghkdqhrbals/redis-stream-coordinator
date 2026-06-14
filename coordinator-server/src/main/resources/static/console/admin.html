@@ -7,13 +7,13 @@
     <link rel="stylesheet" href="/console/styles.css">
 </head>
 <body>
-<main class="access-shell">
-    <section class="access-header">
+<main class="access-shell admin-shell" data-admin-shell>
+    <section class="access-header admin-hero">
         <div class="brand-lockup">
             <div class="brand-mark" aria-hidden="true">RC</div>
             <div>
                 <h1>Admin Operations</h1>
-                <p>Stream metadata and shard scaling controls</p>
+                <p>Stream-level shard topology and resharding controls</p>
             </div>
         </div>
         <div class="admin-header-actions">
@@ -23,8 +23,9 @@
     </section>
 
     <section class="access-grid admin-grid">
-        <article class="access-card">
+        <article class="access-card admin-card admin-card-primary">
             <h2>Session</h2>
+            <p class="admin-note">Sign in with coordinator credentials. The console stores only the issued bearer token in browser storage.</p>
             <form id="adminLoginForm" class="access-login-form">
                 <label>
                     Username
@@ -45,12 +46,16 @@
                     <dt>Roles</dt>
                     <dd id="adminSessionRoles">-</dd>
                 </div>
+                <div>
+                    <dt>Token expires</dt>
+                    <dd id="adminTokenExpires">-</dd>
+                </div>
             </dl>
             <p id="adminError" class="form-error" role="alert"></p>
         </article>
 
-        <article class="access-card">
-            <h2>Selected Group</h2>
+        <article class="access-card admin-card">
+            <h2>Selected Stream</h2>
             <label class="admin-label">
                 Stream / Consumer Group
                 <select id="adminGroupSelect"></select>
@@ -62,13 +67,17 @@
                     <dd id="adminCurrentShardCount">-</dd>
                 </div>
                 <div>
-                    <dt>Consumer parallelism</dt>
+                    <dt>Consumer group</dt>
+                    <dd id="adminSelectedConsumerGroup">-</dd>
+                </div>
+                <div>
+                    <dt>Parallelism</dt>
                     <dd>Configured in consumer pods</dd>
                 </div>
             </dl>
         </article>
 
-        <article class="access-card">
+        <article class="access-card admin-card">
             <h2>Create Stream</h2>
             <form id="adminCreateStreamForm" class="admin-form">
                 <label>
@@ -84,12 +93,12 @@
             <p class="admin-note">Creates stream-level shard metadata. Runtime consumer groups join through their configured group name.</p>
         </article>
 
-        <article class="access-card">
+        <article class="access-card admin-card">
             <h2>Shard Scale</h2>
             <form id="adminScaleForm" class="admin-form">
                 <label>
                     Target shard count
-                    <input id="adminTargetShardCount" type="number" min="1" value="20">
+                    <input id="adminTargetShardCount" type="number" min="0" value="20">
                 </label>
                 <label>
                     Reason
@@ -104,7 +113,7 @@
             <p class="admin-note">Scale-in starts a resharding flow. Producers refresh routing after write failures or cache refresh, and consumers drain revoked shards before removed shards are retired.</p>
         </article>
 
-        <article class="access-card wide">
+        <article class="access-card admin-card wide">
             <h2>Operation Result</h2>
             <pre id="adminResult" class="config-block"><code>No operation executed.</code></pre>
         </article>

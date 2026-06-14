@@ -19,7 +19,6 @@ class ProducerRoutingAutoConfiguration {
     ): ProducerRoutingCache =
         ProducerRoutingCache(
             streamPrefix = properties.streamPrefix,
-            consumerGroupName = properties.consumerGroupName,
             client = client,
             refreshInterval = properties.routingRefreshInterval,
         ).also { it.validateInitialRouting() }
@@ -48,12 +47,12 @@ class ProducerRoutingAutoConfiguration {
     @Bean
     @ConditionalOnBean(ProducerRoutingProperties::class, ProducerRoutingCache::class, RedisStreamWriter::class)
     @ConditionalOnMissingBean
-    fun redisStreamPublisher(
-        properties: ProducerRoutingProperties,
+    fun streamProducer(
         routingCache: ProducerRoutingCache,
         writer: RedisStreamWriter,
-    ): RedisStreamPublisher =
-        RoutingRedisStreamPublisher(
+        properties: ProducerRoutingProperties,
+    ): StreamProducer =
+        StreamProducer(
             routingCache = routingCache,
             writer = writer,
             maxAttempts = properties.publishMaxAttempts,

@@ -19,6 +19,11 @@ enum class CoordinatorError(
     ),
     GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUP_NOT_FOUND", "Group not found"),
     STREAM_NOT_FOUND(HttpStatus.NOT_FOUND, "STREAM_NOT_FOUND", "Stream not found"),
+    STREAM_SHARD_TOPOLOGY_CONFLICT(
+        HttpStatus.CONFLICT,
+        "STREAM_SHARD_TOPOLOGY_CONFLICT",
+        "Stream shard topology is inconsistent across consumer groups",
+    ),
     GROUP_HAS_ACTIVE_MEMBERS(
         HttpStatus.CONFLICT,
         "GROUP_HAS_ACTIVE_MEMBERS",

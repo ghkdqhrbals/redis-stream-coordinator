@@ -247,20 +247,38 @@ class CoordinatorService(
         }
 
     /**
-     * Returns producer routing metadata for the current shard layout.
+     * Returns producer routing metadata for the stream-level shard topology.
      */
-    fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse {
+    fun producerRouting(streamPrefix: String): ProducerRoutingResponse {
         try {
-            val group = requireGroup(streamPrefix, consumerGroup)
-            if (group.shardCount > 0) {
-                streamProvisioner.provision(group.streamShardProvisioningPlan())
+            val groups = stateStore.list()
+                .filter { it.streamPrefix == streamPrefix }
+                .sortedBy { it.consumerGroup }
+            if (groups.isEmpty()) {
+                throw CoordinatorException(
+                    CoordinatorError.STREAM_NOT_FOUND,
+                    "No coordinator groups exist for stream prefix $streamPrefix",
+                )
             }
-            recordGroupState(group)
-            val response = group.toProducerRoutingResponse()
-            metrics.recordProducerRouting(streamPrefix, consumerGroup, "SUCCESS")
+            val shardCounts = groups.map { it.shardCount }.toSet()
+            if (shardCounts.size != 1) {
+                throw CoordinatorException(
+                    CoordinatorError.STREAM_SHARD_TOPOLOGY_CONFLICT,
+                    "Stream prefix '$streamPrefix' has divergent shard counts across consumer groups: " +
+                        groups.joinToString { "${it.consumerGroup}=${it.shardCount}" },
+                )
+            }
+            val shardCount = shardCounts.single()
+            val metadataVersion = groups.maxOf { it.metadataVersion }
+            if (shardCount > 0) {
+                streamProvisioner.provision(groups.first().streamShardProvisioningPlan())
+            }
+            groups.forEach(::recordGroupState)
+            val response = producerRoutingResponse(streamPrefix, metadataVersion, shardCount)
+            metrics.recordProducerRouting(streamPrefix, "stream", "SUCCESS")
             return response
         } catch (error: RuntimeException) {
-            metrics.recordProducerRouting(streamPrefix, consumerGroup, "ERROR")
+            metrics.recordProducerRouting(streamPrefix, "stream", "ERROR")
             throw error
         }
     }
@@ -2574,14 +2592,18 @@ class CoordinatorService(
     private fun MemberMetadata.isLiveOwner(): Boolean =
         state == MemberState.ACTIVE || state == MemberState.STARTING || state == MemberState.LEAVING
 
-    /**
-     * Converts the current shard layout into metadata consumed by producer-side routers.
-     */
-    private fun GroupMetadata.toProducerRoutingResponse(): ProducerRoutingResponse {
-        val activeShardKeys = if (shardCount > 0) streamShardKeys() else emptyList()
+    private fun producerRoutingResponse(
+        streamPrefix: String,
+        metadataVersion: Long,
+        shardCount: Int,
+    ): ProducerRoutingResponse {
+        val activeShardKeys = if (shardCount > 0) {
+            RedisStreamShardKeys.forShardCount(streamPrefix, shardCount)
+        } else {
+            emptyList()
+        }
         return ProducerRoutingResponse(
             streamPrefix = streamPrefix,
-            consumerGroup = consumerGroup,
             metadataVersion = metadataVersion,
             shardCount = shardCount,
             streamKeyPattern = RedisStreamShardKeys.keyPattern(streamPrefix),

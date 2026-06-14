@@ -33,7 +33,7 @@ Producers never use a local shard count as the source of truth. They fetch routi
 }
 ```
 
-The producer caches this metadata and routes a partition key to a shard index in `[0, shardCount)`. If `metadataVersion` changes, a cache TTL expires, or a publish detects stale routing, the producer refreshes the cache.
+The producer caches this metadata and routes a non-null partition key to a shard index in `[0, shardCount)`. If `metadataVersion` changes, a cache TTL expires, or a publish detects stale routing, the producer refreshes the cache.
 
 Routing is deterministic only within the same routing metadata snapshot:
 
@@ -42,6 +42,8 @@ Routing is deterministic only within the same routing metadata snapshot:
 * same partition key.
 
 If shard count changes, the same partition key can route to a different Redis Stream shard. The coordinator does not globally deduplicate the same event id across every shard.
+
+When an application publishes with `partitionKey = null`, the producer intentionally does not run key-based routing. It uses load distribution routing across the active shard list for that producer instance. Null-key publishing is useful for events that do not need per-key ordering or affinity. It must not be used when all records for the same business entity must land on the same shard.
 
 ## Duplicate Publish Boundary
 

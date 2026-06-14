@@ -18,7 +18,6 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -38,7 +37,6 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -51,12 +49,45 @@ class RedisStreamPublisherTest {
     }
 
     @Test
+    fun `publisher accepts null partition key and load distributes writes`() {
+        val writer = RecordingRedisStreamWriter()
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = writer,
+        )
+
+        publisher.publish(null, mapOf("payload" to "created"))
+        publisher.publish(null, mapOf("payload" to "paid"))
+
+        assertEquals(listOf("orders:0", "orders:1"), writer.writes.map { it.streamKey })
+    }
+
+    @Test
+    fun `publisher rejects blank non null partition key before writing`() {
+        val writer = RecordingRedisStreamWriter()
+        val publisher = RoutingRedisStreamPublisher(
+            routingCache = ProducerRoutingCache(
+                streamPrefix = "orders",
+                client = SingleRoutingClient(routing()),
+            ),
+            writer = writer,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            publisher.publish(" ", mapOf("payload" to "created"))
+        }
+        assertEquals(emptyList(), writer.writes)
+    }
+
+    @Test
     fun `publisher convenience payload method writes payload field`() {
         val writer = RecordingRedisStreamWriter()
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -73,7 +104,6 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -96,7 +126,6 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -132,7 +161,6 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = SingleRoutingClient(routing()),
             ),
             writer = writer,
@@ -157,7 +185,6 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = client,
             ),
             writer = writer,
@@ -180,7 +207,6 @@ class RedisStreamPublisherTest {
         val publisher = RoutingRedisStreamPublisher(
             routingCache = ProducerRoutingCache(
                 streamPrefix = "orders",
-                consumerGroupName = "orders-consumer",
                 client = client,
             ),
             writer = writer,
@@ -201,7 +227,6 @@ class RedisStreamPublisherTest {
     ): ProducerRoutingResponse =
         ProducerRoutingResponse(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
             metadataVersion = version,
             shardCount = 2,
             streamKeyPattern = "orders:{shardIndex}",
@@ -273,7 +298,7 @@ private class ScriptedPublisherRoutingClient(
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
         responses[calls++]
 }
 
@@ -298,6 +323,6 @@ private class SingleRoutingClient(
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
         response
 }

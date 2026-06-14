@@ -122,10 +122,6 @@ class ConsumerPodRuntimeConfiguration {
     fun sampleProducerRoutingProperties(environment: Environment): ProducerRoutingProperties =
         ProducerRoutingProperties.producer(
             streamPrefix = environment.string("STREAM_PREFIX", "create-order"),
-            consumerGroupName = environment.string(
-                "CONSUMER_GROUP_NAME",
-                environment.string("CONSUMER_GROUP", "demo-workers"),
-            ),
         ) {
             routingRefreshInterval = environment.duration("PRODUCER_ROUTING_REFRESH_INTERVAL", Duration.ofSeconds(2))
             publishMaxAttempts = environment.int("PRODUCER_PUBLISH_MAX_ATTEMPTS", 2)

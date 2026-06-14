@@ -70,10 +70,6 @@ Producer routing eventually returns `shardCount=0` and an empty shard list. Remo
 
 No. Producer routing is pull-based. The producer refreshes routing metadata from the coordinator and caches it for a bounded lease.
 
-### Q. Does the Python producer/consumer follow different routing or heartbeat rules?
-
-No. The Python client uses the same coordinator heartbeat statuses, logical-member split for listener concurrency, Murmur3 32-bit routing, modulo-bias removal, and `XADD NOMKSTREAM` stale-route protection as the JVM starter.
-
 ### Q. What if a producer has stale routing after scale-in?
 
 The publisher uses Redis `XADD NOMKSTREAM` so a removed stream key is not recreated accidentally. If a stale write targets a removed shard key, the attempt fails, the routing cache is invalidated, and the producer refreshes routing before retrying.
@@ -81,6 +77,10 @@ The publisher uses Redis `XADD NOMKSTREAM` so a removed stream key is not recrea
 ### Q. Can the same partition key route to a different shard after resharding?
 
 Yes. Routing determinism is scoped to the same routing protocol, same shard count, and same partition key. Changing shard count changes the routing domain.
+
+### Q. What does `partitionKey = null` mean for producer publishing?
+
+It means load distribution, not key-based routing. The producer selects from the active shard list for that producer instance and does not provide per-key affinity or ordering. Use it only for events where records do not need to stay colocated by business entity.
 
 ### Q. Can the same event id be produced to two shards during resharding?
 

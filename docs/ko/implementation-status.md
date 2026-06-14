@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | `coordinator-server` | MVP 구현 | group metadata, heartbeat reconciliation, assignment, resharding, monitoring, ACL, audit, Redis-backed state를 담당하는 Spring Boot control plane |
 | `redisstream-core` | 구현됨 | coordinator와 support module이 공유하는 coordination version contract와 versioned timing defaults |
-| `com.redisstream:redisstream-spring-boot-starter` | MVP 구현 | consumer heartbeat lifecycle, shard callback, Redis Stream polling, producer routing, publish, graceful leave, progress report를 제공하는 Spring Boot integration layer |
+| `io.github.ghkdqhrbals:redisstream-spring-boot-starter` | MVP 구현 | consumer heartbeat lifecycle, shard callback, Redis Stream polling, producer routing, publish, graceful leave, progress report를 제공하는 Spring Boot integration layer |
 
 ## 구현 완료
 

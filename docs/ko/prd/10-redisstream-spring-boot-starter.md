@@ -2,7 +2,7 @@
 
 ## 목표
 
-`com.redisstream:redisstream-spring-boot-starter`는 애플리케이션이 Redis Stream Coordinator에 연결하기 위해 필요한 런타임 구성요소를 제공한다.
+`io.github.ghkdqhrbals:redisstream-spring-boot-starter`는 애플리케이션이 Redis Stream Coordinator에 연결하기 위해 필요한 런타임 구성요소를 제공한다.
 
 Coordinator 서버는 control plane이다. 애플리케이션은 starter를 통해 coordinator group에 join하고, heartbeat를 보내고, shard assignment를 받고, local shard worker를 시작하거나 중지하며, revoke/drain progress를 보고한다.
 
@@ -19,8 +19,8 @@ Starter는 특정 Redis Stream 처리 프레임워크를 강제하지 않는다.
 | `@StreamConfiguration` | coordinator-managed listener method가 공유할 polling 설정과 poller thread pool size 기본값을 선언한다. |
 | `@StreamListener` | business handler method를 listener endpoint로 표시하고 stream prefix, group ID, startup, concurrency를 endpoint 단위로 설정한다. |
 | `CoordinatorConsumerProperties.consumer(...)` | 하나의 `{streamPrefix, consumerGroupName}`에 대한 managed consumer를 등록한다. |
-| `ProducerRoutingProperties.producer(...)` | 하나의 `{streamPrefix, consumerGroupName}`에 대한 producer routing cache를 등록한다. |
-| `RedisStreamPublisher.publish(...)` | partition key를 active Redis Stream shard로 routing하고 record를 `XADD`한다. |
+| `ProducerRoutingProperties.producer(...)` | 하나의 `streamPrefix`에 대한 producer routing cache를 등록한다. |
+| `RedisStreamPublisher.publish(...)` | non-null partition key는 active Redis Stream shard로 routing하고, null partition key는 active shard에 load-distribute한 뒤 record를 `XADD`한다. |
 | `CoordinatorShardLifecycle` | 애플리케이션이 직접 worker를 운영할 때 shard assign/revoke callback을 받는다. |
 | `RedisStreamMessageHandler` | built-in polling adapter가 business handler를 호출한다. ACK, ACKDEL, NACK은 애플리케이션 코드가 명시적으로 수행한다. |
 
@@ -63,7 +63,7 @@ fun ordersConsumer(): CoordinatorConsumerProperties =
 
 @Bean
 fun ordersProducer(): ProducerRoutingProperties =
-    ProducerRoutingProperties.producer("orders", "orders-consumer") {
+    ProducerRoutingProperties.producer("orders") {
         xadd.maxLen = 100_000
     }
 ```
@@ -88,7 +88,7 @@ redis-stream-coordinator:
   coordinator-base-url: http://localhost:8080
 ```
 
-Consumer/producer의 stream prefix, consumer group name, polling size, timeout, ACK 정책, producer routing refresh, XADD MAXLEN 같은 runtime 설정은 코드에서 bean으로 정의한다. 이렇게 해야 한 애플리케이션 안에서 여러 consumer/producer를 명시적으로 만들 수 있고, 애플리케이션 고유 설정 시스템이나 버전 정책과 충돌하지 않는다.
+Consumer/producer의 runtime 설정은 코드에서 bean으로 정의한다. Consumer는 stream prefix, consumer group name, polling size, timeout, ACK 정책을 가진다. Producer는 stream prefix, routing refresh, XADD MAXLEN 같은 publish 설정만 가진다. 이렇게 해야 한 애플리케이션 안에서 여러 consumer/producer를 명시적으로 만들 수 있고, 애플리케이션 고유 설정 시스템이나 버전 정책과 충돌하지 않는다.
 
 ## Consumer 설정
 
@@ -226,34 +226,43 @@ Producer도 YAML에는 shared coordinator endpoint만 둔다. Routing identity�
 ```kotlin
 @Configuration(proxyBeanMethods = false)
 class OrdersProducerConfiguration {
-    @Bean
-    fun ordersProducerProperties(): ProducerRoutingProperties =
-        ProducerRoutingProperties.producer(
+    @Bean("ordersStreamProducer")
+    fun ordersStreamProducer(
+        coordinatorClient: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+    ): StreamProducer =
+        StreamProducer(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
-        ) {
-            routingRefreshInterval = Duration.ofSeconds(30)
-            publishMaxAttempts = 2
-            xadd.maxLen = 10_000_000
-            xadd.approximateTrimming = true
-        }
+            client = coordinatorClient,
+            redisConnectionFactory = redisConnectionFactory,
+            routingRefreshInterval = Duration.ofSeconds(30),
+            publishMaxAttempts = 2,
+            xadd = RedisStreamXAddConfiguration(
+                maxLen = 10_000_000,
+                approximateTrimming = true,
+            ),
+        )
 }
 ```
 
-`ProducerRoutingCache` bean도 생성 시 같은 초기 metadata validation을 수행하고 local routing cache를 채운다. Prefix/group shard metadata가 없는 상태는 첫 publish 시점의 에러가 아니라 startup error이다.
+하나의 애플리케이션은 여러 `StreamProducer` bean을 가질 수 있다. 각 producer bean은 자기 stream prefix, routing cache, XADD 옵션, publish retry 설정을 독립적으로 가진다. 애플리케이션 서비스는 필요한 producer를 bean name 또는 `@Qualifier`로 주입해야 한다. Unqualified 단일 producer 주입은 producer가 하나뿐인 애플리케이션에서만 적합하다.
+
+`StreamProducer` bean은 생성 시 stream-level producer routing metadata를 검증하고 local routing cache를 채운다. Stream shard metadata가 없는 상태는 첫 publish 시점의 에러가 아니라 startup error이다.
 
 Producer는 heartbeat를 보내지 않는다. Shard 추가와 shard count 변경은 주기적 routing metadata refresh로 producer에 전파된다. `routingRefreshInterval`은 일반적인 전파 지연 상한이고, routing cache lease는 coordinator refresh 없이 producer가 계속 publish할 수 있는 최대 시간이다. Cache lease가 만료된 뒤에도 refresh가 실패하면 stale routing을 무기한 사용하지 않고 publish를 fail closed해야 한다.
 
-애플리케이션은 `RedisStreamPublisher`로 publish한다.
+애플리케이션은 선택한 `StreamProducer`로 publish한다.
 
 ```kotlin
-redisStreamPublisher.publish(
+ordersStreamProducer.publish(
     partitionKey = "order-123",
     fields = mapOf("eventId" to "evt-1", "payload" to "..."),
 )
 ```
 
-Publisher는 coordinator의 producer routing metadata를 읽고, shard count와 shard metadata를 기준으로 partition key를 stream shard에 매핑한 뒤 `XADD NOMKSTREAM`을 보낸다.
+Publisher는 coordinator의 producer routing metadata를 읽고, shard count와 shard metadata를 기준으로 non-null partition key를 stream shard에 매핑한 뒤 `XADD NOMKSTREAM`을 보낸다. `partitionKey = null`이면 key-based routing을 수행하지 않고 active shard list 안에서 load distribution routing을 사용한다.
+
+`partitionKey = null`은 같은 business entity의 record가 같은 shard에 머물러야 하는 workload에 적합하지 않다. Null key publish는 per-key ordering이나 affinity가 필요 없는 event를 shard 전체에 분산하기 위한 모드다.
 
 `NOMKSTREAM`은 scale-in을 위한 기본 producer 안전장치다. Producer가 stale routing metadata를 가지고 제거된 shard key에 write하려고 해도 Redis가 stream key를 다시 만들면 안 된다. 이 경우 첫 publish attempt는 실패하고 routing cache를 invalidate한다. 기본 두 번째 attempt는 새 routing metadata를 가져온 뒤 target shard를 다시 계산한다.
 

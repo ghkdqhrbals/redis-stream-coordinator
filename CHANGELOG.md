@@ -4,6 +4,63 @@ All notable changes to this project are tracked here.
 
 This project follows Semantic Versioning after `1.0.0`. Before `1.0.0`, compatibility-affecting changes are still documented because the coordinator protocol and Redis metadata are operational contracts.
 
+## 0.3.0 - 2026-06-15
+
+### Added
+
+* Stream-level producer routing endpoint: `GET /coord/v1/streams/{streamPrefix}/producer-routing`.
+* Nullable producer `partitionKey`; `null` now uses load distribution across active stream shards.
+* Grafana Stream Detail producer routing panel backed by the stream-level routing endpoint.
+* Grafana Admin Console links for provisioned and import dashboards.
+* Admin console bearer-token login through `/coord/v1/auth/login`, token expiry display, and stream-level shard controls.
+
+### Changed
+
+* Physical shard topology and producer routing are now stream-scoped rather than consumer-group-scoped.
+* `StreamProducer`, `ProducerRoutingProperties`, and producer routing cache no longer require `consumerGroupName`.
+* Producer startup validation checks stream-level routing metadata.
+* Grafana import dashboards use the configured `COORDINATOR_API_URL` for admin links and coordinator API calls.
+
+### Removed
+
+* Removed the group-scoped producer routing endpoint `GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing`.
+
+### Compatibility
+
+* Release version: `0.3.0`.
+* HTTP API prefix: `/coord/v1`.
+* Coordination protocol version: `1`.
+* Redis metadata schema version: `1`.
+* Spring Boot/Kotlin modules require Java 24, Kotlin 2.2.21, Spring Boot 4.0.6, and Gradle 8.14.5.
+* Recommended Redis version is Redis 8.8. `XACKDEL` requires Redis 8.2+ and `XNACK` requires Redis 8.8+; unsupported commands fail fast or fall back to `XACK` where configured.
+
+## 0.2.0 - 2026-06-08
+
+### Added
+
+* `StreamProducer` public Spring API for producer applications.
+* Named `StreamProducer` bean pattern so one application can define multiple producers and inject them with `@Qualifier`.
+* Producer sample updated to use a named `sampleStreamProducer` bean directly instead of relying on a shared `ProducerRoutingProperties` bean.
+* Tests covering multiple named `StreamProducer` beans in the same Spring context.
+
+### Changed
+
+* The default producer auto-configuration now creates a `StreamProducer` bean while retaining `RedisStreamPublisher` compatibility through the implemented interface.
+* Producer documentation now recommends one `StreamProducer` bean per logical stream.
+
+### Removed
+
+* Removed the experimental Python client module and its dedicated CI workflow from the active release surface.
+
+### Compatibility
+
+* Release version: `0.2.0`.
+* HTTP API prefix: `/coord/v1`.
+* Coordination protocol version: `1`.
+* Redis metadata schema version: `1`.
+* Spring Boot/Kotlin modules require Java 24, Kotlin 2.2.21, Spring Boot 4.0.6, and Gradle 8.14.5.
+* Recommended Redis version is Redis 8.8. `XACKDEL` requires Redis 8.2+ and `XNACK` requires Redis 8.8+; unsupported commands fail fast or fall back to `XACK` where configured.
+
 ## 0.1.0 - 2026-06-08
 
 ### Added

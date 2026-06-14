@@ -32,7 +32,6 @@ The project does not provide a single-processing guarantee. Real applications of
 * `coordinator-server`: Spring Boot control-plane server for group metadata, heartbeat, assignment, migration, monitoring, Redis-backed state, and optional Redis Stream shard provisioning.
 * `redisstream-core`: shared coordination protocol contract, version metadata, and versioned timing defaults used by both the coordinator server and support modules.
 * `redisstream-spring-boot-starter`: Spring Boot starter that applications can add to join a coordinator group, send heartbeats, report runtime capacity, receive assignment changes, implement shard lifecycle callbacks, and publish through coordinator routing metadata.
-* `clients/python`: sync-first Python producer/consumer package published as `redisstream-coordinator` and imported as `redisstream`.
 * `samples:consumer-pod`: runnable Spring Boot sample that behaves like a consumer pod for local end-to-end coordinator, consumer, and publisher smoke tests.
 * `samples:publisher-pod`: runnable Spring Boot sample that publishes records through coordinator-managed producer routing.
 
@@ -55,7 +54,7 @@ See [Versioning and Compatibility Policy](docs/prd/11-versioning-compatibility.m
 Applications can implement `CoordinatorShardLifecycle` directly and keep ownership of actual Redis Stream reads, handler execution, `XACK`, retry, DLQ, and idempotency.
 
 ```kotlin
-implementation("com.redisstream:redisstream-spring-boot-starter:<version>")
+implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:<version>")
 ```
 
 For the built-in Redis Stream polling adapter, the simplest path is `@StreamConfiguration` plus `@StreamListener`:
@@ -160,71 +159,58 @@ class OrdersShardLifecycle : CoordinatorShardLifecycle {
 }
 ```
 
-Consumer and producer runtime settings are intentionally code-defined. The only official starter YAML property is `redis-stream-coordinator.coordinator-base-url`. Use `consumerGroupName` for the logical Redis Stream consumer group name; `member-name` is not a public YAML setting.
+Consumer and producer runtime settings are intentionally code-defined. The only official starter YAML property is `redis-stream-coordinator.coordinator-base-url`. Consumers use `consumerGroupName` for the logical Redis Stream consumer group name; producers use only `streamPrefix` for routing. `member-name` is not a public YAML setting.
 
 Producer applications can use the starter to route and publish to the active Redis Stream shard:
 
 ```kotlin
-import com.redisstream.producer.ProducerRoutingProperties
-import com.redisstream.producer.RedisStreamPublisher
+import com.redisstream.consumer.CoordinatorClient
+import com.redisstream.producer.RedisStreamXAddConfiguration
+import com.redisstream.producer.StreamProducer
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.data.redis.connection.RedisConnectionFactory
 import java.time.Duration
 
 @Configuration(proxyBeanMethods = false)
 class OrdersProducerConfiguration {
-    @Bean
-    fun ordersProducerProperties(): ProducerRoutingProperties =
-        ProducerRoutingProperties.producer(
+    @Bean("ordersStreamProducer")
+    fun ordersStreamProducer(
+        coordinatorClient: CoordinatorClient,
+        redisConnectionFactory: RedisConnectionFactory,
+    ): StreamProducer =
+        StreamProducer(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
-        ) {
-            routingRefreshInterval = Duration.ofSeconds(30)
-            xadd.maxLen = 10_000_000
-        }
+            client = coordinatorClient,
+            redisConnectionFactory = redisConnectionFactory,
+            routingRefreshInterval = Duration.ofSeconds(30),
+            xadd = RedisStreamXAddConfiguration(maxLen = 10_000_000),
+        )
 }
-
-redisStreamPublisher.publish(
-    partitionKey = orderId,
-    fields = mapOf("payload" to payload),
-)
 ```
 
-During Spring bean initialization, both managed consumers and producer routing caches validate coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`. If the coordinator group does not exist or has no active shards, application startup fails immediately instead of waiting for the first heartbeat or publish call.
+```kotlin
+import com.redisstream.producer.StreamProducer
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.stereotype.Service
 
-## Python Integration
-
-The Python client is sync-first and lives under `clients/python`.
-
-```bash
-pip install redisstream-coordinator
+@Service
+class OrderPublisher(
+    @Qualifier("ordersStreamProducer")
+    private val ordersProducer: StreamProducer,
+) {
+    fun publish(orderId: String, payload: String) {
+        ordersProducer.publish(
+            partitionKey = orderId,
+            fields = mapOf("payload" to payload),
+        )
+    }
+}
 ```
 
-```python
-from redisstream import RedisStreamCoordinator
+Use a non-null `partitionKey` when records for the same business entity need shard affinity. Passing `partitionKey = null` is supported, but it uses load distribution across active shards and does not preserve per-key ordering.
 
-app = RedisStreamCoordinator(
-    coordinator_base_url="http://localhost:8080",
-    redis_url="redis://localhost:6379",
-)
-
-@app.stream_listener(
-    stream_prefix="orders",
-    group_id="orders-consumer",
-    concurrency=4,
-    poll_batch_size=10,
-)
-def consume(message):
-    # Run business processing first, then explicitly commit the Redis Stream record.
-    message.ack()
-
-publisher = app.publisher("orders", "orders-consumer")
-publisher.publish("order-123", {"eventId": "evt-1", "payload": "..."})
-
-app.start()
-```
-
-Python listener concurrency follows the JVM starter contract: `concurrency = 4` creates four logical coordinator members with independent heartbeat state and Redis consumer names. Producer routing uses the same Murmur3 32-bit routing algorithm and `XADD NOMKSTREAM` stale-route protection as the JVM starter. Processing remains at-least-once.
+During Spring bean initialization, managed consumers validate coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`, while stream producers validate stream-level routing metadata for the configured `streamPrefix`. If coordinator metadata does not exist or has no active shards, application startup fails immediately instead of waiting for the first heartbeat or publish call.
 
 ## Documentation
 
@@ -235,10 +221,13 @@ Python listener concurrency follows the JVM starter contract: `concurrency = 4` 
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
+* [Release 0.3.0](docs/releases/0.3.0.md)
+* [Release 0.3.0 (Korean)](docs/ko/releases/0.3.0.md)
+* [Release 0.2.0](docs/releases/0.2.0.md)
+* [Release 0.2.0 (Korean)](docs/ko/releases/0.2.0.md)
 * [Release 0.1.0](docs/releases/0.1.0.md)
 * [Release 0.1.0 (Korean)](docs/ko/releases/0.1.0.md)
 * [Terraform and GitOps Governance](docs/prd/13-terraform-governance.md)
-* [Python Client Library](docs/prd/15-python-client.md)
 * [Terraform Shard Management Module](terraform/README.md)
 * [OpenAPI Spec](docs/openapi/coordinator.v1.yaml)
 * [Docker Guide](docs/docker.md)
@@ -248,6 +237,29 @@ Python listener concurrency follows the JVM starter contract: `concurrency = 4` 
 * [Contributing](CONTRIBUTING.md)
 * [Security Policy](SECURITY.md)
 * [Changelog](CHANGELOG.md)
+
+## Maven Central
+
+The public Maven coordinates use the verified GitHub namespace:
+
+```kotlin
+implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.3.0")
+```
+
+Published library artifacts:
+
+* `io.github.ghkdqhrbals:redisstream-core`
+* `io.github.ghkdqhrbals:redisstream-spring-boot-starter`
+
+The Kotlin package namespace remains `com.redisstream`. Maven `groupId` and Kotlin package names do not need to match.
+
+Maven Central publishing is manual through the `Maven Central` GitHub Actions workflow. Required repository secrets:
+
+* `MAVEN_CENTRAL_USERNAME`
+* `MAVEN_CENTRAL_PASSWORD`
+* `MAVEN_CENTRAL_SIGNING_KEY`
+* `MAVEN_CENTRAL_SIGNING_KEY_ID`
+* `MAVEN_CENTRAL_SIGNING_PASSWORD`
 
 ## Docker Quick Start
 
@@ -286,7 +298,7 @@ The pod smoke stack also starts Prometheus and Grafana for coordinator-owned met
 * Grafana: `http://localhost:3001` (`admin` / `admin`)
 * Dashboard: `Redis Stream Coordinator`
 
-Prometheus scrapes `coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
+Prometheus scrapes `rsc-coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The local Docker topology gives the coordinator the same `rsc-coordinator` network alias used by the EC2 deployment so the monitoring configuration can be reused without hostname drift. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
 
 For an existing Grafana instance, import the dashboards in `monitoring/grafana/import/`. Configure a Prometheus datasource and an Infinity datasource for the coordinator API first; enter the coordinator URL, monitoring username, and password on the datasource, then select those datasources during dashboard import. The dashboard JSON does not store the coordinator password.
 
