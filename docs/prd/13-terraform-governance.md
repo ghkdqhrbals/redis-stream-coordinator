@@ -86,7 +86,7 @@ Apply behavior:
 
 1. `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` creates the group if it does not exist.
 2. If the group already exists, `409` is treated as an expected condition.
-3. The module reads `GET /producer-routing`.
+3. The module reads `GET /coord/v1/streams/{streamPrefix}/producer-routing`.
 4. If the current `shardCount` differs from `shard_count`, it calls `POST /coord/v1/streams/{streamPrefix}/scale`.
 5. The module polls producer routing metadata until the desired shard count is visible.
 

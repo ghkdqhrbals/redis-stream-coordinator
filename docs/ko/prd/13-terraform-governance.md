@@ -86,7 +86,7 @@ Apply 동작:
 
 1. `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`로 group이 없으면 생성한다.
 2. 이미 존재하는 group의 `409`는 정상 조건으로 처리한다.
-3. `GET /producer-routing`으로 현재 shard count를 읽는다.
+3. `GET /coord/v1/streams/{streamPrefix}/producer-routing`으로 현재 shard count를 읽는다.
 4. 현재 `shardCount`와 Terraform의 `shard_count`가 다르면 `POST /coord/v1/streams/{streamPrefix}/scale`을 호출한다.
 5. Producer routing metadata가 원하는 shard count를 노출할 때까지 poll한다.
 
