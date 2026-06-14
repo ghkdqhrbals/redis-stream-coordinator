@@ -39,7 +39,7 @@ class CoordinatorWebConfig(
     }
 
     override fun addViewControllers(registry: ViewControllerRegistry) {
-        registry.addViewController("/console").setViewName("redirect:/console/admin.html")
-        registry.addViewController("/console/").setViewName("redirect:/console/admin.html")
+        registry.addViewController("/console").setViewName("forward:/console/admin.html")
+        registry.addViewController("/console/").setViewName("forward:/console/admin.html")
     }
 }
