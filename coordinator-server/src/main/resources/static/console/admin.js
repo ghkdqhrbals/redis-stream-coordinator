@@ -11,6 +11,7 @@ const adminState = {
     tokenExpiresAt: readSession(ADMIN_TOKEN_EXPIRES_KEY),
     groups: [],
     selectedKey: "",
+    lastCurl: "",
 };
 
 const adminElements = {};
@@ -45,6 +46,12 @@ function bindAdminElements() {
         "adminScaleOut",
         "adminScaleIn",
         "adminResult",
+        "adminRequestMethod",
+        "adminRequestPath",
+        "adminCurlPreview",
+        "adminCopyCurl",
+        "adminResponseStatus",
+        "adminResponsePreview",
     ].forEach((id) => {
         adminElements[id] = document.getElementById(id);
     });
@@ -64,6 +71,7 @@ function bindAdminEvents() {
     });
     adminElements.adminScaleOut.addEventListener("click", () => applyShardScale(currentShardCount() + 1));
     adminElements.adminScaleIn.addEventListener("click", () => applyShardScale(Math.max(0, currentShardCount() - 1)));
+    adminElements.adminCopyCurl.addEventListener("click", copyAdminCurl);
 }
 
 async function handleAdminLogin(event) {
@@ -206,7 +214,9 @@ async function adminRequest(path, options = {}) {
     if (options.body) {
         headers["Content-Type"] = "application/json";
     }
+    renderAdminRequestPreview(path, options, headers);
     try {
+        renderAdminResponse("Pending", "Sending request...");
         const response = await fetch(path, {
             method: options.method || "GET",
             headers,
@@ -214,22 +224,128 @@ async function adminRequest(path, options = {}) {
             cache: "no-store",
             signal: controller.signal,
         });
+        const responseText = await response.text();
+        renderAdminResponse(response.status, responseText || response.statusText || "");
         if (response.status === 401) {
             const error = new Error("Unauthorized");
             error.status = 401;
             throw error;
         }
         if (!response.ok) {
-            throw new Error(await response.text() || `HTTP ${response.status}`);
+            throw new Error(responseText || `HTTP ${response.status}`);
         }
-        return response.json();
+        return responseText ? JSON.parse(responseText) : {};
     } catch (error) {
         if (error.name === "AbortError") {
+            renderAdminResponse("Timeout", "Request timed out.");
             throw new Error("Request timed out.");
+        }
+        if (adminElements.adminResponseStatus?.textContent === "Pending") {
+            renderAdminResponse("Error", error.message);
         }
         throw error;
     } finally {
         clearTimeout(timeout);
+    }
+}
+
+function renderAdminRequestPreview(path, options, headers) {
+    const method = options.method || "GET";
+    adminElements.adminRequestMethod.textContent = method;
+    adminElements.adminRequestMethod.className = `admin-method-pill ${method.toLowerCase()}`;
+    adminElements.adminRequestPath.textContent = path;
+    adminState.lastCurl = buildAdminCurl(path, method, headers, options.body);
+    adminElements.adminCurlPreview.textContent = adminState.lastCurl;
+}
+
+function buildAdminCurl(path, method, headers, body) {
+    const lines = [`curl ${shellQuote(new URL(path, window.location.origin).toString())}`];
+    if (method !== "GET") {
+        lines.push(`  --request ${method}`);
+    }
+    Object.entries(headers).forEach(([name, value]) => {
+        const displayValue = name.toLowerCase() === "authorization" ? maskAuthorization(value) : value;
+        lines.push(`  --header ${shellQuote(`${name}: ${displayValue}`)}`);
+    });
+    if (body) {
+        lines.push(`  --data ${shellQuote(JSON.stringify(maskSensitivePayload(body), null, 2))}`);
+    }
+    return lines.join(" \\\n");
+}
+
+function maskAuthorization(value) {
+    if (!value) {
+        return "";
+    }
+    if (value.startsWith("Bearer ")) {
+        const token = value.slice("Bearer ".length);
+        return `Bearer ${token.slice(0, 10)}...`;
+    }
+    return value;
+}
+
+function maskSensitivePayload(value) {
+    if (Array.isArray(value)) {
+        return value.map(maskSensitivePayload);
+    }
+    if (value && typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, nested]) => {
+            if (isSensitiveField(key)) {
+                return [key, "<redacted>"];
+            }
+            return [key, maskSensitivePayload(nested)];
+        }));
+    }
+    return value;
+}
+
+function isSensitiveField(key) {
+    return /password|token|secret|credential|authorization/i.test(key);
+}
+
+function shellQuote(value) {
+    return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function renderAdminResponse(status, body) {
+    adminElements.adminResponseStatus.textContent = String(status);
+    adminElements.adminResponseStatus.className = `admin-status-pill ${statusClass(status)}`;
+    adminElements.adminResponsePreview.textContent = prettyResponseBody(body);
+}
+
+function statusClass(status) {
+    if (typeof status === "number" && status >= 200 && status < 300) {
+        return "ok";
+    }
+    if (status === "Pending" || status === "Not sent") {
+        return "pending";
+    }
+    return "error";
+}
+
+function prettyResponseBody(body) {
+    if (!body) {
+        return "";
+    }
+    try {
+        return JSON.stringify(JSON.parse(body), null, 2);
+    } catch {
+        return String(body);
+    }
+}
+
+async function copyAdminCurl() {
+    if (!adminState.lastCurl) {
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(adminState.lastCurl);
+        adminElements.adminCopyCurl.textContent = "Copied";
+        setTimeout(() => {
+            adminElements.adminCopyCurl.textContent = "Copy cURL";
+        }, 1200);
+    } catch (error) {
+        showAdminError("Failed to copy cURL.");
     }
 }
 

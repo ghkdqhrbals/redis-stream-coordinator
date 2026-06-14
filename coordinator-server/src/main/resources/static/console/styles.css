@@ -404,39 +404,123 @@ button {
 }
 
 .admin-shell {
-    max-width: 1180px;
+    width: min(1360px, 100%);
+    max-width: none;
+    color: #202632;
+}
+
+body:has([data-admin-shell]) {
+    background: #f7f8fb;
+    color: #202632;
 }
 
 .admin-hero {
     align-items: flex-start;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 18px;
+    border-bottom: 1px solid #e3e7ee;
+    padding-bottom: 20px;
 }
 
-.admin-grid {
+.admin-workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+    gap: 22px;
     align-items: start;
-    grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+}
+
+.admin-operation-list {
+    display: grid;
+    gap: 16px;
 }
 
 .admin-card {
+    border-color: #e3e7ee;
+    background: #ffffff;
     padding: 20px;
+    box-shadow: none;
 }
 
 .admin-card h2 {
     margin-bottom: 14px;
-    font-size: 16px;
+    color: #202632;
+    font-size: 22px;
+    line-height: 1.2;
 }
 
 .admin-card-primary {
-    border-color: #365263;
-    background: #121b24;
+    border-color: #d7dde8;
+    background: #ffffff;
+}
+
+.admin-operation-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.admin-operation-id {
+    display: inline-flex;
+    min-width: 0;
+    color: #687386;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.admin-method-pill,
+.admin-status-pill {
+    display: inline-flex;
+    min-height: 22px;
+    align-items: center;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.admin-method-pill.get {
+    background: #edf5ff;
+    color: #0b62b4;
+}
+
+.admin-method-pill.post {
+    background: #e9f9ef;
+    color: #087236;
+}
+
+.admin-method-pill.delete {
+    background: #fff0f0;
+    color: #bd1f2d;
+}
+
+.admin-status-pill {
+    text-transform: none;
+}
+
+.admin-status-pill.ok {
+    background: #e9f9ef;
+    color: #087236;
+}
+
+.admin-status-pill.pending {
+    background: #f0f3f8;
+    color: #606c7d;
+}
+
+.admin-status-pill.error {
+    background: #fff0f0;
+    color: #bd1f2d;
 }
 
 .admin-label,
 .admin-form label {
     display: grid;
     gap: 7px;
-    color: var(--muted-strong);
+    color: #435064;
     font-size: 13px;
     font-weight: 650;
 }
@@ -450,10 +534,10 @@ button {
 .admin-label select {
     width: 100%;
     min-height: 36px;
-    border: 1px solid var(--border);
+    border: 1px solid #d8dee8;
     border-radius: var(--radius);
-    background: #0f151c;
-    color: var(--text);
+    background: #ffffff;
+    color: #202632;
     padding: 0 12px;
     outline: none;
 }
@@ -462,8 +546,8 @@ button {
     min-height: 36px;
     border: 0;
     border-radius: var(--radius);
-    background: var(--accent-strong);
-    color: #04130f;
+    background: #111827;
+    color: #ffffff;
     font-size: 13px;
     font-weight: 800;
 }
@@ -474,7 +558,7 @@ button {
 
 .admin-note {
     margin: 12px 0 0;
-    color: var(--muted);
+    color: #687386;
     font-size: 12px;
     line-height: 1.5;
 }
@@ -485,6 +569,145 @@ button {
 
 .admin-current-state dd {
     overflow-wrap: anywhere;
+}
+
+.admin-shell .brand-mark {
+    border-color: #d8dee8;
+    background: #ffffff;
+    color: #087236;
+}
+
+.admin-shell .brand-lockup h1 {
+    color: #202632;
+}
+
+.admin-shell .brand-lockup p {
+    color: #687386;
+}
+
+.admin-shell .ghost-link,
+.admin-shell .ghost-button {
+    border-color: #d8dee8;
+    background: #ffffff;
+    color: #202632;
+}
+
+.admin-shell .ghost-link:hover,
+.admin-shell .ghost-button:hover {
+    border-color: #9aa6b7;
+    color: #111827;
+}
+
+.admin-shell .access-login-form label {
+    color: #435064;
+}
+
+.admin-shell .access-login-form input {
+    border-color: #d8dee8;
+    background: #ffffff;
+    color: #202632;
+}
+
+.admin-shell .access-login-form button {
+    background: #111827;
+    color: #ffffff;
+}
+
+.admin-shell .access-session {
+    border-color: #e3e7ee;
+}
+
+.admin-shell .access-session dt {
+    color: #687386;
+}
+
+.admin-shell .access-session dd {
+    color: #202632;
+}
+
+.admin-request-panel {
+    position: sticky;
+    top: 22px;
+    min-width: 0;
+    border: 1px solid #d8dee8;
+    border-radius: var(--radius);
+    background: #ffffff;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+}
+
+.admin-request-header,
+.admin-response-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid #e3e7ee;
+    padding: 12px;
+}
+
+.admin-request-header > div {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+}
+
+.admin-request-path {
+    min-width: 0;
+    color: #435064;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.admin-code-block,
+.admin-response-block,
+.admin-result-block {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.admin-code-block {
+    min-height: 210px;
+    max-height: 340px;
+    background: #101114;
+    color: #e7edf4;
+    padding: 16px;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.admin-response-header h2,
+.admin-result-title {
+    margin: 0;
+    color: #202632;
+    font-size: 13px;
+}
+
+.admin-response-block,
+.admin-result-block {
+    max-height: 260px;
+    background: #f7f8fb;
+    color: #202632;
+    padding: 14px;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.admin-result-title {
+    border-top: 1px solid #e3e7ee;
+    padding: 12px 12px 0;
+}
+
+.admin-result-block {
+    max-height: 180px;
+    color: #435064;
 }
 
 .side-panel,
@@ -1663,6 +1886,14 @@ td {
 
     .summary-strip {
         grid-template-columns: repeat(3, minmax(120px, 1fr));
+    }
+
+    .admin-workbench {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-request-panel {
+        position: static;
     }
 }
 
