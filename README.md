@@ -221,6 +221,8 @@ During Spring bean initialization, managed consumers validate coordinator routin
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
+* [Release 0.3.1](docs/releases/0.3.1.md)
+* [Release 0.3.1 (Korean)](docs/ko/releases/0.3.1.md)
 * [Release 0.3.0](docs/releases/0.3.0.md)
 * [Release 0.3.0 (Korean)](docs/ko/releases/0.3.0.md)
 * [Release 0.2.0](docs/releases/0.2.0.md)
@@ -243,7 +245,7 @@ During Spring bean initialization, managed consumers validate coordinator routin
 The public Maven coordinates use the verified GitHub namespace:
 
 ```kotlin
-implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.3.0")
+implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.3.1")
 ```
 
 Published library artifacts:

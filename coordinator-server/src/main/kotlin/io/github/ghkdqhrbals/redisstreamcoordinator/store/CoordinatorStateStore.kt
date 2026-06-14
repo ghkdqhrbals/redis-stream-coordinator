@@ -4,6 +4,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.COORDINATOR_METADATA_SCHEMA_VERSION
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupKey
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamMetadata
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -51,6 +52,31 @@ interface CoordinatorStateStore {
      * Lists all known group aggregates from the store index.
      */
     fun list(): List<GroupMetadata>
+
+    /**
+     * Loads the stream-level shard layout metadata for a stream prefix.
+     */
+    fun getStream(streamPrefix: String): StreamMetadata? = null
+
+    /**
+     * Creates stream-level shard layout metadata when none exists for the prefix.
+     */
+    fun putStreamIfAbsent(stream: StreamMetadata): Boolean = false
+
+    /**
+     * Deletes stream-level shard layout metadata only when the stored revision matches the expected revision.
+     */
+    fun deleteStreamIfRevision(streamPrefix: String, expectedRevision: Long): Boolean = false
+
+    /**
+     * Persists changed stream-level shard layout metadata.
+     */
+    fun saveStream(stream: StreamMetadata) = Unit
+
+    /**
+     * Lists all known stream-level shard layouts.
+     */
+    fun listStreams(): List<StreamMetadata> = emptyList()
 }
 
 class CoordinatorStateConflictException(message: String) : RuntimeException(message)
@@ -60,6 +86,7 @@ class CoordinatorStateSchemaException(message: String) : RuntimeException(messag
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "memory", matchIfMissing = true)
 class InMemoryCoordinatorStateStore : CoordinatorStateStore {
     private val groups = ConcurrentHashMap<GroupKey, GroupMetadata>()
+    private val streams = ConcurrentHashMap<String, StreamMetadata>()
 
     override fun contains(key: GroupKey): Boolean =
         groups.containsKey(key)
@@ -94,6 +121,33 @@ class InMemoryCoordinatorStateStore : CoordinatorStateStore {
 
     override fun list(): List<GroupMetadata> =
         groups.values.toList()
+
+    override fun getStream(streamPrefix: String): StreamMetadata? =
+        streams[streamPrefix]
+
+    override fun putStreamIfAbsent(stream: StreamMetadata): Boolean =
+        streams.putIfAbsent(stream.streamPrefix, stream.also { it.storeRevision = 1 }) == null
+
+    override fun deleteStreamIfRevision(streamPrefix: String, expectedRevision: Long): Boolean {
+        var deleted = false
+        streams.computeIfPresent(streamPrefix) { _, stored ->
+            if (stored.storeRevision == expectedRevision) {
+                deleted = true
+                null
+            } else {
+                stored
+            }
+        }
+        return deleted
+    }
+
+    override fun saveStream(stream: StreamMetadata) {
+        stream.storeRevision += 1
+        streams[stream.streamPrefix] = stream
+    }
+
+    override fun listStreams(): List<StreamMetadata> =
+        streams.values.toList()
 }
 
 @Component
@@ -165,6 +219,42 @@ class RedisCoordinatorStateStore @Autowired constructor(
             .mapNotNull(::readIndexedGroupMetadata)
             .distinctBy { it.streamPrefix to it.consumerGroup }
 
+    override fun getStream(streamPrefix: String): StreamMetadata? =
+        readStreamMetadata(keys.forStream(streamPrefix))
+
+    override fun putStreamIfAbsent(stream: StreamMetadata): Boolean {
+        val streamKey = keys.forStream(stream.streamPrefix)
+        val stored = writeStreamMetadata(streamKey, stream, onlyIfAbsent = true)
+        if (stored) {
+            redisCommands.setAdd(keys.streamsIndex, streamKey.metadata)
+        }
+        return stored
+    }
+
+    override fun deleteStreamIfRevision(streamPrefix: String, expectedRevision: Long): Boolean {
+        val streamKey = keys.forStream(streamPrefix)
+        val deleted = redisCommands.executeLong(
+            DELETE_GROUP_IF_REVISION_SCRIPT,
+            listOf(streamKey.metadata),
+            expectedRevision.toString(),
+        ) == 1L
+        if (deleted) {
+            redisCommands.setRemove(keys.streamsIndex, streamKey.metadata)
+        }
+        return deleted
+    }
+
+    override fun saveStream(stream: StreamMetadata) {
+        val streamKey = keys.forStream(stream.streamPrefix)
+        writeStreamMetadata(streamKey, stream, onlyIfAbsent = false)
+        redisCommands.setAdd(keys.streamsIndex, streamKey.metadata)
+    }
+
+    override fun listStreams(): List<StreamMetadata> =
+        redisCommands.setMembers(keys.streamsIndex)
+            .mapNotNull(::readStreamMetadata)
+            .distinctBy { it.streamPrefix }
+
     /**
      * Atomically updates the single Redis hash that stores the canonical group metadata.
      */
@@ -211,6 +301,48 @@ class RedisCoordinatorStateStore @Autowired constructor(
         redisCommands.hashGet(keys.metadata, METADATA_AGGREGATE_FIELD)
             ?.let { objectMapper.readRedisGroupMetadata(it) }
             ?: migrateLegacyGroupMetadata(keys)
+
+    private fun writeStreamMetadata(
+        key: RedisCoordinatorStreamKey,
+        stream: StreamMetadata,
+        onlyIfAbsent: Boolean,
+    ): Boolean {
+        stream.requireSupportedRedisMetadataSchema()
+        val previousRevision = stream.storeRevision
+        val nextRevision = if (onlyIfAbsent) previousRevision.takeIf { it > 0 } ?: 1 else previousRevision + 1
+        stream.storeRevision = nextRevision
+        val result = redisCommands.executeLong(
+            UPSERT_GROUP_METADATA_SCRIPT,
+            listOf(key.metadata),
+            if (onlyIfAbsent) "NX" else "UPSERT",
+            previousRevision.toString(),
+            nextRevision.toString(),
+            objectMapper.writeValueAsString(stream),
+            stream.schemaVersion.toString(),
+            REDIS_METADATA_LAYOUT_VERSION.toString(),
+            stream.updatedAt.toString(),
+        )
+        return when (result) {
+            1L -> true
+            0L -> {
+                stream.storeRevision = previousRevision
+                false
+            }
+            else -> {
+                stream.storeRevision = previousRevision
+                throw CoordinatorStateConflictException(
+                    "Redis coordinator stream metadata changed before save for ${key.metadata}; expected store revision $previousRevision",
+                )
+            }
+        }
+    }
+
+    private fun readStreamMetadata(key: RedisCoordinatorStreamKey): StreamMetadata? =
+        readStreamMetadata(key.metadata)
+
+    private fun readStreamMetadata(metadataKey: String): StreamMetadata? =
+        redisCommands.hashGet(metadataKey, METADATA_AGGREGATE_FIELD)
+            ?.let { objectMapper.readRedisStreamMetadata(it) }
 
     private fun readIndexedGroupMetadata(indexMember: String): GroupMetadata? {
         redisCommands.hashGet(indexMember, METADATA_AGGREGATE_FIELD)
@@ -298,6 +430,7 @@ class JdbcCoordinatorStateStore @Autowired constructor(
 ) : CoordinatorStateStore {
     init {
         jdbcTemplate.execute(CREATE_TABLE_SQL)
+        jdbcTemplate.execute(CREATE_STREAM_TABLE_SQL)
     }
 
     override fun contains(key: GroupKey): Boolean =
@@ -403,8 +536,99 @@ class JdbcCoordinatorStateStore @Autowired constructor(
             rowMapper,
         )
 
+    override fun getStream(streamPrefix: String): StreamMetadata? =
+        try {
+            jdbcTemplate.queryForObject(
+                """
+                SELECT metadata_json
+                FROM redis_stream_coordinator_stream_metadata
+                WHERE stream_prefix = ?
+                """.trimIndent(),
+                streamRowMapper,
+                streamPrefix,
+            )
+        } catch (_: EmptyResultDataAccessException) {
+            null
+        }
+
+    override fun putStreamIfAbsent(stream: StreamMetadata): Boolean {
+        stream.requireSupportedRedisMetadataSchema()
+        val previousRevision = stream.storeRevision
+        stream.storeRevision = 1
+        return try {
+            jdbcTemplate.update(
+                """
+                INSERT INTO redis_stream_coordinator_stream_metadata
+                  (stream_prefix, metadata_json, store_revision, schema_version, layout_version, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """.trimIndent(),
+                stream.streamPrefix,
+                objectMapper.writeValueAsString(stream),
+                stream.storeRevision,
+                stream.schemaVersion,
+                JDBC_METADATA_LAYOUT_VERSION,
+                stream.updatedAt.toString(),
+            )
+            true
+        } catch (_: DuplicateKeyException) {
+            stream.storeRevision = previousRevision
+            false
+        }
+    }
+
+    override fun deleteStreamIfRevision(streamPrefix: String, expectedRevision: Long): Boolean =
+        jdbcTemplate.update(
+            """
+            DELETE FROM redis_stream_coordinator_stream_metadata
+            WHERE stream_prefix = ? AND store_revision = ?
+            """.trimIndent(),
+            streamPrefix,
+            expectedRevision,
+        ) == 1
+
+    override fun saveStream(stream: StreamMetadata) {
+        stream.requireSupportedRedisMetadataSchema()
+        val previousRevision = stream.storeRevision
+        val nextRevision = previousRevision + 1
+        stream.storeRevision = nextRevision
+        val updated = jdbcTemplate.update(
+            """
+            UPDATE redis_stream_coordinator_stream_metadata
+            SET metadata_json = ?, store_revision = ?, schema_version = ?, layout_version = ?, updated_at = ?
+            WHERE stream_prefix = ? AND store_revision = ?
+            """.trimIndent(),
+            objectMapper.writeValueAsString(stream),
+            nextRevision,
+            stream.schemaVersion,
+            JDBC_METADATA_LAYOUT_VERSION,
+            stream.updatedAt.toString(),
+            stream.streamPrefix,
+            previousRevision,
+        )
+        if (updated != 1) {
+            stream.storeRevision = previousRevision
+            throw CoordinatorStateConflictException(
+                "JDBC coordinator stream metadata changed before save for ${stream.streamPrefix}; expected store revision $previousRevision",
+            )
+        }
+    }
+
+    override fun listStreams(): List<StreamMetadata> =
+        jdbcTemplate.query(
+            """
+            SELECT metadata_json
+            FROM redis_stream_coordinator_stream_metadata
+            ORDER BY stream_prefix
+            """.trimIndent(),
+            streamRowMapper,
+        )
+
     private val rowMapper = RowMapper<GroupMetadata> { rs: ResultSet, _: Int ->
         objectMapper.readRedisGroupMetadata(rs.getString("metadata_json"))
+    }
+
+    private val streamRowMapper = RowMapper<StreamMetadata> { rs: ResultSet, _: Int ->
+        objectMapper.readRedisStreamMetadata(rs.getString("metadata_json"))
     }
 
     companion object {
@@ -422,11 +646,27 @@ class JdbcCoordinatorStateStore @Autowired constructor(
               PRIMARY KEY (stream_prefix, consumer_group)
             )
         """.trimIndent()
+
+        private val CREATE_STREAM_TABLE_SQL = """
+            CREATE TABLE IF NOT EXISTS redis_stream_coordinator_stream_metadata (
+              stream_prefix VARCHAR(512) NOT NULL,
+              metadata_json CLOB NOT NULL,
+              store_revision BIGINT NOT NULL,
+              schema_version INTEGER NOT NULL,
+              layout_version INTEGER NOT NULL,
+              updated_at VARCHAR(64) NOT NULL,
+              PRIMARY KEY (stream_prefix)
+            )
+        """.trimIndent()
     }
 }
 
 internal fun ObjectMapper.readRedisGroupMetadata(raw: String): GroupMetadata =
     readValue<GroupMetadata>(normalizeRedisGroupMetadata(raw))
+        .also { it.requireSupportedRedisMetadataSchema() }
+
+internal fun ObjectMapper.readRedisStreamMetadata(raw: String): StreamMetadata =
+    readValue<StreamMetadata>(raw)
         .also { it.requireSupportedRedisMetadataSchema() }
 
 private fun ObjectMapper.normalizeRedisGroupMetadata(raw: String): String {
@@ -527,6 +767,14 @@ internal fun GroupMetadata.requireSupportedRedisMetadataSchema() {
     }
 }
 
+internal fun StreamMetadata.requireSupportedRedisMetadataSchema() {
+    if (schemaVersion != COORDINATOR_METADATA_SCHEMA_VERSION) {
+        throw CoordinatorStateSchemaException(
+            "Unsupported Redis coordinator stream metadata schemaVersion $schemaVersion; supported schemaVersion is $COORDINATOR_METADATA_SCHEMA_VERSION",
+        )
+    }
+}
+
 private const val LEGACY_VERSION_SUFFIX = "Version"
 private const val LEGACY_ACTIVE_WRITE_VERSION_FIELD = "activeWrite$LEGACY_VERSION_SUFFIX"
 private const val LEGACY_SHARD_COUNTS_BY_VERSION_FIELD = "shardCountsBy$LEGACY_VERSION_SUFFIX"
@@ -539,6 +787,7 @@ class RedisCoordinatorStateKeys(
     private val prefix = keyPrefix
 
     val groupsIndex: String = "$prefix:groups"
+    val streamsIndex: String = "$prefix:streams"
 
     fun forGroup(key: GroupKey): RedisCoordinatorGroupKeys {
         val tag = "{${key.streamPrefix}:${key.consumerGroup}}"
@@ -547,9 +796,18 @@ class RedisCoordinatorStateKeys(
             metadata = "$prefix:$tag:metadata",
         )
     }
+
+    fun forStream(streamPrefix: String): RedisCoordinatorStreamKey {
+        val tag = "{$streamPrefix}"
+        return RedisCoordinatorStreamKey(metadata = "$prefix:$tag:stream")
+    }
 }
 
 data class RedisCoordinatorGroupKeys(
     val group: String,
+    val metadata: String,
+)
+
+data class RedisCoordinatorStreamKey(
     val metadata: String,
 )

@@ -174,6 +174,18 @@ Recorded state by write boundary:
 
 Consumer rule: once a shard enters local revoking state, the consumer must not resume reads for that shard just because heartbeat is temporarily failing. Only a later coordinator assignment can make the shard readable again.
 
+### Stream Creation and First Heartbeat Boundaries
+
+Stream-level metadata and physical shard stream keys are created before any runtime consumer group exists. The coordinator must not use `XGROUP CREATE MKSTREAM` as the stream creation mechanism.
+
+| Edge case | Risk | Required behavior |
+| --- | --- | --- |
+| Physical stream creation fails after metadata claim | Phantom stream metadata without Redis stream keys | Roll back the stream metadata compare-and-set claim and return the provisioning error |
+| First heartbeat arrives for an existing stream but missing group | Consumer repeats `UNKNOWN_MEMBER_ID` forever even though stream topology exists | Treat `memberEpoch=0` as group auto-registration, then assign from stream shard metadata |
+| First heartbeat arrives for a missing stream | Consumer accidentally creates topology from local config | Return `UNKNOWN_MEMBER_ID`; stream topology must be created by Admin API or compatibility group-create API |
+| First heartbeat arrives after stream was scaled to zero | Group provisioning tries to create Redis consumer groups for zero shards | Record the group with `shardCount=0`, skip Redis consumer group provisioning, and return an empty assignment |
+| Compatibility group create runs under an existing stream | Divergent shard counts across groups | Require the requested group shard count to match stream metadata |
+
 Coordinator rule: a shard must not move from pending to assigned for the new owner until one of these is true:
 
 * previous owner reported `REVOKED` with no in-flight work;

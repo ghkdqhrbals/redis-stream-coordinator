@@ -137,6 +137,18 @@ data class StreamCreateResponse(
     val metadataVersion: Long,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
+@Schema(description = "Source-of-truth metadata stored by the coordinator for one logical stream shard layout.")
+data class StreamMetadata(
+    val streamPrefix: String,
+    var schemaVersion: Int = COORDINATOR_METADATA_SCHEMA_VERSION,
+    var storeRevision: Long = 0,
+    var metadataVersion: Long,
+    var shardCount: Int,
+    val createdAt: Instant,
+    var updatedAt: Instant,
+)
+
 @Schema(description = "Request body for deleting group metadata.")
 data class DeleteGroupRequest(
     @field:NotBlank

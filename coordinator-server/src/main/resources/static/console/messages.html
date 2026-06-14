@@ -6,7 +6,7 @@
     <title>Redis Stream Messages</title>
     <link rel="stylesheet" href="/console/styles.css">
 </head>
-<body class="message-explorer-page">
+<body class="message-explorer-page console-docs-page">
 <main class="message-explorer-shell">
     <section id="messageLoginView" class="message-login-panel">
         <div>
@@ -22,20 +22,36 @@
         <p id="messageLoginError" class="form-error" role="alert"></p>
     </section>
 
-    <section id="messageAppView" class="message-app hidden">
-        <header class="message-header">
-            <div>
-                <p class="eyebrow">Message Explorer</p>
-                <h1>Redis Stream Records</h1>
-                <p id="messageExplorerSubtitle" class="page-subtitle">Select a stream, consumer group, and shard.</p>
+    <section id="messageAppView" class="message-app hidden" data-messages-shell>
+        <aside class="message-sidebar scalar-sidebar" aria-label="Message explorer navigation">
+            <div class="brand-lockup compact">
+                <div class="brand-mark" aria-hidden="true">RC</div>
+                <div>
+                    <h1>Coordinator</h1>
+                    <p>Message Explorer</p>
+                </div>
             </div>
-            <div class="message-actions">
-                <button id="messageExplorerRefresh" class="ghost-button small" type="button">Refresh</button>
-                <button id="messageExplorerSignOut" class="ghost-button small" type="button">Sign out</button>
-            </div>
-        </header>
+            <nav class="scalar-nav" aria-label="Console">
+                <a href="/console/index.html">Monitoring</a>
+                <a href="/console/admin.html">Admin</a>
+                <a class="selected" href="/console/messages.html">Messages</a>
+            </nav>
+            <button id="messageExplorerSignOut" class="ghost-button small" type="button">Sign out</button>
+        </aside>
 
-        <section class="message-controls">
+        <section class="message-workspace">
+            <header class="message-header">
+                <div>
+                    <p class="eyebrow">Message Explorer</p>
+                    <h1>Redis Stream Records</h1>
+                    <p id="messageExplorerSubtitle" class="page-subtitle">Select a stream, consumer group, and shard.</p>
+                </div>
+                <div class="message-actions">
+                    <button id="messageExplorerRefresh" class="ghost-button small" type="button">Refresh</button>
+                </div>
+            </header>
+
+            <section class="message-controls">
             <label>
                 Stream / Consumer Group
                 <select id="messageGroupSelect"></select>
@@ -63,17 +79,17 @@
                     <option value="1000">1000</option>
                 </select>
             </label>
-        </section>
+            </section>
 
-        <section class="message-status-strip">
+            <section class="message-status-strip">
             <article><span>Stream length</span><strong id="messageStreamLength">-</strong></article>
             <article><span>Lag</span><strong id="messageLag">-</strong></article>
             <article><span>Pending</span><strong id="messagePending">-</strong></article>
             <article><span>End offset</span><strong id="messageEndOffset">-</strong></article>
             <article><span>Consumer offset</span><strong id="messageConsumerOffset">-</strong></article>
-        </section>
+            </section>
 
-        <section class="message-table-panel">
+            <section class="message-table-panel">
             <div class="message-browser-header">
                 <div>
                     <span id="messageStreamKey" class="shard-name">-</span>
@@ -104,7 +120,25 @@
                     <tbody id="messageRows"></tbody>
                 </table>
             </div>
+            </section>
         </section>
+
+        <aside class="admin-request-panel message-request-panel" aria-label="Message request preview">
+            <div class="admin-request-header">
+                <div>
+                    <span id="messageRequestMethod" class="admin-method-pill get">GET</span>
+                    <span id="messageRequestPath" class="admin-request-path">/coord/v1/monitoring/streams/{stream}/groups/{group}/shards/{shard}/messages</span>
+                </div>
+            </div>
+            <pre id="messageCurlPreview" class="admin-code-block"><code>curl https://coordinator.ghkdqhrbals.org/coord/v1/monitoring/streams/{stream}/groups/{group}/shards/{shard}/messages \
+  --request GET \
+  --header 'Authorization: Bearer &lt;token&gt;'</code></pre>
+            <div class="admin-response-header">
+                <h2>Message Operations</h2>
+                <span id="messageResponseStatus" class="admin-status-pill pending">Ready</span>
+            </div>
+            <pre id="messageResponsePreview" class="admin-response-block"><code>Select a stream, group, and shard to preview the exact request.</code></pre>
+        </aside>
     </section>
 </main>
 <script src="/console/table-resize.js"></script>

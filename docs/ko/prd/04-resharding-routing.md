@@ -84,7 +84,8 @@ sequenceDiagram
     C->>Store: Read group metadata
     C->>Store: Validate no active resharding
     C->>Store: Create PREPARING resharding state
-    C->>Stream: Provision shard stream keys and consumer groups
+    C->>Stream: Provision shard stream keys
+    C->>Stream: Provision Redis consumer groups for registered groups
     C->>Store: Activate new shard count
     C->>Store: Increment group epoch and recalculate target assignment
     C-->>Admin: Return reshardingId and old/new shard counts
@@ -118,6 +119,19 @@ Source of truth:
 * consumer `concurrency`: `@StreamListener(concurrency = N)`이 만드는 consumer-side logical member 수
 * routing metadata: coordinator producer routing endpoint
 
+## Create Stream
+
+`POST /coord/v1/streams/{streamPrefix}`는 stream-level shard metadata와 physical shard stream key만 만든다. Redis consumer group을 만들지 않고, stream prefix를 group 이름으로 임의 변환하지 않는다.
+
+Physical stream 생성은 Redis consumer group 생성과 별도 단계이다.
+
+1. 해당 prefix를 이미 coordinator metadata나 Redis stream key가 소유하지 않는지 검증한 뒤 stream metadata를 저장한다.
+2. 각 physical stream key를 consumer group과 독립적으로 생성한다.
+3. Physical stream 생성에 실패하면 stream metadata claim을 rollback한다.
+4. Runtime consumer가 설정한 `consumerGroup`은 첫 `memberEpoch=0` heartbeat에서 등록된다.
+
+이 분리는 producer의 `XADD NOMKSTREAM` 안전장치를 유지하기 위한 것이다. Producer routing이 stale이면 producer write가 fail closed해야 하며, consumer group 생성 경로나 `XGROUP CREATE MKSTREAM`이 제거된 stream key를 다시 만들어서는 안 된다.
+
 ## Create Group
 
 `initialShardCount`는 생략할 수 있다. 생략하면 coordinator default를 사용한다.
@@ -126,9 +140,13 @@ Source of truth:
 
 1. group이 이미 존재하지 않는지 확인한다.
 2. 요청 shard count를 검증한다.
-3. provisioning이 켜져 있으면 shard stream key와 Redis consumer group을 생성한다.
-4. `shardCount`와 `groupEpoch=1`을 저장한다.
-5. duplicate create request는 `409 Conflict`로 거절한다.
+3. 같은 shard count를 가진 stream-level metadata가 존재하도록 보장한다.
+4. provisioning이 켜져 있으면 physical stream key 생성을 Redis consumer group 생성과 분리해서 수행한다.
+5. 각 shard stream에 Redis consumer group을 생성한다.
+6. `shardCount`와 `groupEpoch=1`을 저장한다.
+7. duplicate create request는 `409 Conflict`로 거절한다.
+
+Stream이 이미 존재하면 직접 group 생성과 첫 heartbeat 자동 등록은 반드시 stream shard count를 따른다. Stream이 이미 `0` shard로 scale된 상태라면 group은 `shardCount=0`으로 기록될 수 있지만 active routing에 shard stream이 없으므로 Redis consumer group provisioning은 생략한다.
 
 ## Scale Out / Scale In
 

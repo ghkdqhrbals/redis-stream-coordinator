@@ -84,7 +84,8 @@ sequenceDiagram
     C->>Store: Read group metadata
     C->>Store: Validate no active resharding
     C->>Store: Create PREPARING resharding state
-    C->>Stream: Provision shard stream keys and consumer groups
+    C->>Stream: Provision shard stream keys
+    C->>Stream: Provision Redis consumer groups for registered groups
     C->>Store: Activate new shard count
     C->>Store: Increment group epoch and recalculate target assignment
     C-->>Admin: Return reshardingId and old/new shard counts
@@ -118,6 +119,19 @@ Source of truth:
 * consumer `concurrency`: consumer-side logical member count created by `@StreamListener(concurrency = N)`,
 * routing metadata: coordinator producer routing endpoint.
 
+## Create Stream
+
+`POST /coord/v1/streams/{streamPrefix}` creates stream-level shard metadata and physical shard stream keys only. It must not create a Redis consumer group and must not invent a group name from the stream prefix.
+
+Physical stream creation is a separate step from Redis consumer group creation:
+
+1. Store stream metadata after validating that no coordinator metadata or Redis stream key already owns the prefix.
+2. Create each physical stream key independently of any consumer group.
+3. Roll back the stream metadata if physical stream creation fails.
+4. Let runtime consumers register their configured `consumerGroup` on the first `memberEpoch=0` heartbeat.
+
+This split keeps producer `XADD NOMKSTREAM` meaningful. Producers can fail closed when routing is stale because the coordinator, not producer writes or `XGROUP CREATE MKSTREAM`, owns physical stream key creation.
+
 ## Create Group
 
 `initialShardCount` can be omitted. In that case the coordinator uses configured defaults.
@@ -126,9 +140,13 @@ Processing order:
 
 1. Verify the group does not already exist.
 2. Validate the requested shard count.
-3. Provision shard stream keys and Redis consumer groups when provisioning is enabled.
-4. Store `shardCount` and `groupEpoch=1`.
-5. Reject duplicate create requests with `409 Conflict`.
+3. Ensure stream-level metadata exists with the same shard count.
+4. Provision physical stream keys separately from Redis consumer groups when provisioning is enabled.
+5. Provision the Redis consumer group for every shard stream.
+6. Store `shardCount` and `groupEpoch=1`.
+7. Reject duplicate create requests with `409 Conflict`.
+
+When a stream already exists, direct group creation and first-heartbeat auto registration must use the stream shard count. If the stream has been scaled to zero, the group can be recorded with `shardCount=0`, but Redis consumer group provisioning is skipped because there are no shard streams in active routing.
 
 ## Scale Out / Scale In
 

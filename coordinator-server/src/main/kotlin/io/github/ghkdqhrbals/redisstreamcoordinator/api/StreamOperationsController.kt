@@ -33,9 +33,9 @@ class StreamOperationsController(
      * Creates a stream-level shard layout with only a stream prefix in the path.
      */
     @Operation(
-        operationId = "createStreamGroup",
-        summary = "Create a stream group",
-        description = "Creates the initial shard layout for a sharded Redis Stream prefix. The official create path only requires streamPrefix; consumer groups reconcile through their own runtime configuration and heartbeat flow.",
+        operationId = "createStream",
+        summary = "Create a stream",
+        description = "Creates stream-level shard metadata and physical Redis Stream keys for a sharded Redis Stream prefix. This operation does not create a Redis consumer group; runtime consumer groups are registered by heartbeat or the compatibility group API.",
         responses = [
             ApiResponse(responseCode = "201", description = "Stream shard layout was created."),
             ApiResponse(responseCode = "409", description = "The stream prefix already has coordinator metadata or Redis Stream keys."),

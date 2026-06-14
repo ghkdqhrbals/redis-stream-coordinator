@@ -117,6 +117,11 @@ function bindElements() {
         "progressList",
         "migrationStatus",
         "migrationList",
+        "monitorRequestPath",
+        "monitorCurlPreview",
+        "monitorResponseStatus",
+        "monitorResponsePreview",
+        "monitorCopyCurl",
     ].forEach((id) => {
         elements[id] = document.getElementById(id);
     });
@@ -189,6 +194,12 @@ function bindEvents() {
         state.globalMessages.cursors[state.globalMessages.page] = "__rsc_tail__:0";
         state.globalMessages.nextCursor = "";
         loadGlobalMessages();
+    });
+    elements.monitorCopyCurl?.addEventListener("click", () => {
+        const curl = elements.monitorCurlPreview?.textContent || "";
+        if (curl && navigator.clipboard) {
+            navigator.clipboard.writeText(curl);
+        }
     });
     elements.autoRefresh.addEventListener("change", scheduleRefresh);
     elements.refreshInterval.addEventListener("change", scheduleRefresh);
@@ -313,6 +324,7 @@ async function refreshSelectedGroup() {
 }
 
 async function apiRequest(path, authOverride) {
+    renderMonitoringRequestPreview(`${API_BASE}${path}`, "Loading");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response;
@@ -349,11 +361,14 @@ async function apiRequest(path, authOverride) {
         const text = await response.text();
         throw new Error(text || `Request failed with HTTP ${response.status}`);
     }
+    renderMonitoringRequestPreview(`${API_BASE}${path}`, String(response.status));
     return response.json();
 }
 
 async function grafanaRequest(path) {
-    return authenticatedFetchJson(`${GRAFANA_BASE}${path}`);
+    const requestPath = `${GRAFANA_BASE}${path}`;
+    renderMonitoringRequestPreview(requestPath, "Loading");
+    return authenticatedFetchJson(requestPath);
 }
 
 async function authenticatedFetchJson(url) {
@@ -393,6 +408,7 @@ async function authenticatedFetchJson(url) {
         const text = await response.text();
         throw new Error(text || `Request failed with HTTP ${response.status}`);
     }
+    renderMonitoringRequestPreview(url.replace(window.location.origin, ""), String(response.status));
     return response.json();
 }
 
@@ -1241,6 +1257,28 @@ function groupKey(group) {
 
 function groupPath(group) {
     return `/streams/${encodeURIComponent(group.streamPrefix)}/groups/${encodeURIComponent(group.consumerGroup)}`;
+}
+
+function renderMonitoringRequestPreview(path, status) {
+    if (!elements.monitorCurlPreview || !elements.monitorRequestPath) {
+        return;
+    }
+    const requestPath = path || "/coord/v1/monitoring/grafana/shards";
+    elements.monitorRequestPath.textContent = requestPath;
+    elements.monitorCurlPreview.textContent = [
+        `curl ${window.location.origin}${requestPath} \\`,
+        "  --request GET \\",
+        "  --header 'Authorization: Bearer <token>'",
+    ].join("\n");
+    if (elements.monitorResponseStatus && status) {
+        elements.monitorResponseStatus.textContent = status;
+    }
+    if (elements.monitorResponsePreview) {
+        const selected = selectedGroup();
+        elements.monitorResponsePreview.textContent = selected
+            ? `Stream: ${selected.streamPrefix}\nGroup: ${selected.consumerGroup}\nLast request: ${requestPath}`
+            : `GET /coord/v1/monitoring/grafana/shards\nGET /coord/v1/monitoring/groups\nGET /coord/v1/monitoring/grafana/messages`;
+    }
 }
 
 function createBasicAuth(username, password) {

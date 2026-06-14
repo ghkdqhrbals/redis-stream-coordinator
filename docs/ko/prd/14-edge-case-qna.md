@@ -22,6 +22,22 @@ Terminating mode 이후 신규 critical-section 작업은 retryable coordinator-
 
 ## Member 만료와 Rebalance
 
+### Q. Stream 생성이 consumer group도 자동으로 만드나?
+
+아니다. Stream 생성은 stream-level shard metadata와 physical shard stream key만 만든다. Runtime consumer가 자신이 설정한 `consumerGroup`을 가져오며, 해당 group은 첫 `memberEpoch=0` heartbeat 또는 compatibility group-create API로 등록된다.
+
+### Q. Physical stream 생성과 `XGROUP CREATE`를 왜 분리하나?
+
+Producer 안전성은 제거된 shard key가 제거된 상태로 유지되는 데 의존한다. Coordinator가 physical stream key를 명시적으로 만들고, producer write는 `XADD NOMKSTREAM`을 사용한다. Redis consumer group 생성은 `MKSTREAM`에 의존하면 안 된다. 그렇게 하면 retired 상태여야 하는 missing stream key를 consumer group 생성 경로가 다시 만들 수 있기 때문이다.
+
+### Q. Consumer가 명시적으로 group을 만들기 전에 먼저 뜨면?
+
+Stream metadata가 존재하고 heartbeat가 initial join(`memberEpoch=0`)이면 coordinator가 stream shard count로 consumer group을 기록하고 assignment를 반환한다. Stream metadata가 없으면 `UNKNOWN_MEMBER_ID`를 반환한다. Client는 stream 생성 후 retry할 수 있지만, coordinator가 heartbeat만 보고 stream topology를 추론하지는 않는다.
+
+### Q. 첫 consumer join 시점에 stream shard count가 0이면?
+
+Coordinator는 group을 `shardCount=0`으로 기록하고 `OK`와 빈 assignment를 반환한다. Active shard stream이 없으므로 Redis consumer group provisioning은 생략한다. Producer도 stream-level routing이 빈 shard list를 반환하므로 fail closed한다.
+
 ### Q. 모든 consumer member의 heartbeat가 끊기면 어떻게 되나?
 
 Event loop가 member lease TTL 이후 member를 `EXPIRED`로 표시하고, metadata/group epoch를 증가시키고, target assignment를 비운 뒤 group을 `EMPTY`로 바꾼다. Expired member record는 관측성과 stale heartbeat fencing을 위해 잠시 남고, 이후 stale-member cleanup으로 제거될 수 있다.

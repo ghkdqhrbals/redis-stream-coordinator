@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
@@ -75,7 +76,12 @@ class CoordinatorHttpIntegrationTest {
     @Test
     fun `monitoring console is exposed without triggering api basic auth`() {
         mockMvc.perform(get("/console"))
+            .andExpect(status().is3xxRedirection)
+            .andExpect(redirectedUrl("/console/admin.html"))
+
+        mockMvc.perform(get("/console/admin.html"))
             .andExpect(status().isOk)
+            .andExpect(content().string(containsString("data-admin-shell")))
 
         mockMvc.perform(get("/console/index.html"))
             .andExpect(status().isOk)

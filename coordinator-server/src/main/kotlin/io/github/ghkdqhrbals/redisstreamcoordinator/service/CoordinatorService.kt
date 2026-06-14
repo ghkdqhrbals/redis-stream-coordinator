@@ -10,8 +10,10 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisComman
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateConflictException
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateStore
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.NoopStreamShardProvisioner
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.NoopStreamShardCreator
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.RedisStreamShardKeys
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.RedisStreamShardProvisioningPlan
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardCreator
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardProvisioner
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardProvisioningPlan
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.streamShardKeys
@@ -108,6 +110,7 @@ class CoordinatorService(
     private val stateStore: CoordinatorStateStore,
     private val redisConnectionFactory: ObjectProvider<RedisConnectionFactory>,
     private val streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
+    private val streamShardCreator: StreamShardCreator = NoopStreamShardCreator,
     private val clock: Clock = Clock.systemUTC(),
     private val metrics: CoordinatorMetrics = NoopCoordinatorMetrics,
     private val stateMutex: CoordinatorStateMutex = LocalCoordinatorStateMutex,
@@ -144,18 +147,40 @@ class CoordinatorService(
      */
     @CriticalSection(operation = "create-stream")
     fun createStream(streamPrefix: String, request: CreateStreamRequest): StreamCreateResponse {
-        val existingGroups = stateStore.list().filter { it.streamPrefix == streamPrefix }
-        if (existingGroups.isNotEmpty()) {
+        if (stateStore.getStream(streamPrefix) != null || stateStore.list().any { it.streamPrefix == streamPrefix }) {
             throw CoordinatorException(
                 CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
                 "Stream prefix '$streamPrefix' is already managed by coordinator metadata",
             )
         }
-        val response = createGroupOnce(streamPrefix, defaultStreamConsumerGroup(streamPrefix), request.toGroupRequest())
+        val now = Instant.now(clock)
+        val shardCount = request.initialShardCount ?: properties.defaults.initialShardCount
+        requireStreamPrefixNotAlreadyMaterialized(streamPrefix, shardCount)
+        val stream = StreamMetadata(
+            streamPrefix = streamPrefix,
+            metadataVersion = 1,
+            shardCount = shardCount,
+            createdAt = now,
+            updatedAt = now,
+        )
+        if (!stateStore.putStreamIfAbsent(stream)) {
+            throw CoordinatorException(
+                CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
+                "Stream prefix '$streamPrefix' is already managed by coordinator metadata",
+            )
+        }
+        try {
+            streamShardCreator.create(streamPrefix, shardCount)
+        } catch (error: RuntimeException) {
+            runCatching { stateStore.deleteStreamIfRevision(streamPrefix, stream.storeRevision) }
+                .exceptionOrNull()
+                ?.let(error::addSuppressed)
+            throw error
+        }
         return StreamCreateResponse(
-            streamPrefix = response.streamPrefix,
-            shardCount = response.shardCount,
-            metadataVersion = response.metadataVersion,
+            streamPrefix = stream.streamPrefix,
+            shardCount = stream.shardCount,
+            metadataVersion = stream.metadataVersion,
         )
     }
 
@@ -169,15 +194,22 @@ class CoordinatorService(
         }
 
         val now = Instant.now(clock)
-        val shardCount = request.initialShardCount ?: properties.defaults.initialShardCount
-        if (stateStore.list().none { it.streamPrefix == streamPrefix }) {
+        val existingStream = stateStore.getStream(streamPrefix)
+        val shardCount = existingStream?.shardCount ?: request.initialShardCount ?: properties.defaults.initialShardCount
+        if (existingStream != null && request.initialShardCount != null && request.initialShardCount != existingStream.shardCount) {
+            throw CoordinatorException(
+                CoordinatorError.INVALID_REQUEST,
+                "Group shard count must match stream shard count ${existingStream.shardCount} for '$streamPrefix'",
+            )
+        }
+        if (existingStream == null && stateStore.list().none { it.streamPrefix == streamPrefix }) {
             requireStreamPrefixNotAlreadyMaterialized(streamPrefix, shardCount)
         }
         val group = GroupMetadata(
             streamPrefix = streamPrefix,
             consumerGroup = consumerGroup,
             groupEpoch = 1,
-            metadataVersion = 1,
+            metadataVersion = existingStream?.metadataVersion ?: 1,
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
             shardCount = shardCount,
@@ -190,7 +222,11 @@ class CoordinatorService(
         }
         // Provision after the state claim is won so rejected concurrent creates cannot leave stream keys behind.
         try {
-            streamProvisioner.provision(group.streamShardProvisioningPlan())
+            ensureStreamMetadata(streamPrefix, shardCount, now)
+            streamShardCreator.create(streamPrefix, shardCount)
+            if (group.shardCount > 0) {
+                streamProvisioner.provision(group.streamShardProvisioningPlan())
+            }
         } catch (error: RuntimeException) {
             runCatching { stateStore.deleteIfRevision(key, group.storeRevision) }
                 .exceptionOrNull()
@@ -202,11 +238,12 @@ class CoordinatorService(
     }
 
     private fun requireStreamPrefixNotAlreadyMaterialized(streamPrefix: String, shardCount: Int) {
+        val shardKeys = RedisStreamShardKeys.forShardCount(streamPrefix, shardCount)
         if (!properties.streams.provisioningEnabled || !redisCommands.isConfigured()) {
             return
         }
 
-        val existingKeys = (listOf(streamPrefix) + RedisStreamShardKeys.forShardCount(streamPrefix, shardCount).map { it.value })
+        val existingKeys = (listOf(streamPrefix) + shardKeys.map { it.value })
             .filter(redisCommands::hasKey)
         if (existingKeys.isNotEmpty()) {
             throw CoordinatorException(
@@ -216,8 +253,76 @@ class CoordinatorService(
         }
     }
 
-    private fun defaultStreamConsumerGroup(streamPrefix: String): String =
-        streamPrefix
+    private fun ensureStreamMetadata(streamPrefix: String, shardCount: Int, now: Instant): StreamMetadata {
+        stateStore.getStream(streamPrefix)?.let { return it }
+        val stream = StreamMetadata(
+            streamPrefix = streamPrefix,
+            metadataVersion = 1,
+            shardCount = shardCount,
+            createdAt = now,
+            updatedAt = now,
+        )
+        return if (stateStore.putStreamIfAbsent(stream)) {
+            stream
+        } else {
+            stateStore.getStream(streamPrefix)
+                ?: stream
+        }
+    }
+
+    private fun requireGroupForHeartbeat(
+        streamPrefix: String,
+        consumerGroup: String,
+        request: HeartbeatRequest,
+    ): GroupMetadata? =
+        try {
+            requireGroup(streamPrefix, consumerGroup)
+        } catch (error: CoordinatorException) {
+            if (error.error != CoordinatorError.GROUP_NOT_FOUND) {
+                throw error
+            }
+            createGroupForInitialHeartbeat(streamPrefix, consumerGroup, request)
+        }
+
+    private fun createGroupForInitialHeartbeat(
+        streamPrefix: String,
+        consumerGroup: String,
+        request: HeartbeatRequest,
+    ): GroupMetadata? {
+        if (request.memberEpoch != 0L) {
+            return null
+        }
+        val stream = stateStore.getStream(streamPrefix) ?: return null
+        val now = Instant.now(clock)
+        val key = GroupKey(streamPrefix, consumerGroup)
+        val group = GroupMetadata(
+            streamPrefix = streamPrefix,
+            consumerGroup = consumerGroup,
+            groupEpoch = 1,
+            metadataVersion = stream.metadataVersion,
+            assignmentEpoch = 0,
+            state = GroupState.EMPTY,
+            shardCount = stream.shardCount,
+            createdAt = now,
+            updatedAt = now,
+        )
+        reconcile(group, now)
+        if (!stateStore.putIfAbsent(key, group)) {
+            return requireGroup(streamPrefix, consumerGroup)
+        }
+        try {
+            if (group.shardCount > 0) {
+                streamProvisioner.provision(group.streamShardProvisioningPlan())
+            }
+        } catch (error: RuntimeException) {
+            runCatching { stateStore.deleteIfRevision(key, group.storeRevision) }
+                .exceptionOrNull()
+                ?.let(error::addSuppressed)
+            throw error
+        }
+        recordGroupState(group)
+        return group
+    }
 
     /**
      * Returns the current group metadata snapshot without mutating coordinator state.
@@ -251,6 +356,12 @@ class CoordinatorService(
      */
     fun producerRouting(streamPrefix: String): ProducerRoutingResponse {
         try {
+            val stream = stateStore.getStream(streamPrefix)
+            if (stream != null) {
+                val response = producerRoutingResponse(streamPrefix, stream.metadataVersion, stream.shardCount)
+                metrics.recordProducerRouting(streamPrefix, "stream", "SUCCESS")
+                return response
+            }
             val groups = stateStore.list()
                 .filter { it.streamPrefix == streamPrefix }
                 .sortedBy { it.consumerGroup }
@@ -324,13 +435,23 @@ class CoordinatorService(
     }
 
     private fun scaleStreamOnce(streamPrefix: String, request: ScaleStreamRequest): StreamScaleResponse {
+        val stream = stateStore.getStream(streamPrefix)
         val groups = stateStore.list()
             .filter { it.streamPrefix == streamPrefix }
             .sortedBy { it.consumerGroup }
-        if (groups.isEmpty()) {
+        if (groups.isEmpty() && stream == null) {
             throw CoordinatorException(
                 CoordinatorError.STREAM_NOT_FOUND,
-                "No coordinator groups exist for stream prefix $streamPrefix",
+                "No coordinator stream metadata exists for stream prefix $streamPrefix",
+            )
+        }
+        if (groups.isEmpty()) {
+            updateStreamShardLayout(stream!!, request.targetShardCount)
+            return StreamScaleResponse(
+                streamPrefix = streamPrefix,
+                targetShardCount = request.targetShardCount,
+                affectedConsumerGroups = emptyList(),
+                migrations = emptyList(),
             )
         }
 
@@ -352,12 +473,31 @@ class CoordinatorService(
         val migrations = groups.map { group ->
             scaleGroupOnce(streamPrefix, group.consumerGroup, groupRequest)
         }
+        val streamToUpdate = stream ?: ensureStreamMetadata(streamPrefix, groups.first().shardCount, Instant.now(clock))
+        updateStreamShardLayout(streamToUpdate, request.targetShardCount)
         return StreamScaleResponse(
             streamPrefix = streamPrefix,
             targetShardCount = request.targetShardCount,
             affectedConsumerGroups = groups.map { it.consumerGroup },
             migrations = migrations,
         )
+    }
+
+    private fun updateStreamShardLayout(stream: StreamMetadata, targetShardCount: Int) {
+        if (targetShardCount < 0) {
+            throw CoordinatorException(
+                CoordinatorError.INVALID_REQUEST,
+                "targetShardCount must be zero or positive",
+            )
+        }
+        if (stream.shardCount == targetShardCount) {
+            return
+        }
+        streamShardCreator.create(stream.streamPrefix, targetShardCount)
+        stream.shardCount = targetShardCount
+        stream.metadataVersion += 1
+        stream.updatedAt = Instant.now(clock)
+        stateStore.saveStream(stream)
     }
 
     /**
@@ -441,6 +581,10 @@ class CoordinatorService(
         reconcile(group, now)
         enforceRebalanceTimeouts(group, now)
         stateStore.save(group.key(), group)
+        updateStreamShardLayout(
+            ensureStreamMetadata(group.streamPrefix, migration.fromShardCount, now),
+            migration.toShardCount,
+        )
         recordGroupState(group)
         return migration
     }
@@ -483,6 +627,10 @@ class CoordinatorService(
         bumpMetadata(group, now, bumpGroupEpoch = true)
         reconcile(group, now)
         stateStore.save(group.key(), group)
+        updateStreamShardLayout(
+            ensureStreamMetadata(group.streamPrefix, migration.toShardCount, now),
+            migration.fromShardCount,
+        )
         recordGroupState(group)
         return migration
     }
@@ -518,14 +666,8 @@ class CoordinatorService(
             return rejectedHeartbeat(request, memberId, HeartbeatStatus.INVALID_REQUEST)
         }
 
-        val group = try {
-            requireGroup(streamPrefix, consumerGroup)
-        } catch (error: CoordinatorException) {
-            if (error.error == CoordinatorError.GROUP_NOT_FOUND) {
-                return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
-            }
-            throw error
-        }
+        val group = requireGroupForHeartbeat(streamPrefix, consumerGroup, request)
+            ?: return rejectedHeartbeat(request, memberId, HeartbeatStatus.UNKNOWN_MEMBER_ID)
 
         val now = Instant.now(clock)
         val membersExpired = expireMembers(group, now)

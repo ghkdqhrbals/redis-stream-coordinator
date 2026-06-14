@@ -6,7 +6,7 @@
     <title>Redis Stream Coordinator Console</title>
     <link rel="stylesheet" href="/console/styles.css">
 </head>
-<body>
+<body class="console-docs-page">
 <main id="loginView" class="login-shell">
     <section class="login-panel" aria-labelledby="loginTitle">
         <div class="brand-lockup">
@@ -31,7 +31,7 @@
     </section>
 </main>
 
-<main id="appView" class="app-shell hidden">
+<main id="appView" class="app-shell console-docs-shell hidden" data-monitoring-shell>
     <aside class="sidebar">
         <header class="sidebar-header">
             <div class="brand-lockup compact">
@@ -42,6 +42,7 @@
                 </div>
             </div>
             <a class="ghost-link" href="/console/admin.html">Admin</a>
+            <a class="ghost-link" href="/console/messages.html">Messages</a>
             <button id="logoutButton" class="ghost-button" type="button">Sign out</button>
         </header>
 
@@ -367,6 +368,26 @@
             </section>
         </section>
     </section>
+
+    <aside class="admin-request-panel monitor-request-panel" aria-label="Monitoring request preview">
+        <div class="admin-request-header">
+            <div>
+                <span id="monitorRequestMethod" class="admin-method-pill get">GET</span>
+                <span id="monitorRequestPath" class="admin-request-path">/coord/v1/monitoring/grafana/shards</span>
+            </div>
+            <button id="monitorCopyCurl" class="ghost-button small" type="button">Copy cURL</button>
+        </div>
+        <pre id="monitorCurlPreview" class="admin-code-block"><code>curl https://coordinator.ghkdqhrbals.org/coord/v1/monitoring/grafana/shards \
+  --request GET \
+  --header 'Authorization: Bearer &lt;token&gt;'</code></pre>
+        <div class="admin-response-header">
+            <h2>Monitoring Operations</h2>
+            <span id="monitorResponseStatus" class="admin-status-pill pending">Ready</span>
+        </div>
+        <pre id="monitorResponsePreview" class="admin-response-block"><code>GET /coord/v1/monitoring/grafana/shards
+GET /coord/v1/monitoring/groups
+GET /coord/v1/monitoring/grafana/messages</code></pre>
+    </aside>
 </main>
 
 <script src="/console/table-resize.js"></script>

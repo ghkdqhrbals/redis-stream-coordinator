@@ -69,12 +69,13 @@ paths:
     parameters:
       - $ref: "#/components/parameters/streamPrefix"
     post:
-      tags: [Groups]
-      operationId: createStreamGroup
-      summary: Create a stream group.
+      tags: [Stream Operations]
+      operationId: createStream
+      summary: Create a stream.
       description: |
-        Creates the initial shard layout for a sharded Redis Stream prefix. The official create path only
-        requires `streamPrefix`; consumer groups reconcile through their own runtime configuration and heartbeat flow.
+        Creates stream-level shard metadata and physical Redis Stream keys for a sharded Redis Stream prefix.
+        This operation does not create a Redis consumer group; runtime consumer groups are registered by
+        heartbeat or the compatibility group API.
       requestBody:
         required: true
         content:

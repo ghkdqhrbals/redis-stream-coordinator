@@ -130,7 +130,32 @@ open class CoordinatorRedisCommands(
         withConnection { it.ping() }
 
     /**
-     * Creates a Redis Stream consumer group, optionally creating the stream key.
+     * Ensures a Redis Stream key exists without creating a consumer group.
+     */
+    fun xEnsureStream(streamKey: String) {
+        require(streamKey.isNotBlank()) { "streamKey must not be blank" }
+        if (hasKey(streamKey)) {
+            return
+        }
+        withConnection { connection ->
+            val response = connection.execute(
+                "XADD",
+                streamKey.bytes(),
+                "*".bytes(),
+                "__rsc_init".bytes(),
+                "1".bytes(),
+            )
+            val recordId = when (response) {
+                is ByteArray -> String(response, StandardCharsets.UTF_8)
+                is String -> response
+                else -> error("Redis XADD returned unsupported response type ${response?.javaClass?.name} for $streamKey")
+            }
+            connection.execute("XDEL", streamKey.bytes(), recordId.bytes())
+        }
+    }
+
+    /**
+     * Creates a Redis Stream consumer group for an existing stream key.
      */
     fun xGroupCreate(streamKey: String, consumerGroup: String) {
         require(streamKey.isNotBlank()) { "streamKey must not be blank" }
@@ -143,7 +168,6 @@ open class CoordinatorRedisCommands(
                 streamKey.bytes(),
                 consumerGroup.bytes(),
                 "$".bytes(),
-                "MKSTREAM".bytes(),
                 "ENTRIESREAD".bytes(),
                 entriesRead.toString().bytes(),
             )

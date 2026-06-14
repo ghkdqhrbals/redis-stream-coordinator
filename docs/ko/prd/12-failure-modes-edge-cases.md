@@ -177,6 +177,18 @@ Write boundary별 Redis-recorded state:
 
 Consumer rule: shard가 local revoking state에 들어가면 heartbeat가 일시적으로 실패한다는 이유만으로 read를 재개하면 안 된다. 이후 coordinator가 다시 assigned로 내려줄 때만 read 가능하다.
 
+### Stream 생성과 첫 Heartbeat 경계
+
+Stream-level metadata와 physical shard stream key는 runtime consumer group이 존재하기 전에 생성된다. Coordinator는 stream 생성 메커니즘으로 `XGROUP CREATE MKSTREAM`을 사용하면 안 된다.
+
+| Edge case | Risk | Required behavior |
+| --- | --- | --- |
+| Metadata claim 뒤 physical stream 생성 실패 | Redis stream key 없는 phantom stream metadata | Stream metadata compare-and-set claim을 rollback하고 provisioning error를 반환한다 |
+| 기존 stream에 대해 첫 heartbeat가 들어왔지만 group이 없음 | Stream topology가 있는데 consumer가 `UNKNOWN_MEMBER_ID`를 반복 | `memberEpoch=0`을 group auto-registration으로 처리하고 stream shard metadata 기준으로 assign한다 |
+| Missing stream에 첫 heartbeat가 들어옴 | Consumer local config만으로 topology가 만들어짐 | `UNKNOWN_MEMBER_ID`를 반환한다. Stream topology는 Admin API 또는 compatibility group-create API로만 생성된다 |
+| Stream이 0 shard로 scale된 뒤 첫 heartbeat가 들어옴 | 0 shard에 대해 Redis consumer group provisioning을 시도 | Group을 `shardCount=0`으로 기록하고 Redis consumer group provisioning을 생략하며 빈 assignment를 반환한다 |
+| 기존 stream 아래 compatibility group create 실행 | Consumer group 간 shard count divergence | Requested group shard count가 stream metadata와 일치해야 한다 |
+
 Coordinator rule: 새 owner에게 pending shard를 assigned로 바꾸려면 아래 중 하나가 먼저 성립해야 한다.
 
 * previous owner가 in-flight work 없이 `REVOKED`를 보고했다.

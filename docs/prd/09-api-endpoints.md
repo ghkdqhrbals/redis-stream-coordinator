@@ -108,13 +108,13 @@ Common status codes:
 
 ## Admin API
 
-### Create Group
+### Create Stream
 
 ```http
 POST /coord/v1/streams/{streamPrefix}
 ```
 
-Creates initial stream shard metadata and the configured shard count. The official create path only requires `streamPrefix`; consumer groups come from consumer runtime configuration and converge through heartbeat.
+Creates stream-level shard metadata, the configured shard count, and physical Redis Stream keys. This operation does not create a Redis consumer group. Consumer groups come from consumer runtime configuration and are registered on their first heartbeat, or through the compatibility group API.
 
 Request body:
 

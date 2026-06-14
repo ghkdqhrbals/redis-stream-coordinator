@@ -53,6 +53,10 @@ function bindMessageElements() {
         "messageNextPage",
         "messageError",
         "messageRows",
+        "messageRequestPath",
+        "messageCurlPreview",
+        "messageResponsePreview",
+        "messageResponseStatus",
     ].forEach((id) => {
         messageElements[id] = document.getElementById(id);
     });
@@ -150,6 +154,7 @@ async function refreshSelectedMessageGroup() {
         messageState.offsets = [];
         renderMessageShards();
         renderSelectedOffset();
+        renderMessageRequestPreview();
         renderMessagePage({ records: [], nextCursor: null }, true);
         return;
     }
@@ -186,11 +191,12 @@ async function loadMessagePage(reset) {
     try {
         clearMessageError();
         const shard = offset.shard;
-        const page = await messageApiRequest(
-            `${groupPath(group)}/shards/${shard.shardIndex}/messages?${params}`,
-        );
+        const path = `${groupPath(group)}/shards/${shard.shardIndex}/messages?${params}`;
+        renderMessageRequestPreview(path, "Loading");
+        const page = await messageApiRequest(path);
         messageState.cursor = page.nextCursor;
         renderMessagePage(page, reset);
+        renderMessageRequestPreview(path, `${(page.records || []).length} records`);
     } catch (error) {
         showMessageError(error.message || "Failed to load stream records.");
     }
@@ -238,6 +244,7 @@ function renderSelectedOffset() {
         offset?.consumerLastAckedId || offset?.consumerLastDeliveredId || offset?.groupLastDeliveredId,
     );
     messageElements.messageStreamKey.textContent = offset?.streamKey || "-";
+    renderMessageRequestPreview();
 }
 
 function renderMessagePage(page, reset) {
@@ -246,6 +253,36 @@ function renderMessagePage(page, reset) {
     messageElements.messageRows.innerHTML = existingRows + rows || `<tr><td colspan="4" class="empty-line">No records.</td></tr>`;
     messageElements.messagePageHint.textContent = `${page.direction || messageElements.messageDirection.value}, limit ${page.limit || messageElements.messageLimit.value}`;
     messageElements.messageNextPage.disabled = !page.nextCursor;
+}
+
+function renderMessageRequestPreview(path, status) {
+    if (!messageElements.messageCurlPreview || !messageElements.messageRequestPath) {
+        return;
+    }
+    const group = selectedMessageGroup();
+    const offset = selectedOffset();
+    const params = new URLSearchParams({
+        direction: messageElements.messageDirection?.value || "BACKWARD",
+        limit: messageElements.messageLimit?.value || "25",
+    });
+    const resolvedPath = path || (group && offset
+        ? `${groupPath(group)}/shards/${offset.shard.shardIndex}/messages?${params}`
+        : "/streams/{streamPrefix}/groups/{consumerGroup}/shards/{shardIndex}/messages");
+    const fullPath = `${MESSAGE_API_BASE}${resolvedPath}`;
+    messageElements.messageRequestPath.textContent = fullPath;
+    messageElements.messageCurlPreview.textContent = [
+        `curl ${window.location.origin}${fullPath} \\`,
+        "  --request GET \\",
+        "  --header 'Authorization: Bearer <token>'",
+    ].join("\n");
+    if (messageElements.messageResponsePreview) {
+        messageElements.messageResponsePreview.textContent = group && offset
+            ? `Stream: ${group.streamPrefix}\nGroup: ${group.consumerGroup}\nShard: ${offset.streamKey || `:${offset.shard.shardIndex}`}`
+            : "Select a stream, group, and shard to preview the exact request.";
+    }
+    if (messageElements.messageResponseStatus && status) {
+        messageElements.messageResponseStatus.textContent = status;
+    }
 }
 
 function messageRow(record) {

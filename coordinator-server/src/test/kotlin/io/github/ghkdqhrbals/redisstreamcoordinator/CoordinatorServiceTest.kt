@@ -72,6 +72,113 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `create stream stores only stream metadata without implicit consumer group`() {
+        val response = service.createStream("stream-only", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+
+        assertEquals("stream-only", response.streamPrefix)
+        assertEquals(2, response.shardCount)
+        assertTrue(service.listGroups().groups.none { it.streamPrefix == "stream-only" })
+    }
+
+    @Test
+    fun `create stream provisions physical stream keys without consumer group`() {
+        val streamCreator = RecordingStreamShardCreator()
+        val groupProvisioner = RecordingStreamShardProvisioner()
+        val service = service(clock, streamShardCreator = streamCreator, streamProvisioner = groupProvisioner)
+
+        service.createStream("provision-stream-only", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+
+        assertEquals(listOf("provision-stream-only" to 2), streamCreator.created)
+        assertTrue(groupProvisioner.provisioned.isEmpty())
+    }
+
+    @Test
+    fun `create stream rolls back metadata when physical stream creation fails`() {
+        val service = service(clock, streamShardCreator = ThrowingStreamShardCreator())
+
+        val createError = kotlin.runCatching {
+            service.createStream("rollback-stream-only", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+        }.exceptionOrNull() as IllegalStateException
+        val routingError = kotlin.runCatching {
+            service.producerRouting("rollback-stream-only")
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals("stream shard creation failed", createError.message)
+        assertEquals(CoordinatorError.STREAM_NOT_FOUND, routingError.error)
+    }
+
+    @Test
+    fun `initial heartbeat provisions consumer group after stream create`() {
+        val streamCreator = RecordingStreamShardCreator()
+        val groupProvisioner = RecordingStreamShardProvisioner()
+        val service = service(clock, streamShardCreator = streamCreator, streamProvisioner = groupProvisioner)
+        service.createStream("heartbeat-provision", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+
+        service.heartbeat(
+            streamPrefix = "heartbeat-provision",
+            consumerGroup = "runtime-workers",
+            memberId = "member-a",
+            request = heartbeat("member-a", memberEpoch = 0),
+        )
+
+        assertEquals(listOf("heartbeat-provision" to 2), streamCreator.created)
+        assertEquals(
+            listOf(ProvisionedPlan("heartbeat-provision", "runtime-workers", 2)),
+            groupProvisioner.provisioned,
+        )
+    }
+
+    @Test
+    fun `initial heartbeat joins zero shard stream without provisioning consumer groups`() {
+        val groupProvisioner = RecordingStreamShardProvisioner()
+        val service = service(clock, streamProvisioner = groupProvisioner)
+        service.createStream("retired-stream", CreateStreamRequest(initialShardCount = 1, requestedBy = "test"))
+        service.scaleStream(
+            "retired-stream",
+            ScaleStreamRequest(targetShardCount = 0, requestedBy = "test", reason = "retire before consumers join"),
+        )
+
+        val response = service.heartbeat(
+            streamPrefix = "retired-stream",
+            consumerGroup = "runtime-workers",
+            memberId = "member-a",
+            request = heartbeat("member-a", memberEpoch = 0),
+        )
+        val group = service.getGroup("retired-stream", "runtime-workers")
+
+        assertEquals(HeartbeatStatus.OK, response.status)
+        assertTrue(response.assignment.assignedShards.isEmpty())
+        assertEquals(0, group.shardCount)
+        assertTrue(groupProvisioner.provisioned.isEmpty())
+    }
+
+    @Test
+    fun `producer routing uses stream metadata before any consumer group joins`() {
+        service.createStream("routing-stream-only", CreateStreamRequest(initialShardCount = 3, requestedBy = "test"))
+
+        val routing = service.producerRouting("routing-stream-only")
+
+        assertEquals("routing-stream-only", routing.streamPrefix)
+        assertEquals(3, routing.shardCount)
+        assertEquals((0..2).toList(), routing.shards.map { it.shardIndex })
+    }
+
+    @Test
+    fun `scale stream updates stream metadata before any consumer group joins`() {
+        service.createStream("scale-stream-only", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+
+        val scaled = service.scaleStream(
+            "scale-stream-only",
+            ScaleStreamRequest(targetShardCount = 4, requestedBy = "test", reason = "scale stream-only layout"),
+        )
+        val routing = service.producerRouting("scale-stream-only")
+
+        assertEquals(4, scaled.targetShardCount)
+        assertTrue(scaled.affectedConsumerGroups.isEmpty())
+        assertEquals(4, routing.shardCount)
+    }
+
+    @Test
     fun `additional group create under managed prefix does not reject existing coordinator shard keys`() {
         val redis = FakeExistingKeyRedisCommands(mutableSetOf<String>())
         val service = service(
@@ -663,6 +770,40 @@ class CoordinatorServiceTest {
         )
 
         assertEquals(HeartbeatStatus.UNKNOWN_MEMBER_ID, response.status)
+    }
+
+    @Test
+    fun `initial join heartbeat returns unknown member when stream metadata is missing`() {
+        val response = service.heartbeat(
+            streamPrefix = "missing-stream",
+            consumerGroup = "runtime-workers",
+            memberId = "member-a",
+            request = heartbeat("member-a", memberEpoch = 0),
+        )
+
+        assertEquals(HeartbeatStatus.UNKNOWN_MEMBER_ID, response.status)
+        val error = kotlin.runCatching {
+            service.getGroup("missing-stream", "runtime-workers")
+        }.exceptionOrNull() as CoordinatorException
+        assertEquals(CoordinatorError.GROUP_NOT_FOUND, error.error)
+    }
+
+    @Test
+    fun `initial join heartbeat registers consumer group for existing stream`() {
+        service.createStream("heartbeat-stream", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+
+        val response = service.heartbeat(
+            streamPrefix = "heartbeat-stream",
+            consumerGroup = "runtime-workers",
+            memberId = "member-a",
+            request = heartbeat("member-a", memberEpoch = 0),
+        )
+        val group = service.getGroup("heartbeat-stream", "runtime-workers")
+
+        assertEquals(HeartbeatStatus.OK, response.status)
+        assertEquals("runtime-workers", group.consumerGroup)
+        assertEquals(2, group.shardCount)
+        assertEquals(1, service.listMembers("heartbeat-stream", "runtime-workers").members.size)
     }
 
     @Test
@@ -2267,15 +2408,14 @@ class CoordinatorServiceTest {
     }
 
     @Test
-    fun `stream level producer routing rejects divergent group shard topology`() {
+    fun `group creation rejects divergent stream shard topology`() {
         service.createGroup("divergent-routing", "orders-consumer", createGroupRequest(initialShardCount = 2))
-        service.createGroup("divergent-routing", "analytics-consumer", createGroupRequest(initialShardCount = 3))
 
         val error = kotlin.runCatching {
-            service.producerRouting("divergent-routing")
+            service.createGroup("divergent-routing", "analytics-consumer", createGroupRequest(initialShardCount = 3))
         }.exceptionOrNull() as CoordinatorException
 
-        assertEquals(CoordinatorError.STREAM_SHARD_TOPOLOGY_CONFLICT, error.error)
+        assertEquals(CoordinatorError.INVALID_REQUEST, error.error)
     }
 
     @Test
@@ -2803,6 +2943,7 @@ class CoordinatorServiceTest {
         clock: Clock,
         stateStore: CoordinatorStateStore = InMemoryCoordinatorStateStore(),
         streamProvisioner: StreamShardProvisioner = NoopStreamShardProvisioner,
+        streamShardCreator: StreamShardCreator = NoopStreamShardCreator,
         rebalanceTimeout: Duration = CoordinatorProtocol.DEFAULT_TIMING.rebalanceTimeout,
         properties: CoordinatorProperties = CoordinatorProperties(
             heartbeatInterval = Duration.ofSeconds(3),
@@ -2822,6 +2963,7 @@ class CoordinatorServiceTest {
             stateStore = stateStore,
             redisConnectionFactory = StaticListableBeanFactory().getBeanProvider(RedisConnectionFactory::class.java),
             streamProvisioner = streamProvisioner,
+            streamShardCreator = streamShardCreator,
             clock = clock,
             redisCommands = redisCommands,
         )
@@ -2987,6 +3129,20 @@ private class RecordingStreamShardProvisioner : StreamShardProvisioner {
             consumerGroup = plan.consumerGroup,
             shardCount = plan.shardCount,
         )
+    }
+}
+
+private class RecordingStreamShardCreator : StreamShardCreator {
+    val created = mutableListOf<Pair<String, Int>>()
+
+    override fun create(streamPrefix: String, shardCount: Int) {
+        created += streamPrefix to shardCount
+    }
+}
+
+private class ThrowingStreamShardCreator : StreamShardCreator {
+    override fun create(streamPrefix: String, shardCount: Int) {
+        throw IllegalStateException("stream shard creation failed")
     }
 }
 

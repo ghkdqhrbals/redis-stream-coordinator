@@ -22,6 +22,22 @@ After terminating mode starts, new critical-section work returns a retryable coo
 
 ## Member Expiration and Rebalance
 
+### Q. Does creating a stream automatically create a consumer group?
+
+No. Stream creation stores stream-level shard metadata and creates physical shard stream keys. Runtime consumers bring their own configured `consumerGroup`, and that group is registered by the first `memberEpoch=0` heartbeat or by the compatibility group-create API.
+
+### Q. Why is physical stream creation separated from `XGROUP CREATE`?
+
+Producer safety depends on removed shard keys staying removed. The coordinator creates physical stream keys explicitly, and producer writes use `XADD NOMKSTREAM`. Redis consumer group creation must not rely on `MKSTREAM`, because that would let a consumer group creation path recreate a missing stream key that should stay retired.
+
+### Q. What if a consumer starts before its group was explicitly created?
+
+If the stream metadata exists and the heartbeat is an initial join (`memberEpoch=0`), the coordinator records the consumer group using the stream shard count and returns an assignment. If the stream metadata is missing, the coordinator returns `UNKNOWN_MEMBER_ID`; the client may retry after the stream is created but the coordinator does not infer stream topology from heartbeat alone.
+
+### Q. What if the stream has zero shards when the first consumer joins?
+
+The coordinator records the group with `shardCount=0`, returns `OK`, and sends an empty assignment. Redis consumer group provisioning is skipped because there are no active shard streams. Producers also fail closed because stream-level routing returns an empty shard list.
+
 ### Q. What happens when every consumer member stops heartbeating?
 
 The event loop marks members `EXPIRED` after the member lease TTL, bumps metadata/group epoch, clears target assignments, and moves the group to `EMPTY`. Expired member records remain temporarily for observability and stale heartbeat fencing, then stale-member cleanup can remove them.

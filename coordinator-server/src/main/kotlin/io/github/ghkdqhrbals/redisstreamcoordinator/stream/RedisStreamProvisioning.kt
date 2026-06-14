@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component
 
 interface StreamShardProvisioner {
     /**
-     * Ensures the Redis Stream keys and consumer group for a shard count exist.
+     * Ensures the Redis Stream consumer group for a shard count exists.
      * Coordinator state claims or PREPARING migrations should be committed before this runs,
      * so failed state races cannot leave untracked shard keys behind.
      */
@@ -20,6 +20,36 @@ interface StreamShardProvisioner {
 
 object NoopStreamShardProvisioner : StreamShardProvisioner {
     override fun provision(plan: RedisStreamShardProvisioningPlan) = Unit
+}
+
+interface StreamShardCreator {
+    /**
+     * Ensures physical Redis Stream keys exist without creating any consumer group.
+     */
+    fun create(streamPrefix: String, shardCount: Int)
+}
+
+object NoopStreamShardCreator : StreamShardCreator {
+    override fun create(streamPrefix: String, shardCount: Int) = Unit
+}
+
+@Component
+class RedisStreamShardCreator(
+    private val properties: CoordinatorProperties,
+    private val redisCommands: ObjectProvider<CoordinatorRedisCommands>,
+) : StreamShardCreator {
+    override fun create(streamPrefix: String, shardCount: Int) {
+        if (!properties.streams.provisioningEnabled || shardCount == 0) {
+            return
+        }
+
+        val commands = redisCommands.ifAvailable?.takeIf { it.isConfigured() }
+            ?: throw CoordinatorException(CoordinatorError.REDIS_NOT_CONFIGURED)
+
+        RedisStreamShardKeys.forShardCount(streamPrefix, shardCount).forEach { shardKey ->
+            commands.xEnsureStream(shardKey.value)
+        }
+    }
 }
 
 @Component

@@ -107,6 +107,29 @@ class GrafanaDashboardContractTest {
     }
 
     @Test
+    fun `monitoring and message consoles use scalar style request panels`() {
+        val indexHtml = readStaticConsole("index.html")
+        val messagesHtml = readStaticConsole("messages.html")
+        val styles = readStaticConsole("styles.css")
+
+        assertTrue(indexHtml.contains("data-monitoring-shell"))
+        assertTrue(indexHtml.contains("monitorCurlPreview"))
+        assertTrue(indexHtml.contains("GET /coord/v1/monitoring/grafana/shards"))
+        assertTrue(indexHtml.contains("""href="/console/admin.html""""))
+        assertTrue(indexHtml.contains("""href="/console/messages.html""""))
+
+        assertTrue(messagesHtml.contains("data-messages-shell"))
+        assertTrue(messagesHtml.contains("messageCurlPreview"))
+        assertTrue(messagesHtml.contains("Message Operations"))
+        assertTrue(messagesHtml.contains("""href="/console/admin.html""""))
+        assertTrue(messagesHtml.contains("""href="/console/index.html""""))
+
+        assertTrue(styles.contains(".console-docs-page"))
+        assertTrue(styles.contains(".monitor-request-panel"))
+        assertTrue(styles.contains(".message-request-panel"))
+    }
+
+    @Test
     fun `grafana dashboards link to admin console and stream producer routing`() {
         listOf(
             "redis-stream-coordinator.json",
