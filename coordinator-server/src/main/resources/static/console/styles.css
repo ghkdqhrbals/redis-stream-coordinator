@@ -403,8 +403,33 @@ button {
     gap: 8px;
 }
 
+.admin-shell {
+    max-width: 1180px;
+}
+
+.admin-hero {
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 18px;
+}
+
 .admin-grid {
     align-items: start;
+    grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+}
+
+.admin-card {
+    padding: 20px;
+}
+
+.admin-card h2 {
+    margin-bottom: 14px;
+    font-size: 16px;
+}
+
+.admin-card-primary {
+    border-color: #365263;
+    background: #121b24;
 }
 
 .admin-label,
@@ -424,7 +449,7 @@ button {
 .admin-form input,
 .admin-label select {
     width: 100%;
-    min-height: 38px;
+    min-height: 36px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: #0f151c;
@@ -434,7 +459,7 @@ button {
 }
 
 .admin-form button {
-    min-height: 38px;
+    min-height: 36px;
     border: 0;
     border-radius: var(--radius);
     background: var(--accent-strong);
@@ -456,6 +481,10 @@ button {
 
 .admin-current-state {
     margin-top: 12px;
+}
+
+.admin-current-state dd {
+    overflow-wrap: anywhere;
 }
 
 .side-panel,

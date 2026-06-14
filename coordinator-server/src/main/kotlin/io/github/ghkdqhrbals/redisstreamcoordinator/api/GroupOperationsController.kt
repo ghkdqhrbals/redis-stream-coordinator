@@ -6,7 +6,6 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.Migration
-import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ProducerRoutingResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.RollbackMigrationRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ScaleGroupRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
@@ -24,32 +23,11 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}")
 @Tag(
     name = "Group Operations",
-    description = "Producer routing, shard resharding, and migration rollback operations.",
+    description = "Consumer group shard resharding and migration rollback operations.",
 )
 class GroupOperationsController(
     private val coordinator: CoordinatorService,
 ) {
-    /**
-     * Returns read-only producer routing metadata for the current shard layout.
-     */
-    @Operation(
-        operationId = "getProducerRoutingMetadata",
-        summary = "Read producer routing metadata",
-        description = "Returns the shard count, stream key pattern, concrete shard keys, and Redis Cluster slots that producers must use when routing partition keys.",
-        responses = [
-            ApiResponse(responseCode = "200", description = "Producer routing metadata."),
-            ApiResponse(responseCode = "404", description = "The group does not exist."),
-        ],
-    )
-    @GetMapping("/producer-routing")
-    fun getProducerRouting(
-        @Parameter(description = "Sharded Redis Stream prefix used to build physical stream keys such as create-order:4.", example = "create-order")
-        @PathVariable streamPrefix: String,
-        @Parameter(description = "Redis Stream consumer group name.", example = "demo-workers")
-        @PathVariable consumerGroup: String,
-    ): ProducerRoutingResponse =
-        coordinator.producerRouting(streamPrefix, consumerGroup)
-
     /**
      * Starts shard scale-out or scale-in.
      */

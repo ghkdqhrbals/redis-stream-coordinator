@@ -78,6 +78,10 @@ The publisher uses Redis `XADD NOMKSTREAM` so a removed stream key is not recrea
 
 Yes. Routing determinism is scoped to the same routing protocol, same shard count, and same partition key. Changing shard count changes the routing domain.
 
+### Q. What does `partitionKey = null` mean for producer publishing?
+
+It means load distribution, not key-based routing. The producer selects from the active shard list for that producer instance and does not provide per-key affinity or ordering. Use it only for events where records do not need to stay colocated by business entity.
+
 ### Q. Can the same event id be produced to two shards during resharding?
 
 Yes. The producer provides shard-level idempotent XADD behavior, not global event-id deduplication across old and new shard layouts. Duplicate-sensitive workloads should quiesce producers and drain in-flight publish retries before shard count changes.

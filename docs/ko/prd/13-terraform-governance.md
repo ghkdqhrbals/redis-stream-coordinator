@@ -117,7 +117,7 @@ Terraform read operation은 coordinator source-of-truth API를 호출해야 한�
 
 ```http
 GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}
-GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+GET /coord/v1/streams/{streamPrefix}/producer-routing
 ```
 
 Provider가 managed desired state로 다룰 field:

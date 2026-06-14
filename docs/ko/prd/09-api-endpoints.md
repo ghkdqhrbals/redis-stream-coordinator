@@ -84,7 +84,7 @@ Common status codes:
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | group metadata 조회 | no | not required |
 | Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | inactive group metadata 삭제 | yes | live member가 있으면 force 없이는 reject |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/scale` | stream 전체 shard scale-out/in migration 시작 | yes | active migration or same target is rejected/no-op |
-| Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing` | producer 라우팅 메타데이터 조회 | no | not required |
+| Admin | `GET` | `/coord/v1/streams/{streamPrefix}/producer-routing` | stream producer 라우팅 메타데이터 조회 | no | not required |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}` | migration 상태 조회 | no | not required |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/migrations/{reshardingId}/rollback` | migration rollback 요청 | yes | current migration state decides acceptance |
 | Member | `POST` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/members/{memberId}/heartbeat` | member liveness/owned shard 보고 및 assignment 수신 | yes | `requestId`; effective state is `memberEpoch` + `ownedShards` |
@@ -190,7 +190,7 @@ Failure behavior:
 ### Get Producer Routing Metadata
 
 ```http
-GET /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing
+GET /coord/v1/streams/{streamPrefix}/producer-routing
 ```
 
 Returns the routing metadata that producers need to route partition keys to Redis Stream shards. This endpoint is read-only and does not create streams, change shard counts, or mutate group assignment.
@@ -204,7 +204,9 @@ streamKey = format(streamKeyPattern, shardIndex)
 
 `routeV1` is a fixed protocol contract, not group metadata. The starter computes a 32-bit Murmur3 hash and maps it into `[0, shardCount)` using deterministic rejection sampling so `2^32 % shardCount` tail values do not create modulo bias. Future incompatible routing changes must use a new protocol/API version instead of storing per-group hash settings.
 
-Routing is deterministic only for the returned `shardCount`, routing protocol, and partition key. After shard scale-out/in, the same partition key may route to a different stream key. The coordinator does not provide global event id deduplication across every shard.
+`routeV1`은 애플리케이션이 non-null partition key를 전달한 경우에만 적용된다. Spring Boot producer가 `partitionKey = null`을 받으면 이 endpoint가 반환한 active shard list 안에서 client-side load distribution routing을 사용한다.
+
+Routing is deterministic only for the returned `shardCount`, routing protocol, and non-null partition key. After shard scale-out/in, the same partition key may route to a different stream key. Null-key load distribution does not provide per-key affinity. The coordinator does not provide global event id deduplication across every shard.
 
 Response summary:
 

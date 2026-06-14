@@ -22,7 +22,6 @@ class ProducerRoutingCacheTest {
         val clock = MutableClock(Instant.parse("2026-05-23T00:00:00Z"))
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofSeconds(30),
             clock = clock,
@@ -47,7 +46,6 @@ class ProducerRoutingCacheTest {
         val clock = MutableClock(Instant.parse("2026-05-23T00:00:00Z"))
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofSeconds(10),
             clock = clock,
@@ -72,7 +70,6 @@ class ProducerRoutingCacheTest {
         )
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = client,
             refreshInterval = Duration.ofMinutes(5),
         )
@@ -83,6 +80,20 @@ class ProducerRoutingCacheTest {
         assertEquals(2, client.calls)
         assertEquals(2, refreshed.metadataVersion)
         assertEquals(2, cache.route("order-1").metadataVersion)
+    }
+
+    @Test
+    fun `null partition key uses load distribution routing across active shards`() {
+        val cache = ProducerRoutingCache(
+            streamPrefix = "orders",
+            client = ScriptedRoutingClient(routing(version = 1, shardCount = 3)),
+            refreshInterval = Duration.ofMinutes(5),
+        )
+
+        val routes = List(5) { cache.route(null) }
+
+        assertEquals(listOf(0, 1, 2, 0, 1), routes.map { it.shard.shardIndex })
+        assertEquals(1, cache.cachedMetadataVersion())
     }
 
     @Test
@@ -98,12 +109,11 @@ class ProducerRoutingCacheTest {
     }
 
     @Test
-    fun `routing metadata for a different group is rejected`() {
+    fun `routing metadata for a different stream is rejected`() {
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = ScriptedRoutingClient(
-                routing(version = 1, shardCount = 2, consumerGroup = "other-consumer"),
+                routing(version = 1, shardCount = 2, streamPrefix = "other-orders"),
             ),
         )
 
@@ -117,7 +127,6 @@ class ProducerRoutingCacheTest {
         val metadata = routing(version = 1, shardCount = 2)
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = ScriptedRoutingClient(
                 metadata.copy(
                     shards = listOf(
@@ -137,7 +146,6 @@ class ProducerRoutingCacheTest {
     fun `initial routing validation fails when coordinator has no active shards`() {
         val cache = ProducerRoutingCache(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = ScriptedRoutingClient(
                 routing(version = 1, shardCount = 0),
             ),
@@ -153,11 +161,9 @@ class ProducerRoutingCacheTest {
         version: Long,
         shardCount: Int,
         streamPrefix: String = "orders",
-        consumerGroup: String = "orders-consumer",
     ): ProducerRoutingResponse =
         ProducerRoutingResponse(
             streamPrefix = streamPrefix,
-            consumerGroup = consumerGroup,
             metadataVersion = version,
             shardCount = shardCount,
             streamKeyPattern = "$streamPrefix:{shardIndex}",
@@ -173,7 +179,6 @@ class ProducerRoutingCacheTest {
     private fun hashOnlyRouting(shardCount: Int): ProducerRoutingResponse =
         ProducerRoutingResponse(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
             metadataVersion = 1,
             shardCount = shardCount,
             streamKeyPattern = "orders:{shardIndex}",
@@ -205,7 +210,7 @@ private class ScriptedRoutingClient(
             assignment = AssignmentView(emptySet(), emptySet(), 0),
         )
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
         responses[calls++]
 }
 

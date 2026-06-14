@@ -9,7 +9,6 @@ Producer applications should define one `StreamProducer` bean per logical stream
 fun ordersStreamProducer(...): StreamProducer =
     StreamProducer(
         streamPrefix = "create-order",
-        consumerGroupName = "demo-workers",
         client = coordinatorClient,
         redisConnectionFactory = redisConnectionFactory,
     )

@@ -2248,10 +2248,34 @@ class CoordinatorServiceTest {
         assertEquals("stream-zero", response.streamPrefix)
         assertEquals(0, response.targetShardCount)
         assertEquals(listOf("analytics-consumer", "orders-consumer"), response.affectedConsumerGroups)
-        assertEquals(0, service.producerRouting("stream-zero", "orders-consumer").shardCount)
-        assertEquals(0, service.producerRouting("stream-zero", "analytics-consumer").shardCount)
-        assertTrue(service.producerRouting("stream-zero", "orders-consumer").shards.isEmpty())
-        assertTrue(service.producerRouting("stream-zero", "analytics-consumer").shards.isEmpty())
+        val routing = service.producerRouting("stream-zero")
+        assertEquals(0, routing.shardCount)
+        assertTrue(routing.shards.isEmpty())
+    }
+
+    @Test
+    fun `stream level producer routing is derived from stream shard topology`() {
+        service.createStream("stream-routing", CreateStreamRequest(initialShardCount = 3, requestedBy = "test"))
+
+        val routing = service.producerRouting("stream-routing")
+
+        assertEquals("stream-routing", routing.streamPrefix)
+        assertEquals(1, routing.metadataVersion)
+        assertEquals(3, routing.shardCount)
+        assertEquals("stream-routing:{shardIndex}", routing.streamKeyPattern)
+        assertEquals(listOf("stream-routing:0", "stream-routing:1", "stream-routing:2"), routing.shards.map { it.streamKey })
+    }
+
+    @Test
+    fun `stream level producer routing rejects divergent group shard topology`() {
+        service.createGroup("divergent-routing", "orders-consumer", createGroupRequest(initialShardCount = 2))
+        service.createGroup("divergent-routing", "analytics-consumer", createGroupRequest(initialShardCount = 3))
+
+        val error = kotlin.runCatching {
+            service.producerRouting("divergent-routing")
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.STREAM_SHARD_TOPOLOGY_CONFLICT, error.error)
     }
 
     @Test
@@ -2589,7 +2613,7 @@ class CoordinatorServiceTest {
 
         val completedGroup = service.getGroup("scale-zero", "orders-consumer")
         val completedMigration = service.getMigration("scale-zero", "orders-consumer", migration.reshardingId)
-        val routing = service.producerRouting("scale-zero", "orders-consumer")
+        val routing = service.producerRouting("scale-zero")
 
         assertEquals(0, completedGroup.shardCount)
         assertEquals(MigrationState.DEPRECATED, completedMigration.state)
@@ -2716,14 +2740,14 @@ class CoordinatorServiceTest {
                 requestedBy = "test",
             ),
         )
-        val beforeScale = service.producerRouting("route-orders", "orders-consumer")
+        val beforeScale = service.producerRouting("route-orders")
 
         service.scaleGroup(
             "route-orders",
             "orders-consumer",
             ScaleGroupRequest(targetShardCount = 3, requestedBy = "test", reason = "scale producer writes"),
         )
-        val afterScale = service.producerRouting("route-orders", "orders-consumer")
+        val afterScale = service.producerRouting("route-orders")
 
                 assertEquals(2, beforeScale.shardCount)
         assertEquals("route-orders:{shardIndex}", beforeScale.streamKeyPattern)

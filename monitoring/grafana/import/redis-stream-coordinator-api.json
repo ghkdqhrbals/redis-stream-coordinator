@@ -40,6 +40,17 @@
       "title": "Stream Detail",
       "type": "link",
       "url": "/d/redis-stream-coordinator-stream-detail/redis-stream-coordinator-stream-detail"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Admin Console",
+      "type": "link",
+      "url": "${COORDINATOR_API_URL}/console/admin.html"
     }
   ],
   "panels": [

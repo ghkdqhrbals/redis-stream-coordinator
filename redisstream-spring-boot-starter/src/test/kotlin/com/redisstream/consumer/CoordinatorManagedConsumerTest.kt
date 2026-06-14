@@ -559,9 +559,8 @@ class CoordinatorManagedConsumerTest {
     ): ProducerRoutingResponse =
         ProducerRoutingResponse(
             streamPrefix = "orders",
-            consumerGroup = "orders-consumer",
             metadataVersion = 1,
-                        shardCount = shardCount,
+            shardCount = shardCount,
             streamKeyPattern = "orders:{shardIndex}",
             shards = (0 until shardCount).map { shardIndex ->
                 ProducerRoutingShard(
@@ -644,6 +643,6 @@ private class ScriptedCoordinatorClient(
         return responses[index++]
     }
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
         routing ?: error("producer routing is not used in this test")
 }

@@ -219,7 +219,7 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
-    fun `http api returns producer routing metadata`() {
+    fun `http api returns producer routing metadata from stream endpoint`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-routing/groups/orders-consumer")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth())
@@ -229,18 +229,43 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(status().isCreated)
 
         mockMvc.perform(
-            get("/coord/v1/streams/http-routing/groups/orders-consumer/producer-routing")
+            get("/coord/v1/streams/http-routing/producer-routing")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth()),
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.streamPrefix").value("http-routing"))
-            .andExpect(jsonPath("$.consumerGroup").value("orders-consumer"))
+            .andExpect(jsonPath("$.consumerGroup").doesNotExist())
             .andExpect(jsonPath("$.metadataVersion").value(1))
                         .andExpect(jsonPath("$.shardCount").value(2))
             .andExpect(jsonPath("$.streamKeyPattern").value("http-routing:{shardIndex}"))
             .andExpect(jsonPath("$.shards.length()").value(2))
             .andExpect(jsonPath("$.shards[0].streamKey").value("http-routing:0"))
             .andExpect(jsonPath("$.shards[1].streamKey").value("http-routing:1"))
+    }
+
+    @Test
+    fun `http api returns stream level producer routing metadata without consumer group`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/http-stream-routing")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(CreateStreamRequest(initialShardCount = 3, requestedBy = "test"))),
+        )
+            .andExpect(status().isCreated)
+
+        mockMvc.perform(
+            get("/coord/v1/streams/http-stream-routing/producer-routing")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.streamPrefix").value("http-stream-routing"))
+            .andExpect(jsonPath("$.consumerGroup").doesNotExist())
+            .andExpect(jsonPath("$.metadataVersion").value(1))
+            .andExpect(jsonPath("$.shardCount").value(3))
+            .andExpect(jsonPath("$.streamKeyPattern").value("http-stream-routing:{shardIndex}"))
+            .andExpect(jsonPath("$.shards.length()").value(3))
+            .andExpect(jsonPath("$.shards[0].streamKey").value("http-stream-routing:0"))
+            .andExpect(jsonPath("$.shards[2].streamKey").value("http-stream-routing:2"))
     }
 
     @Test
@@ -272,7 +297,7 @@ class CoordinatorHttpIntegrationTest {
                                     .andExpect(jsonPath("$.toShardCount").value(4))
 
         mockMvc.perform(
-            get("/coord/v1/streams/http-scale-routing/groups/orders-consumer/producer-routing")
+            get("/coord/v1/streams/http-scale-routing/producer-routing")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth()),
         )
             .andExpect(status().isOk)
@@ -332,15 +357,7 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.migrations[1].toShardCount").value(0))
 
         mockMvc.perform(
-            get("/coord/v1/streams/http-stream-zero/groups/orders-consumer/producer-routing")
-                .header(HttpHeaders.AUTHORIZATION, basicAuth()),
-        )
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.shardCount").value(0))
-            .andExpect(jsonPath("$.shards.length()").value(0))
-
-        mockMvc.perform(
-            get("/coord/v1/streams/http-stream-zero/groups/analytics-consumer/producer-routing")
+            get("/coord/v1/streams/http-stream-zero/producer-routing")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth()),
         )
             .andExpect(status().isOk)

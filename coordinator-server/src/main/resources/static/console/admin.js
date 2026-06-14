@@ -2,11 +2,13 @@ const ADMIN_API_BASE = "/coord/v1";
 const ADMIN_MONITORING_BASE = "/coord/v1/monitoring";
 const ADMIN_AUTH_KEY = "redisStreamCoordinator.console.auth";
 const ADMIN_USER_KEY = "redisStreamCoordinator.console.user";
+const ADMIN_TOKEN_EXPIRES_KEY = "redisStreamCoordinator.console.tokenExpires";
 const ADMIN_REQUEST_TIMEOUT_MS = 10000;
 
 const adminState = {
     authHeader: readSession(ADMIN_AUTH_KEY),
     username: readSession(ADMIN_USER_KEY),
+    tokenExpiresAt: readSession(ADMIN_TOKEN_EXPIRES_KEY),
     groups: [],
     selectedKey: "",
 };
@@ -28,10 +30,12 @@ function bindAdminElements() {
         "adminPassword",
         "adminSessionUsername",
         "adminSessionRoles",
+        "adminTokenExpires",
         "adminError",
         "adminGroupSelect",
         "adminRefreshGroups",
         "adminCurrentShardCount",
+        "adminSelectedConsumerGroup",
         "adminCreateStreamForm",
         "adminCreateStreamPrefix",
         "adminCreateShardCount",
@@ -59,7 +63,7 @@ function bindAdminEvents() {
         applyShardScale(Number(adminElements.adminTargetShardCount.value));
     });
     adminElements.adminScaleOut.addEventListener("click", () => applyShardScale(currentShardCount() + 1));
-    adminElements.adminScaleIn.addEventListener("click", () => applyShardScale(Math.max(1, currentShardCount() - 1)));
+    adminElements.adminScaleIn.addEventListener("click", () => applyShardScale(Math.max(0, currentShardCount() - 1)));
 }
 
 async function handleAdminLogin(event) {
@@ -70,17 +74,31 @@ async function handleAdminLogin(event) {
         showAdminError("Enter username and password.");
         return;
     }
-    const authHeader = createBasicAuth(username, password);
     try {
-        await loadAdminSession(authHeader);
+        const login = await loginAdmin(username, password);
+        const authHeader = `Bearer ${login.accessToken}`;
         adminState.authHeader = authHeader;
         adminState.username = username;
+        adminState.tokenExpiresAt = login.expiresAt || "";
         writeSession(ADMIN_AUTH_KEY, authHeader);
         writeSession(ADMIN_USER_KEY, username);
+        writeSession(ADMIN_TOKEN_EXPIRES_KEY, adminState.tokenExpiresAt);
+        renderTokenExpiry();
+        await loadAdminSession(authHeader);
         await refreshAdminGroups();
+        adminElements.adminPassword.value = "";
     } catch (error) {
         showAdminError(error.status === 401 ? "Invalid credentials." : error.message);
     }
+}
+
+async function loginAdmin(username, password) {
+    return adminRequest("/coord/v1/auth/login", {
+        method: "POST",
+        authHeader: "",
+        body: { username, password },
+        baseOverride: "",
+    });
 }
 
 async function loadAdminSession(authHeader) {
@@ -90,6 +108,7 @@ async function loadAdminSession(authHeader) {
     });
     adminElements.adminSessionUsername.textContent = session.username || "-";
     adminElements.adminSessionRoles.textContent = Array.isArray(session.roles) ? session.roles.join(", ") : "-";
+    renderTokenExpiry();
     showAdminError("");
     return session;
 }
@@ -122,6 +141,7 @@ function renderAdminGroups() {
 function renderAdminSelection() {
     const group = selectedGroup();
     adminElements.adminCurrentShardCount.textContent = group ? String(group.shardCount || 0) : "-";
+    adminElements.adminSelectedConsumerGroup.textContent = group ? group.consumerGroup : "-";
     if (group) {
         adminElements.adminTargetShardCount.value = String(group.shardCount || 1);
     }
@@ -154,8 +174,8 @@ async function applyShardScale(targetShardCount) {
         showAdminError("Select a group first.");
         return;
     }
-    if (!Number.isFinite(targetShardCount) || targetShardCount < 1) {
-        showAdminError("Target shard count must be at least 1.");
+    if (!Number.isFinite(targetShardCount) || targetShardCount < 0) {
+        showAdminError("Target shard count must be 0 or greater.");
         return;
     }
     const response = await adminRequest(`${ADMIN_API_BASE}/streams/${encodeURIComponent(group.streamPrefix)}/scale`, {
@@ -174,10 +194,15 @@ async function applyShardScale(targetShardCount) {
 async function adminRequest(path, options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), ADMIN_REQUEST_TIMEOUT_MS);
+    const requestedAuthHeader = Object.prototype.hasOwnProperty.call(options, "authHeader")
+        ? options.authHeader
+        : adminState.authHeader;
     const headers = {
         Accept: "application/json",
-        Authorization: options.authHeader || adminState.authHeader,
     };
+    if (requestedAuthHeader) {
+        headers.Authorization = requestedAuthHeader;
+    }
     if (options.body) {
         headers["Content-Type"] = "application/json";
     }
@@ -222,20 +247,11 @@ function selectedGroup() {
 }
 
 function currentShardCount() {
-    return Math.max(1, Number(selectedGroup()?.shardCount || adminElements.adminTargetShardCount.value || 1));
+    return Math.max(0, Number(selectedGroup()?.shardCount ?? adminElements.adminTargetShardCount.value ?? 0));
 }
 
 function groupKey(group) {
     return `${group.streamPrefix}::${group.consumerGroup}`;
-}
-
-function createBasicAuth(username, password) {
-    const bytes = new TextEncoder().encode(`${username}:${password}`);
-    let binary = "";
-    bytes.forEach((byte) => {
-        binary += String.fromCharCode(byte);
-    });
-    return `Basic ${btoa(binary)}`;
 }
 
 function readSession(key) {
@@ -252,6 +268,16 @@ function writeSession(key, value) {
     } catch {
         // Ignore browser storage failures.
     }
+}
+
+function renderTokenExpiry() {
+    const value = adminState.tokenExpiresAt;
+    if (!value) {
+        adminElements.adminTokenExpires.textContent = "-";
+        return;
+    }
+    const date = new Date(value);
+    adminElements.adminTokenExpires.textContent = Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function valueOrDash(value) {

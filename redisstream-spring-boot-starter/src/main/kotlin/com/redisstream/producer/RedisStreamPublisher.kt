@@ -12,7 +12,7 @@ data class PublishedRedisStreamMessage(
 )
 
 data class RedisStreamPublishRequest(
-    val partitionKey: String,
+    val partitionKey: String?,
     val fields: Map<String, String>,
     val options: RedisStreamPublishOptions = RedisStreamPublishOptions(),
 )
@@ -25,9 +25,11 @@ data class RedisStreamPublishOptions(
 interface RedisStreamPublisher {
     /**
      * Routes a message by partition key and appends the supplied fields to the selected stream.
+     *
+     * A null partition key uses load distribution routing and does not preserve key affinity.
      */
     fun publish(
-        partitionKey: String,
+        partitionKey: String?,
         fields: Map<String, String>,
         options: RedisStreamPublishOptions,
     ): PublishedRedisStreamMessage
@@ -35,20 +37,20 @@ interface RedisStreamPublisher {
     /**
      * Publishes a field map using the globally configured XADD options.
      */
-    fun publish(partitionKey: String, fields: Map<String, String>): PublishedRedisStreamMessage =
+    fun publish(partitionKey: String?, fields: Map<String, String>): PublishedRedisStreamMessage =
         publish(partitionKey, fields, RedisStreamPublishOptions())
 
     /**
      * Publishes a text payload under the conventional "payload" stream field.
      */
-    fun publish(partitionKey: String, payload: String): PublishedRedisStreamMessage =
+    fun publish(partitionKey: String?, payload: String): PublishedRedisStreamMessage =
         publish(partitionKey, mapOf("payload" to payload))
 
     /**
      * Publishes a text payload with per-message XADD options such as MAXLEN.
      */
     fun publish(
-        partitionKey: String,
+        partitionKey: String?,
         payload: String,
         options: RedisStreamPublishOptions,
     ): PublishedRedisStreamMessage =
@@ -73,11 +75,11 @@ class RoutingRedisStreamPublisher(
      * reloads routing metadata and recalculates the target shard before writing again.
      */
     override fun publish(
-        partitionKey: String,
+        partitionKey: String?,
         fields: Map<String, String>,
         options: RedisStreamPublishOptions,
     ): PublishedRedisStreamMessage {
-        require(partitionKey.isNotBlank()) { "partitionKey must not be blank" }
+        partitionKey?.let { require(it.isNotBlank()) { "partitionKey must not be blank" } }
         require(fields.isNotEmpty()) { "Redis Stream message fields must not be empty" }
         require(maxAttempts > 0) { "maxAttempts must be positive" }
 
@@ -112,7 +114,6 @@ class StreamProducer(
     ) : this(
         routingCache = ProducerRoutingCache(
             streamPrefix = properties.streamPrefix,
-            consumerGroupName = properties.consumerGroupName,
             client = client,
             refreshInterval = properties.routingRefreshInterval,
         ).also { it.validateInitialRouting() },
@@ -136,13 +137,12 @@ class StreamProducer(
 
     constructor(
         streamPrefix: String,
-        consumerGroupName: String,
         client: CoordinatorClient,
         writer: RedisStreamWriter,
         routingRefreshInterval: Duration = Duration.ofSeconds(30),
         publishMaxAttempts: Int = 2,
     ) : this(
-        properties = ProducerRoutingProperties.producer(streamPrefix, consumerGroupName) {
+        properties = ProducerRoutingProperties.producer(streamPrefix) {
             this.routingRefreshInterval = routingRefreshInterval
             this.publishMaxAttempts = publishMaxAttempts
         },
@@ -152,7 +152,6 @@ class StreamProducer(
 
     constructor(
         streamPrefix: String,
-        consumerGroupName: String,
         client: CoordinatorClient,
         redisConnectionFactory: RedisConnectionFactory,
         routingRefreshInterval: Duration = Duration.ofSeconds(30),
@@ -160,7 +159,6 @@ class StreamProducer(
         xadd: RedisStreamXAddConfiguration = RedisStreamXAddConfiguration(),
     ) : this(
         streamPrefix = streamPrefix,
-        consumerGroupName = consumerGroupName,
         client = client,
         writer = SpringDataRedisStreamWriter(redisConnectionFactory, xadd),
         routingRefreshInterval = routingRefreshInterval,
@@ -180,7 +178,7 @@ class StreamProducer(
      * produces to multiple stream prefixes.
      */
     override fun publish(
-        partitionKey: String,
+        partitionKey: String?,
         fields: Map<String, String>,
         options: RedisStreamPublishOptions,
     ): PublishedRedisStreamMessage =

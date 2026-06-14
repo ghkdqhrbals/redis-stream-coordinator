@@ -159,7 +159,7 @@ class OrdersShardLifecycle : CoordinatorShardLifecycle {
 }
 ```
 
-Consumer and producer runtime settings are intentionally code-defined. The only official starter YAML property is `redis-stream-coordinator.coordinator-base-url`. Use `consumerGroupName` for the logical Redis Stream consumer group name; `member-name` is not a public YAML setting.
+Consumer and producer runtime settings are intentionally code-defined. The only official starter YAML property is `redis-stream-coordinator.coordinator-base-url`. Consumers use `consumerGroupName` for the logical Redis Stream consumer group name; producers use only `streamPrefix` for routing. `member-name` is not a public YAML setting.
 
 Producer applications can use the starter to route and publish to the active Redis Stream shard:
 
@@ -181,7 +181,6 @@ class OrdersProducerConfiguration {
     ): StreamProducer =
         StreamProducer(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = coordinatorClient,
             redisConnectionFactory = redisConnectionFactory,
             routingRefreshInterval = Duration.ofSeconds(30),
@@ -209,7 +208,9 @@ class OrderPublisher(
 }
 ```
 
-During Spring bean initialization, both managed consumers and stream producers validate coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`. If the coordinator group does not exist or has no active shards, application startup fails immediately instead of waiting for the first heartbeat or publish call.
+Use a non-null `partitionKey` when records for the same business entity need shard affinity. Passing `partitionKey = null` is supported, but it uses load distribution across active shards and does not preserve per-key ordering.
+
+During Spring bean initialization, managed consumers validate coordinator routing metadata for the configured `streamPrefix` and `consumerGroupName`, while stream producers validate stream-level routing metadata for the configured `streamPrefix`. If coordinator metadata does not exist or has no active shards, application startup fails immediately instead of waiting for the first heartbeat or publish call.
 
 ## Documentation
 
@@ -220,6 +221,8 @@ During Spring bean initialization, both managed consumers and stream producers v
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
+* [Release 0.3.0](docs/releases/0.3.0.md)
+* [Release 0.3.0 (Korean)](docs/ko/releases/0.3.0.md)
 * [Release 0.2.0](docs/releases/0.2.0.md)
 * [Release 0.2.0 (Korean)](docs/ko/releases/0.2.0.md)
 * [Release 0.1.0](docs/releases/0.1.0.md)
@@ -240,7 +243,7 @@ During Spring bean initialization, both managed consumers and stream producers v
 The public Maven coordinates use the verified GitHub namespace:
 
 ```kotlin
-implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.2.0")
+implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.3.0")
 ```
 
 Published library artifacts:
@@ -295,7 +298,7 @@ The pod smoke stack also starts Prometheus and Grafana for coordinator-owned met
 * Grafana: `http://localhost:3001` (`admin` / `admin`)
 * Dashboard: `Redis Stream Coordinator`
 
-Prometheus scrapes `coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
+Prometheus scrapes `rsc-coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The local Docker topology gives the coordinator the same `rsc-coordinator` network alias used by the EC2 deployment so the monitoring configuration can be reused without hostname drift. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
 
 For an existing Grafana instance, import the dashboards in `monitoring/grafana/import/`. Configure a Prometheus datasource and an Infinity datasource for the coordinator API first; enter the coordinator URL, monitoring username, and password on the datasource, then select those datasources during dashboard import. The dashboard JSON does not store the coordinator password.
 

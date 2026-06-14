@@ -19,7 +19,6 @@ class PublisherPodConfiguration {
     ): StreamProducer =
         StreamProducer(
             streamPrefix = environment.string("STREAM_PREFIX", "create-order"),
-            consumerGroupName = environment.string("CONSUMER_GROUP_NAME", environment.string("CONSUMER_GROUP", "demo-workers")),
             client = coordinatorClient,
             redisConnectionFactory = redisConnectionFactory,
             routingRefreshInterval = environment.duration("PRODUCER_ROUTING_REFRESH_INTERVAL", Duration.ofSeconds(2)),

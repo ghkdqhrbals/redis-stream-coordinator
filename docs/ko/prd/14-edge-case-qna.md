@@ -78,6 +78,10 @@ Publisher는 Redis `XADD NOMKSTREAM`을 사용한다. 제거된 stream key를 st
 
 그렇다. Routing determinism은 같은 routing protocol, 같은 shard count, 같은 partition key 안에서만 보장된다. Shard count가 바뀌면 routing domain이 바뀐다.
 
+### Q. Producer publish에서 `partitionKey = null`은 무슨 의미인가?
+
+Key-based routing이 아니라 load distribution을 의미한다. Producer는 해당 instance의 active shard list 안에서 shard를 선택하며 per-key affinity나 ordering을 제공하지 않는다. Business entity별 record가 같은 shard에 머물 필요가 없는 event에만 사용해야 한다.
+
 ### Q. Resharding 중 같은 event id가 두 shard에 쓰일 수 있나?
 
 그럴 수 있다. Producer는 shard-level idempotent XADD를 제공할 수 있지만 old/new shard layout 전체에 걸친 global event-id deduplication은 제공하지 않는다. 중복에 민감한 workload는 shard count 변경 전 producer를 멈추고 in-flight publish retry를 drain해야 한다.

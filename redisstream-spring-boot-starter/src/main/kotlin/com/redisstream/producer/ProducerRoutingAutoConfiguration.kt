@@ -19,7 +19,6 @@ class ProducerRoutingAutoConfiguration {
     ): ProducerRoutingCache =
         ProducerRoutingCache(
             streamPrefix = properties.streamPrefix,
-            consumerGroupName = properties.consumerGroupName,
             client = client,
             refreshInterval = properties.routingRefreshInterval,
         ).also { it.validateInitialRouting() }

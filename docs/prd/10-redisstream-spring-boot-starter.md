@@ -17,8 +17,8 @@ The main application-facing functions are:
 | `@StreamConfiguration` | Declare class-level defaults for coordinator-managed listener methods, including polling and poller thread pool size. |
 | `@StreamListener` | Mark a business handler method as a listener endpoint and set endpoint identity, stream prefix, group ID, startup, and concurrency. |
 | `CoordinatorConsumerProperties.consumer(...)` | Register a managed consumer for one `{streamPrefix, consumerGroupName}` pair. |
-| `ProducerRoutingProperties.producer(...)` | Register a producer routing cache for one `{streamPrefix, consumerGroupName}` pair. |
-| `RedisStreamPublisher.publish(...)` | Route a partition key and append a record to the active Redis Stream shard. |
+| `ProducerRoutingProperties.producer(...)` | Register a producer routing cache for one `streamPrefix`. |
+| `RedisStreamPublisher.publish(...)` | Route a non-null partition key, or load-distribute a null partition key, and append a record to an active Redis Stream shard. |
 | `CoordinatorShardLifecycle` | Receive shard assign/revoke callbacks when the application owns its own read workers. |
 | `RedisStreamMessageHandler` | Let the built-in polling adapter execute business handling; application code explicitly ACKs, ACKDELs, or NACKs. |
 
@@ -61,7 +61,7 @@ fun ordersConsumer(): CoordinatorConsumerProperties =
 
 @Bean
 fun ordersProducer(): ProducerRoutingProperties =
-    ProducerRoutingProperties.producer("orders", "orders-consumer") {
+    ProducerRoutingProperties.producer("orders") {
         xadd.maxLen = 100_000
     }
 ```
@@ -222,7 +222,6 @@ class OrdersProducerConfiguration {
     ): StreamProducer =
         StreamProducer(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = coordinatorClient,
             redisConnectionFactory = redisConnectionFactory,
             routingRefreshInterval = Duration.ofSeconds(5),
@@ -235,9 +234,9 @@ class OrdersProducerConfiguration {
 }
 ```
 
-Applications can define multiple `StreamProducer` beans in the same process. Each producer bean owns its own stream prefix, consumer group name, routing cache, XADD options, and publish retry settings. Application services must inject the required producer by bean name or `@Qualifier`; relying on a single unqualified producer is only appropriate for applications with one producer.
+Applications can define multiple `StreamProducer` beans in the same process. Each producer bean owns its own stream prefix, routing cache, XADD options, and publish retry settings. Application services must inject the required producer by bean name or `@Qualifier`; relying on a single unqualified producer is only appropriate for applications with one producer.
 
-When a `StreamProducer` bean is created, it performs the same initial metadata validation and seeds the local routing cache. Missing prefix/group shard metadata is a startup error, not a first-publish error.
+When a `StreamProducer` bean is created, it validates stream-level producer routing metadata and seeds the local routing cache. Missing stream shard metadata is a startup error, not a first-publish error.
 
 The producer does not send heartbeats. Shard additions and shard-count changes reach producers through periodic routing metadata refresh. `routingRefreshInterval` bounds normal propagation delay; the routing cache lease bounds how long a producer may keep publishing without a successful coordinator refresh. If the cache lease expires and refresh still fails, publish must fail closed instead of using stale routing indefinitely.
 
@@ -254,10 +253,13 @@ The publisher:
 
 * reads producer routing metadata,
 * caches metadata by `metadataVersion`,
-* routes partition keys to active stream shards,
+* routes non-null partition keys to active stream shards,
+* load-distributes null partition keys across active stream shards,
 * sends `XADD NOMKSTREAM` with configured max length policy,
 * refreshes routing metadata on stale route signals,
 * returns the produced stream key and Redis Stream ID.
+
+Use `partitionKey = null` only for workloads that do not require records for the same business entity to remain on one shard. Null-key publishing is a load-distribution mode, not a key-affinity mode, so it does not provide per-key ordering.
 
 `NOMKSTREAM` is the default producer safety guard for scale-in. If a producer has stale routing metadata and targets a shard key that was removed, Redis must not recreate that stream key. The publish attempt fails, the routing cache is invalidated, and the default second attempt fetches fresh routing metadata before recalculating the target shard.
 

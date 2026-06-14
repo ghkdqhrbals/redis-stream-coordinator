@@ -80,6 +80,13 @@ class GrafanaDashboardContractTest {
         assertTrue(indexHtml.contains("""href="/console/admin.html""""))
         assertTrue(adminHtml.contains("Apply shard scale"))
         assertTrue(adminHtml.contains("Create stream"))
+        assertTrue(adminHtml.contains("Token expires"))
+        assertTrue(adminHtml.contains("Selected Stream"))
+        assertTrue(adminHtml.contains("data-admin-shell"))
+        assertTrue(adminJs.contains("/coord/v1/auth/login"))
+        assertTrue(adminJs.contains("Bearer "))
+        assertTrue(adminJs.contains("expiresAt"))
+        assertTrue(!adminJs.contains("createBasicAuth"))
         assertTrue(!adminJs.contains("/consumer-concurrency"))
         assertTrue(!adminHtml.contains("Update concurrency policy"))
         assertTrue(!adminHtml.contains("Producer Stress"))
@@ -87,6 +94,35 @@ class GrafanaDashboardContractTest {
         assertTrue(!adminJs.contains("/sample/stress"))
         assertTrue(!adminJs.contains("handleStressProduce"))
         assertTrue(adminJs.contains("/scale"))
+    }
+
+    @Test
+    fun `grafana dashboards link to admin console and stream producer routing`() {
+        listOf(
+            "redis-stream-coordinator.json",
+            "redis-stream-coordinator-stream-detail.json",
+            "redis-stream-coordinator-api.json",
+            "redis-stream-coordinator-public.json",
+        ).forEach { fileName ->
+            val dashboard = readDashboard(fileName)
+            val importDashboard = readImportDashboard(fileName)
+
+            assertTrue(dashboard.contains(""""title": "Admin Console""""), "$fileName should link to admin console")
+            assertTrue(dashboard.contains("https://coordinator.ghkdqhrbals.org/console/admin.html"), "$fileName should use the production coordinator admin URL")
+            assertTrue(importDashboard.contains(""""title": "Admin Console""""), "$fileName import should link to admin console")
+            assertTrue(importDashboard.contains("""${'$'}{COORDINATOR_API_URL}/console/admin.html"""), "$fileName import should use the configured coordinator URL")
+        }
+
+        listOf(
+            readDashboard("redis-stream-coordinator-stream-detail.json"),
+            readImportDashboard("redis-stream-coordinator-stream-detail.json"),
+        ).forEach { content ->
+            assertTrue(content.contains(""""title": "Producer Routing Shards""""))
+            assertTrue(content.contains("/coord/v1/streams/${'$'}streamPrefix/producer-routing"))
+            assertTrue(!content.contains("/groups/${'$'}consumerGroup/producer-routing"))
+            assertTrue(content.contains(""""text": "Stream Key""""))
+            assertTrue(content.contains(""""text": "Redis Slot""""))
+        }
     }
 
     @Test

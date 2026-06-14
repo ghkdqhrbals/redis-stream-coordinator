@@ -44,7 +44,6 @@ class ProducerRoutingAutoConfigurationTest {
             .withBean(ProducerRoutingProperties::class.java, {
                 ProducerRoutingProperties.producer(
                     streamPrefix = "orders",
-                    consumerGroupName = "orders-consumer",
                 )
             })
             .withPropertyValues(
@@ -86,7 +85,6 @@ class ProducerRoutingAutoConfigurationTest {
             .withBean(ProducerRoutingProperties::class.java, {
                 ProducerRoutingProperties.producer(
                     streamPrefix = "orders",
-                    consumerGroupName = "orders-consumer",
                 )
             })
             .withPropertyValues(
@@ -108,8 +106,8 @@ class ProducerRoutingAutoConfigurationTest {
             .withUserConfiguration(NamedStreamProducerConfiguration::class.java)
             .withBean(CoordinatorClient::class.java, {
                 RoutingByGroupCoordinatorClient(
-                    routingResponse(streamPrefix = "orders", consumerGroup = "orders-consumer"),
-                    routingResponse(streamPrefix = "payments", consumerGroup = "payments-consumer"),
+                    routingResponse(streamPrefix = "orders"),
+                    routingResponse(streamPrefix = "payments"),
                 )
             })
             .withBean(RedisStreamWriter::class.java, {
@@ -132,7 +130,6 @@ class ProducerRoutingAutoConfigurationTest {
             .withBean(ProducerRoutingProperties::class.java, {
                 ProducerRoutingProperties.producer(
                     streamPrefix = "orders",
-                    consumerGroupName = "orders-consumer",
                 )
             })
             .run { context ->
@@ -151,7 +148,6 @@ private class NamedStreamProducerConfiguration {
     ): StreamProducer =
         StreamProducer(
             streamPrefix = "orders",
-            consumerGroupName = "orders-consumer",
             client = client,
             writer = writer,
         )
@@ -163,7 +159,6 @@ private class NamedStreamProducerConfiguration {
     ): StreamProducer =
         StreamProducer(
             streamPrefix = "payments",
-            consumerGroupName = "payments-consumer",
             client = client,
             writer = writer,
         )
@@ -180,14 +175,14 @@ private class RoutingOnlyCoordinatorClient(
     ): HeartbeatResponse =
         error("heartbeat is not used in this test")
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
         routing
 }
 
 private class RoutingByGroupCoordinatorClient(
     vararg responses: ProducerRoutingResponse,
 ) : CoordinatorClient {
-    private val responsesByGroup = responses.associateBy { it.streamPrefix to it.consumerGroup }
+    private val responsesByStream = responses.associateBy { it.streamPrefix }
 
     override fun heartbeat(
         streamPrefix: String,
@@ -197,9 +192,9 @@ private class RoutingByGroupCoordinatorClient(
     ): HeartbeatResponse =
         error("heartbeat is not used in this test")
 
-    override fun producerRouting(streamPrefix: String, consumerGroup: String): ProducerRoutingResponse =
-        responsesByGroup[streamPrefix to consumerGroup]
-            ?: error("No routing response for stream=$streamPrefix group=$consumerGroup")
+    override fun producerRouting(streamPrefix: String): ProducerRoutingResponse =
+        responsesByStream[streamPrefix]
+            ?: error("No routing response for stream=$streamPrefix")
 }
 
 private class CapturingRedisStreamWriter : RedisStreamWriter {
@@ -209,12 +204,10 @@ private class CapturingRedisStreamWriter : RedisStreamWriter {
 
 private fun routingResponse(
     streamPrefix: String = "orders",
-    consumerGroup: String = "orders-consumer",
     shardCount: Int = 2,
 ): ProducerRoutingResponse =
     ProducerRoutingResponse(
         streamPrefix = streamPrefix,
-        consumerGroup = consumerGroup,
         metadataVersion = 1,
         shardCount = shardCount,
         streamKeyPattern = "$streamPrefix:{shardIndex}",

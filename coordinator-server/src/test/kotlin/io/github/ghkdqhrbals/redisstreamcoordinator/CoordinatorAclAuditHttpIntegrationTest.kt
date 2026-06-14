@@ -131,12 +131,12 @@ class CoordinatorAclAuditHttpIntegrationTest {
             .andExpect(status().isCreated)
 
         mockMvc.perform(
-            get("/coord/v1/streams/acl-read-stream/groups/orders-consumer/producer-routing")
+            get("/coord/v1/streams/acl-read-stream/producer-routing")
                 .header(HttpHeaders.AUTHORIZATION, basicAuth("reader", "read-password")),
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.streamPrefix").value("acl-read-stream"))
-            .andExpect(jsonPath("$.consumerGroup").value("orders-consumer"))
+            .andExpect(jsonPath("$.consumerGroup").doesNotExist())
 
         assertEquals(
             listOf(CoordinatorAuditAction.CREATE_GROUP to "SUCCESS"),

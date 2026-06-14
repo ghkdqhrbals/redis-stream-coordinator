@@ -1,6 +1,7 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.api
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.CreateStreamRequest
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ProducerRoutingResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ScaleStreamRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamCreateResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamScaleResponse
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -47,6 +49,26 @@ class StreamOperationsController(
         @Valid @RequestBody request: CreateStreamRequest,
     ): ResponseEntity<StreamCreateResponse> =
         ResponseEntity.status(HttpStatus.CREATED).body(coordinator.createStream(streamPrefix, request))
+
+    /**
+     * Returns read-only producer routing metadata for a stream-level shard layout.
+     */
+    @Operation(
+        operationId = "getStreamProducerRoutingMetadata",
+        summary = "Read stream producer routing metadata",
+        description = "Returns shard routing metadata for producers. Producer routing is stream-scoped and does not require a consumer group.",
+        responses = [
+            ApiResponse(responseCode = "200", description = "Producer routing metadata."),
+            ApiResponse(responseCode = "404", description = "No coordinator metadata exists for the stream prefix."),
+            ApiResponse(responseCode = "409", description = "Consumer groups under the stream have divergent shard topology."),
+        ],
+    )
+    @GetMapping("/producer-routing")
+    fun getProducerRouting(
+        @Parameter(description = "Sharded Redis Stream prefix used to build physical stream keys such as create-order:4.", example = "create-order")
+        @PathVariable streamPrefix: String,
+    ): ProducerRoutingResponse =
+        coordinator.producerRouting(streamPrefix)
 
     /**
      * Changes the physical shard count for a stream prefix across every registered consumer group.

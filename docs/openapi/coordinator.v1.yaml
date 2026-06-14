@@ -170,18 +170,17 @@ paths:
         "422":
           $ref: "#/components/responses/Unprocessable"
 
-  /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}/producer-routing:
+  /coord/v1/streams/{streamPrefix}/producer-routing:
     parameters:
       - $ref: "#/components/parameters/streamPrefix"
-      - $ref: "#/components/parameters/consumerGroup"
     get:
       tags: [Producer Routing]
-      operationId: getProducerRoutingMetadata
-      summary: Read producer routing metadata.
+      operationId: getStreamProducerRoutingMetadata
+      summary: Read stream producer routing metadata.
       description: |
-        Returns the shard count, stream key pattern, concrete shard keys, and Redis Cluster slots that producers
-        must use for partition-key routing. The same partition key can route to a different shard after shard count
-        changes, so duplicate-sensitive workloads should quiesce producers before resharding.
+        Returns stream-scoped shard routing metadata for producers. Producer routing does not require a
+        consumer group. The same partition key can route to a different shard after shard count changes, so
+        duplicate-sensitive workloads should quiesce producers before resharding.
       responses:
         "200":
           description: Producer routing metadata.
@@ -189,6 +188,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProducerRoutingResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Consumer groups under the stream have divergent shard topology.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /coord/v1/streams/{streamPrefix}/scale:
     parameters:

@@ -33,7 +33,7 @@ Producer는 로컬 shard count를 source of truth로 쓰지 않는다. Producer�
 }
 ```
 
-Producer는 이 metadata를 캐시하고 partition key를 `[0, shardCount)` 범위의 shard index로 라우팅한다. `metadataVersion`이 바뀌거나, cache TTL이 만료되거나, publish 중 stale routing을 감지하면 cache를 갱신한다.
+Producer는 이 metadata를 캐시하고 non-null partition key를 `[0, shardCount)` 범위의 shard index로 라우팅한다. `metadataVersion`이 바뀌거나, cache TTL이 만료되거나, publish 중 stale routing을 감지하면 cache를 갱신한다.
 
 Routing은 동일 metadata snapshot 안에서만 deterministic하다.
 
@@ -42,6 +42,8 @@ Routing은 동일 metadata snapshot 안에서만 deterministic하다.
 * 같은 partition key
 
 Shard count가 바뀌면 동일 partition key도 다른 Redis Stream shard로 들어갈 수 있다. Coordinator는 모든 shard에 걸친 동일 event id의 global deduplication을 제공하지 않는다.
+
+애플리케이션이 `partitionKey = null`로 publish하면 producer는 key-based routing을 수행하지 않는다. 이 경우 해당 producer instance가 active shard list 안에서 load distribution routing을 사용한다. Null key publish는 entity별 ordering이나 affinity가 필요 없는 event에만 적합하다. 같은 business entity의 모든 record가 같은 shard로 들어가야 하는 workload에서는 사용할 수 없다.
 
 ## Duplicate Publish Boundary
 
