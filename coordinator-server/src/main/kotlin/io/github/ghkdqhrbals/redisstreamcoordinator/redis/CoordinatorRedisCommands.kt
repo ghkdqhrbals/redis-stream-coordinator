@@ -138,19 +138,11 @@ open class CoordinatorRedisCommands(
             return
         }
         withConnection { connection ->
-            val response = connection.execute(
-                "XADD",
+            val recordId = connection.streamCommands().xAdd(
                 streamKey.bytes(),
-                "*".bytes(),
-                "__rsc_init".bytes(),
-                "1".bytes(),
-            )
-            val recordId = when (response) {
-                is ByteArray -> String(response, StandardCharsets.UTF_8)
-                is String -> response
-                else -> error("Redis XADD returned unsupported response type ${response?.javaClass?.name} for $streamKey")
-            }
-            connection.execute("XDEL", streamKey.bytes(), recordId.bytes())
+                mapOf("__rsc_init".bytes() to "1".bytes()),
+            ) ?: error("Redis XADD returned no record id for $streamKey")
+            connection.streamCommands().xDel(streamKey.bytes(), recordId)
         }
     }
 

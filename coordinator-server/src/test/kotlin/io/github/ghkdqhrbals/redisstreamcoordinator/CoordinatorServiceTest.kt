@@ -98,12 +98,14 @@ class CoordinatorServiceTest {
 
         val createError = kotlin.runCatching {
             service.createStream("rollback-stream-only", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
-        }.exceptionOrNull() as IllegalStateException
+        }.exceptionOrNull() as CoordinatorException
         val routingError = kotlin.runCatching {
             service.producerRouting("rollback-stream-only")
         }.exceptionOrNull() as CoordinatorException
 
-        assertEquals("stream shard creation failed", createError.message)
+        assertEquals(CoordinatorError.REDIS_STREAM_PROVISIONING_FAILED, createError.error)
+        assertTrue(createError.message.orEmpty().contains("rollback-stream-only"))
+        assertTrue(createError.message.orEmpty().contains("stream shard creation failed"))
         assertEquals(CoordinatorError.STREAM_NOT_FOUND, routingError.error)
     }
 

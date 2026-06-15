@@ -171,17 +171,29 @@ class CoordinatorService(
         }
         try {
             streamShardCreator.create(streamPrefix, shardCount)
-        } catch (error: RuntimeException) {
-            runCatching { stateStore.deleteStreamIfRevision(streamPrefix, stream.storeRevision) }
-                .exceptionOrNull()
-                ?.let(error::addSuppressed)
+        } catch (error: CoordinatorException) {
+            rollbackStreamMetadata(stream, error)
             throw error
+        } catch (error: RuntimeException) {
+            val provisioningError = CoordinatorException(
+                CoordinatorError.REDIS_STREAM_PROVISIONING_FAILED,
+                "Failed to provision Redis Stream shards for '$streamPrefix': ${error.message}",
+                error,
+            )
+            rollbackStreamMetadata(stream, provisioningError)
+            throw provisioningError
         }
         return StreamCreateResponse(
             streamPrefix = stream.streamPrefix,
             shardCount = stream.shardCount,
             metadataVersion = stream.metadataVersion,
         )
+    }
+
+    private fun rollbackStreamMetadata(stream: StreamMetadata, error: RuntimeException) {
+        runCatching { stateStore.deleteStreamIfRevision(stream.streamPrefix, stream.storeRevision) }
+            .exceptionOrNull()
+            ?.let(error::addSuppressed)
     }
 
     /**

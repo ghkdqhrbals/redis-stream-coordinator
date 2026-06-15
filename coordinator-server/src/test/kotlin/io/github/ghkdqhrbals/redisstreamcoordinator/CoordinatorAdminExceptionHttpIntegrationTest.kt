@@ -4,6 +4,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.CreateStreamRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.NoopStreamShardProvisioner
+import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardCreator
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardProvisioner
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -75,6 +76,20 @@ class CoordinatorAdminExceptionHttpIntegrationTest {
     }
 
     @Test
+    fun `create stream provisioning errors use coordinator error response`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/provisioning-fails")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))),
+        )
+            .andExpect(status().isServiceUnavailable)
+            .andExpect(jsonPath("$.errorCode").value(CoordinatorError.REDIS_STREAM_PROVISIONING_FAILED.code))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("provisioning-fails")))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("stream shard creation failed")))
+    }
+
+    @Test
     fun `consumer concurrency is not exposed as an admin endpoint`() {
         mockMvc.perform(
             patch("/coord/v1/streams/create-payment/groups/payment-low-workers/consumer-concurrency")
@@ -107,5 +122,16 @@ class CoordinatorAdminExceptionHttpIntegrationTest {
         @Primary
         fun streamShardProvisioner(): StreamShardProvisioner =
             NoopStreamShardProvisioner
+
+        @Bean
+        @Primary
+        fun streamShardCreator(): StreamShardCreator =
+            object : StreamShardCreator {
+                override fun create(streamPrefix: String, shardCount: Int) {
+                    if (streamPrefix == "provisioning-fails") {
+                        throw IllegalStateException("stream shard creation failed")
+                    }
+                }
+            }
     }
 }

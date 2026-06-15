@@ -8,13 +8,61 @@ import io.lettuce.core.protocol.CommandType
 import org.mockito.Mockito
 import org.springframework.data.redis.connection.RedisConnection
 import org.springframework.data.redis.connection.RedisConnectionFactory
+import org.springframework.data.redis.connection.RedisStreamCommands
+import org.springframework.data.redis.connection.stream.RecordId
+import org.springframework.data.redis.core.StringRedisTemplate
 import java.lang.reflect.Proxy
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class CoordinatorRedisCommandsTest {
+    @Test
+    fun `xEnsureStream creates and removes an initializer record through typed stream commands`() {
+        val redisTemplate = Mockito.mock(StringRedisTemplate::class.java)
+        val factory = Mockito.mock(RedisConnectionFactory::class.java)
+        val connection = Mockito.mock(RedisConnection::class.java)
+        val streamCommands = Mockito.mock(RedisStreamCommands::class.java)
+        val recordId = RecordId.of("1781076487039-0")
+        val addedStreamKey = AtomicReference<String>()
+        val deletedStreamKey = AtomicReference<String>()
+        val deletedRecordId = AtomicReference<RecordId>()
+
+        Mockito.`when`(redisTemplate.hasKey("view-content-v1:0")).thenReturn(false)
+        Mockito.`when`(factory.connection).thenReturn(connection)
+        Mockito.`when`(connection.streamCommands()).thenReturn(streamCommands)
+        Mockito.`when`(
+            streamCommands.xAdd(
+                Mockito.any(ByteArray::class.java),
+                Mockito.anyMap<ByteArray, ByteArray>(),
+            ),
+        ).thenAnswer { invocation ->
+            addedStreamKey.set((invocation.arguments[0] as ByteArray).stringValue())
+            recordId
+        }
+        Mockito.`when`(
+            streamCommands.xDel(
+                Mockito.any(ByteArray::class.java),
+                Mockito.any(RecordId::class.java),
+            ),
+        ).thenAnswer { invocation ->
+            deletedStreamKey.set((invocation.arguments[0] as ByteArray).stringValue())
+            deletedRecordId.set(invocation.arguments[1] as RecordId)
+            1L
+        }
+
+        CoordinatorRedisCommands(redisTemplate = redisTemplate, redisConnectionFactory = factory)
+            .xEnsureStream("view-content-v1:0")
+
+        assertEquals("view-content-v1:0", addedStreamKey.get())
+        assertEquals("view-content-v1:0", deletedStreamKey.get())
+        assertEquals(recordId, deletedRecordId.get())
+        Mockito.verify(connection, Mockito.never()).execute(Mockito.eq("XDEL"), Mockito.any())
+        Mockito.verify(connection).close()
+    }
+
     @Test
     fun `memory usage routes stream key as the cluster key`() {
         val factory = Mockito.mock(RedisConnectionFactory::class.java)
@@ -100,3 +148,6 @@ class CoordinatorRedisCommandsTest {
         return proxy as RedisClusterAsyncCommands<ByteArray, ByteArray>
     }
 }
+
+private fun ByteArray.stringValue(): String =
+    toString(StandardCharsets.UTF_8)

@@ -50,7 +50,7 @@ enum class CoordinatorError(
     REDIS_STREAM_PROVISIONING_FAILED(
         HttpStatus.SERVICE_UNAVAILABLE,
         "REDIS_STREAM_PROVISIONING_FAILED",
-        "Failed to provision Redis Stream consumer group",
+        "Failed to provision Redis Stream resources",
     ),
     COORDINATOR_STATE_MUTEX_UNAVAILABLE(
         HttpStatus.SERVICE_UNAVAILABLE,
