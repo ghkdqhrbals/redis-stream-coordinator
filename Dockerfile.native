@@ -4,6 +4,9 @@ FROM ghcr.io/graalvm/native-image-community:21 AS build
 
 WORKDIR /workspace
 
+RUN microdnf install -y findutils \
+    && microdnf clean all
+
 COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle ./gradle
 
