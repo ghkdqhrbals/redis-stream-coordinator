@@ -1,11 +1,16 @@
 # syntax=docker/dockerfile:1.7
 
-FROM ghcr.io/graalvm/native-image-community:25 AS build
+FROM ghcr.io/graalvm/native-image-community:25 AS graalvm25
+
+FROM ghcr.io/graalvm/native-image-community:24 AS build
 
 WORKDIR /workspace
 
 RUN microdnf install -y findutils \
     && microdnf clean all
+
+COPY --from=graalvm25 /usr/lib64/graalvm/graalvm-community-java25 /opt/graalvm25
+ENV GRAALVM_HOME=/opt/graalvm25
 
 COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle ./gradle
