@@ -74,6 +74,14 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `scalar api reference is configured with the openapi document url`() {
+        mockMvc.perform(get("/scalar"))
+            .andExpect(status().isOk)
+            .andExpect(content().string(containsString("Redis Stream Coordinator API")))
+            .andExpect(content().string(containsString("\"url\":\"/v3/api-docs\"")))
+    }
+
+    @Test
     fun `monitoring console is exposed without triggering api basic auth`() {
         mockMvc.perform(get("/console"))
             .andExpect(status().isOk)
