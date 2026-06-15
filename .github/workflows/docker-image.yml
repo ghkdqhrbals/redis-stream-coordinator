@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "Dockerfile"
+      - "Dockerfile.native"
       - ".dockerignore"
       - "compose.pods.yaml"
       - "compose.stress.yaml"
@@ -25,6 +26,11 @@ on:
         type: boolean
         required: false
         default: false
+      native:
+        description: "Publish the GraalVM native coordinator image"
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: read
@@ -93,6 +99,7 @@ jobs:
         shell: bash
         env:
           IMAGE: ghcr.io/${{ github.repository }}/coordinator-server
+          NATIVE_IMAGE: ghcr.io/${{ github.repository }}/coordinator
           VERSION: ${{ inputs.version }}
           PUSH_LATEST: ${{ inputs.push_latest }}
         run: |
@@ -101,6 +108,14 @@ jobs:
             echo "${IMAGE}:${VERSION}"
             if [ "${PUSH_LATEST}" = "true" ]; then
               echo "${IMAGE}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "native<<EOF"
+            echo "${NATIVE_IMAGE}:${VERSION}-native"
+            if [ "${PUSH_LATEST}" = "true" ]; then
+              echo "${NATIVE_IMAGE}:native-latest"
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -116,3 +131,17 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ inputs.version }}
             org.opencontainers.image.description=Redis Stream Coordinator server
+
+      - name: Build and publish native coordinator image
+        if: ${{ inputs.native == true }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.native
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.native }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.description=Redis Stream Coordinator native server

@@ -2,6 +2,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.spring")
     id("org.springframework.boot")
+    alias(libs.plugins.graalvm.native)
 }
 
 java {
@@ -41,4 +42,13 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+graalvmNative {
+    binaries {
+        named("main") {
+            imageName.set("redis-stream-coordinator")
+            buildArgs.add("--no-fallback")
+        }
+    }
 }

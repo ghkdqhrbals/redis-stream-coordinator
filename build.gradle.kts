@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.spring) apply false
     alias(libs.plugins.spring.boot) apply false
     alias(libs.plugins.maven.publish) apply false
+    alias(libs.plugins.graalvm.native) apply false
 }
 
 tasks.named<org.gradle.api.tasks.wrapper.Wrapper>("wrapper") {
