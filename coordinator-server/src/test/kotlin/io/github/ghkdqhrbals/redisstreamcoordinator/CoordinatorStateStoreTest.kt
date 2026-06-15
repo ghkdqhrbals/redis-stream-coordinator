@@ -116,9 +116,11 @@ class CoordinatorStateStoreTest {
         val stateKeys = RedisCoordinatorStateKeys("redis-stream:coord:")
         val keys = stateKeys.forGroup(GroupKey("orders", "orders-consumer"))
 
-        assertEquals("redis-stream:coord::groups", stateKeys.groupsIndex)
+        assertEquals("coordinator:metadata", stateKeys.coordinatorMetadata)
+        assertEquals("redis-stream:coord::groups", stateKeys.legacyGroupsIndex)
         assertEquals("redis-stream:coord::{orders:orders-consumer}:group", keys.group)
         assertEquals("redis-stream:coord::{orders:orders-consumer}:metadata", keys.metadata)
+        assertEquals("group:redis-stream:coord::{orders:orders-consumer}:metadata", stateKeys.groupIndexMember(keys.metadata))
     }
 
     @Test
@@ -137,7 +139,8 @@ class CoordinatorStateStoreTest {
             it.storeRevision = 4
         }
         redis.values[keys.group] = objectMapper.writeValueAsString(legacy)
-        redis.setAdd(RedisCoordinatorStateKeys(properties.store.keyPrefix).groupsIndex, keys.group)
+        val stateKeys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
+        redis.setAdd(stateKeys.legacyGroupsIndex, keys.group)
 
         assertTrue(store.contains(key))
         val loaded = assertNotNull(store.get(key))
@@ -147,6 +150,8 @@ class CoordinatorStateStoreTest {
         assertEquals(7, store.list().single().metadataVersion)
         assertEquals(objectMapper.writeValueAsString(loaded), redis.hashes.getValue(keys.metadata).getValue("aggregate"))
         assertEquals("4", redis.hashes.getValue(keys.metadata).getValue("revision"))
+        assertEquals(setOf(stateKeys.groupIndexMember(keys.metadata)), redis.setMembers(stateKeys.coordinatorMetadata))
+        assertEquals(setOf(keys.group), redis.setMembers(stateKeys.legacyGroupsIndex))
     }
 
     @Test
@@ -167,6 +172,33 @@ class CoordinatorStateStoreTest {
         val loaded = assertNotNull(store.get(key))
         assertEquals(1, loaded.metadataVersion)
         assertEquals("1", redis.hashes.getValue(keys.metadata).getValue("revision"))
+    }
+
+    @Test
+    fun `redis store writes coordinator index members to single metadata key`() {
+        val objectMapper = ObjectMapper()
+        val redis = FakeStateStoreRedisCommands()
+        val store = RedisCoordinatorStateStore(
+            redisCommands = redis,
+            objectMapper = objectMapper,
+            properties = properties,
+        )
+        val stateKeys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
+        val key = GroupKey("indexed-orders", "orders-consumer")
+        val groupKeys = stateKeys.forGroup(key)
+        val streamKey = stateKeys.forStream("indexed-orders")
+
+        assertTrue(store.putIfAbsent(key, groupMetadata(key)))
+        assertTrue(store.putStreamIfAbsent(streamMetadata("indexed-orders")))
+
+        assertEquals(
+            setOf(stateKeys.groupIndexMember(groupKeys.metadata), stateKeys.streamIndexMember(streamKey.metadata)),
+            redis.setMembers(stateKeys.coordinatorMetadata),
+        )
+        assertEquals(emptySet(), redis.setMembers(stateKeys.legacyGroupsIndex))
+        assertEquals(emptySet(), redis.setMembers(stateKeys.legacyStreamsIndex))
+        assertEquals(listOf(key), store.list().map { GroupKey(it.streamPrefix, it.consumerGroup) })
+        assertEquals(listOf("indexed-orders"), store.listStreams().map { it.streamPrefix })
     }
 
     private fun service(store: CoordinatorStateStore): CoordinatorService =
@@ -196,6 +228,15 @@ class CoordinatorStateStoreTest {
             metadataVersion = 1,
             assignmentEpoch = 0,
             state = GroupState.EMPTY,
+            shardCount = 4,
+            createdAt = Instant.now(clock),
+            updatedAt = Instant.now(clock),
+        )
+
+    private fun streamMetadata(streamPrefix: String): StreamMetadata =
+        StreamMetadata(
+            streamPrefix = streamPrefix,
+            metadataVersion = 1,
             shardCount = 4,
             createdAt = Instant.now(clock),
             updatedAt = Instant.now(clock),

@@ -920,7 +920,9 @@ class CoordinatorServiceTest {
     fun `health skips redis ping when redis features are disabled`() {
         val redisConnectionFactory = Mockito.mock(RedisConnectionFactory::class.java)
         val service = CoordinatorService(
-            properties = CoordinatorProperties(),
+            properties = CoordinatorProperties(
+                store = CoordinatorProperties.Store(type = CoordinatorProperties.StoreType.MEMORY),
+            ),
             stateStore = InMemoryCoordinatorStateStore(),
             redisConnectionFactory = redisProvider(redisConnectionFactory),
             clock = clock,

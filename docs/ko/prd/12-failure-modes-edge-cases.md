@@ -184,6 +184,7 @@ Stream-level metadata와 physical shard stream key는 runtime consumer group이 
 | Edge case | Risk | Required behavior |
 | --- | --- | --- |
 | Metadata claim 뒤 physical stream 생성 실패 | Redis stream key 없는 phantom stream metadata | Stream metadata compare-and-set claim을 rollback하고 provisioning error를 반환한다 |
+| Redis Stream provisioning이 켜진 상태에서 coordinator가 memory store로 실행됨 | Physical Redis Stream key와 XGROUP은 restart 뒤에도 남지만 coordinator metadata는 사라져 consumer가 durable assignment를 받지 못함 | Startup을 거부한다. Redis Stream provisioning에는 `coordinator.store.type=redis`가 필수이다 |
 | 기존 stream에 대해 첫 heartbeat가 들어왔지만 group이 없음 | Stream topology가 있는데 consumer가 `UNKNOWN_MEMBER_ID`를 반복 | `memberEpoch=0`을 group auto-registration으로 처리하고 stream shard metadata 기준으로 assign한다 |
 | Missing stream에 첫 heartbeat가 들어옴 | Consumer local config만으로 topology가 만들어짐 | `UNKNOWN_MEMBER_ID`를 반환한다. Stream topology는 Admin API 또는 compatibility group-create API로만 생성된다 |
 | Stream이 0 shard로 scale된 뒤 첫 heartbeat가 들어옴 | 0 shard에 대해 Redis consumer group provisioning을 시도 | Group을 `shardCount=0`으로 기록하고 Redis consumer group provisioning을 생략하며 빈 assignment를 반환한다 |
@@ -301,7 +302,7 @@ Redis는 휘발 가능하다고 취급한다. Key는 operator error, eviction po
 Index는 rebuild 가능한 보조 데이터일 뿐이다.
 
 ```text
-redis-stream:coord:groups
+coordinator:metadata
 ```
 
 목표 동작:
@@ -310,7 +311,7 @@ redis-stream:coord:groups
 | --- | --- | --- |
 | metadata key 삭제 | source of truth 손실 | 해당 group fail closed. Heartbeat, routing cache, local state, index에서 재구성 금지 |
 | 최근 metadata write 유실 | Redis state가 이전 version으로 되돌아감 | heartbeat가 더 높은 version을 보고하면 metadata correction round를 시작하고 현재 Redis version의 `SYNC_METADATA` 반환 |
-| group index 삭제 | `list()`와 tick scan에서 group 누락 | 제어된 repair path로 metadata key scan 후 index rebuild |
+| coordinator metadata index 삭제 | `list()`, stream listing, tick scan에서 group/stream 누락 | 제어된 repair path로 metadata key scan 후 index rebuild |
 | index가 없는 metadata를 가리킴 | phantom group | stale index entry skip, 필요 시 제거 |
 | revision field 삭제 | CAS 보호 상실 | corruption으로 보고 fail closed |
 | aggregate JSON 손상 | assignment 계산 불가 | group unhealthy 처리 후 restore 또는 repair 요구 |

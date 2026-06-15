@@ -124,7 +124,7 @@ Redis metadata key가 해당 group의 coordinator source of truth이다. Consume
 Production 권장사항:
 
 1. Deployment에 맞는 Redis persistence와 backup을 사용한다.
-2. Coordinator metadata key를 전용 `coordinator.store.key-prefix` 아래에 둔다.
+2. `coordinator:metadata` index key와 group별 metadata key를 backup 대상에 포함한다.
 3. Application runtime user가 coordinator metadata key를 delete할 수 없게 한다.
 4. Schema-changing upgrade나 수동 maintenance 전에는 coordinator metadata key를 backup한다.
 5. 오래된 Redis backup restore는 일반 retry가 아니라 disaster recovery로 취급한다.

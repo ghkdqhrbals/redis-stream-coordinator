@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 
 @SpringBootTest(
     properties = [
-        "coordinator.store.type=memory",
+        "coordinator.store.type=redis",
         "coordinator.streams.provisioning-enabled=true",
         "coordinator.api.rate-limit.enabled=true",
         "coordinator.api.rate-limit.admin-mutations-per-minute=120",
@@ -37,6 +37,7 @@ class CoordinatorDockerConfigurationTest {
 
     @Test
     fun `docker compose coordinator settings bind to coordinator properties`() {
+        assertEquals(CoordinatorProperties.StoreType.REDIS, properties.store.type)
         assertTrue(properties.streams.provisioningEnabled)
         assertTrue(properties.api.rateLimit.enabled)
         assertEquals(120, properties.api.rateLimit.adminMutationsPerMinute)

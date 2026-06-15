@@ -125,18 +125,20 @@ Redis-backed coordinator는 Redis mutex와 `storeRevision` compare-and-set을 st
 * critical section 순서는 `acquire Redis mutex -> read latest metadata hash -> validate/process/reconcile -> save with storeRevision CAS -> release mutex`이다.
 * 여러 coordinator pod가 같은 Redis store를 보더라도 같은 group update는 mutex 또는 `storeRevision` CAS로 직렬화된다.
 * event loop tick은 다른 instance가 먼저 같은 group을 update하면 reload하거나 skip하고 다음 tick에서 이어간다.
-* memory store는 개발용이며 process-local state이므로 여러 coordinator replicas에 사용하지 않는다.
+* memory store는 격리된 테스트용이며 process-local state이므로 운영 runtime이나 Redis Stream provisioning과 함께 사용하지 않는다.
 
 이 구조의 목적은 사용자가 `replicas=1`, `Recreate`, blue/green passive mode 같은 배포 세부사항을 직접 맞추지 않아도 안전하게 운영을 시작할 수 있게 하는 것이다.
 
 ## Metadata Store Options
 
+Coordinator는 기본 metadata store로 Redis를 사용한다. Physical Redis Stream shard key를 provisioning하는 배포에서는 Redis store가 필수이다. In-memory store는 stream provisioning이 없는 격리 테스트용으로만 남겨 둔다. `coordinator.store.type=memory`와 `coordinator.streams.provisioning-enabled=true`를 함께 설정하면 process restart 뒤 Redis Stream key와 consumer group만 남고 durable coordinator metadata가 사라질 수 있으므로 configuration error로 처리한다.
+
 Coordinator metadata store는 세 가지를 지원한다.
 
 | Store | 용도 | 일관성 경계 |
 | --- | --- | --- |
-| `memory` | local 개발과 unit test | process-local map |
-| `redis` | Redis만으로 운영하는 배포 | group metadata hash 1개 + Redis mutex + `storeRevision` CAS |
+| `memory` | 격리 테스트 전용. Redis Stream provisioning과 함께 사용 금지 | process-local map |
+| `redis` | 기본 운영 store와 모든 Redis Stream provisioning 배포 | group별 metadata hash + `coordinator:metadata` group/stream index + Redis mutex + `storeRevision` CAS |
 | `jdbc` | metadata를 DB에 저장해야 하는 배포 | `{streamPrefix, consumerGroup}` row 1개 + JSON metadata + `storeRevision` CAS |
 
 JDBC store도 Redis store와 동일한 aggregate metadata JSON을 저장한다. primary key는 `{streamPrefix, consumerGroup}`이며 모든 update/delete는 이전 `storeRevision` 조건으로 보호한다.

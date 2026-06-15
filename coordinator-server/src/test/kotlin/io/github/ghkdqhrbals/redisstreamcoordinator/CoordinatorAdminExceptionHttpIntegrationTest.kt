@@ -3,6 +3,8 @@ package io.github.ghkdqhrbals.redisstreamcoordinator
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.CreateStreamRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateStore
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.InMemoryCoordinatorStateStore
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.NoopStreamShardProvisioner
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardCreator
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.StreamShardProvisioner
@@ -28,8 +30,9 @@ import java.util.Base64
 
 @SpringBootTest(
     properties = [
-        "coordinator.store.type=memory",
+        "coordinator.store.type=redis",
         "coordinator.streams.provisioning-enabled=true",
+        "coordinator.coordination.state-mutex.enabled=false",
         "coordinator.defaults.initial-shard-count=2",
         "coordinator.api.admin-username=admin",
         "coordinator.api.admin-password=password",
@@ -107,6 +110,11 @@ class CoordinatorAdminExceptionHttpIntegrationTest {
 
     @TestConfiguration
     class TestConfig {
+        @Bean
+        @Primary
+        fun stateStore(): CoordinatorStateStore =
+            InMemoryCoordinatorStateStore()
+
         @Bean
         @Primary
         fun fakeCoordinatorRedisCommands(): CoordinatorRedisCommands =

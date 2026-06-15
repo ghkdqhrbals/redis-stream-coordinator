@@ -61,7 +61,7 @@ data class CoordinatorProperties(
     )
 
     data class Store(
-        val type: StoreType = StoreType.MEMORY,
+        val type: StoreType = StoreType.REDIS,
         val keyPrefix: String = "redis-stream:coord",
     )
 

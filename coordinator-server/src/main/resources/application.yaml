@@ -41,6 +41,8 @@ spring:
     import: ${SPRING_CONFIG_IMPORT:optional:configtree:/run/secrets/}
 
 coordinator:
+  store:
+    type: ${COORDINATOR_STORE_TYPE:redis}
   api:
     admin-password: ${REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD:password}
     token-secret: ${REDIS_STREAM_COORDINATOR_TOKEN_SECRET:}

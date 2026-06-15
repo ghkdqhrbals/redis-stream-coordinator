@@ -132,13 +132,14 @@ This is required because the same event id can be published to old and new shard
 
 ## Redis Metadata Backup
 
-Coordinator metadata lives in one Redis hash key per group:
+Coordinator metadata lives in one Redis hash key per group, plus one coordinator-level index key:
 
 ```text
+coordinator:metadata
 redis-stream:coord:{streamPrefix:consumerGroup}:metadata
 ```
 
-Back up coordinator metadata keys before schema-changing upgrades and before manual repair operations.
+Back up `coordinator:metadata` and group metadata keys before schema-changing upgrades and before manual repair operations.
 
 ## Metadata Durability
 
@@ -146,11 +147,12 @@ The Redis metadata key is the coordinator source of truth for a group. The coord
 
 Recommended production controls:
 
-1. Use managed Redis persistence and backups appropriate for the deployment.
-2. Keep coordinator metadata keys under a dedicated `coordinator.store.key-prefix`.
-3. Do not let application runtime users delete coordinator metadata keys.
-4. Back up coordinator metadata keys before schema-changing upgrades or manual maintenance.
-5. Treat Redis restore to an older backup as disaster recovery, not as a normal retry path.
+1. Run production with `coordinator.store.type=redis`. The default image configuration uses Redis; do not run `memory` store with Redis Stream provisioning.
+2. Use managed Redis persistence and backups appropriate for the deployment.
+3. Keep coordinator metadata keys under a dedicated `coordinator.store.key-prefix`.
+4. Do not let application runtime users delete coordinator metadata keys.
+5. Back up coordinator metadata keys before schema-changing upgrades or manual maintenance.
+6. Treat Redis restore to an older backup as disaster recovery, not as a normal retry path.
 
 Watch for metadata rollback signals:
 

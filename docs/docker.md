@@ -54,7 +54,7 @@ The coordinator image uses the same Spring Boot configuration keys as the jar. I
 | `REDIS_STREAM_COORDINATOR_ADMIN_PASSWORD` | Password used by `/coord/v1/auth/login` for the default `admin` user. Basic Auth remains accepted for compatibility. |
 | `REDIS_STREAM_COORDINATOR_TOKEN_SECRET` | HMAC signing secret for seven-day Bearer tokens. Set this explicitly in production. |
 | `REDIS_STREAM_COORDINATOR_TOKEN_TTL` | Bearer token lifetime. Default is `7d`. |
-| `COORDINATOR_STORE_TYPE` | `redis` for Redis-backed state, `memory` for local smoke tests. |
+| `COORDINATOR_STORE_TYPE` | `redis` for durable coordinator state. The image defaults to `redis`; `memory` is only for isolated local tests and is rejected when stream provisioning is enabled. |
 | `COORDINATOR_STREAMS_PROVISIONING_ENABLED` | Enables Redis Stream and consumer-group provisioning. |
 | `SPRING_DATA_REDIS_CLUSTER_NODES` | Comma-separated Redis Cluster seed nodes. |
 | `COORDINATOR_API_RATE_LIMIT_ENABLED` | Enables admin mutation API rate limiting. |

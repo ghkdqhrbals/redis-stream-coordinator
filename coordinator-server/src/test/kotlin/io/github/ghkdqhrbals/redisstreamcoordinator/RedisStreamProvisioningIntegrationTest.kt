@@ -22,7 +22,7 @@ import java.util.UUID
 @EnabledIfEnvironmentVariable(named = "REDIS_COORDINATOR_INTEGRATION_TESTS", matches = "true")
 @SpringBootTest(
     properties = [
-        "coordinator.store.type=memory",
+        "coordinator.store.type=redis",
         "coordinator.streams.provisioning-enabled=true",
         "coordinator.defaults.initial-shard-count=2",
         "coordinator.defaults.consumer-max-concurrency=4",

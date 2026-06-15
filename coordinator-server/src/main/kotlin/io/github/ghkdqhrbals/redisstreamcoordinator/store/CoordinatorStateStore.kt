@@ -83,7 +83,7 @@ class CoordinatorStateConflictException(message: String) : RuntimeException(mess
 class CoordinatorStateSchemaException(message: String) : RuntimeException(message)
 
 @Component
-@ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "memory", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "memory")
 class InMemoryCoordinatorStateStore : CoordinatorStateStore {
     private val groups = ConcurrentHashMap<GroupKey, GroupMetadata>()
     private val streams = ConcurrentHashMap<String, StreamMetadata>()
@@ -151,7 +151,7 @@ class InMemoryCoordinatorStateStore : CoordinatorStateStore {
 }
 
 @Component
-@ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "redis")
+@ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "redis", matchIfMissing = true)
 class RedisCoordinatorStateStore @Autowired constructor(
     private val redisCommands: CoordinatorRedisCommands,
     private val objectMapper: ObjectMapper,
@@ -184,7 +184,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
         }
         val stored = writeGroupMetadata(groupKeys, group, onlyIfAbsent = true)
         if (stored) {
-            redisCommands.setAdd(keys.groupsIndex, groupKeys.metadata)
+            redisCommands.setAdd(keys.coordinatorMetadata, keys.groupIndexMember(groupKeys.metadata))
         }
         return stored
     }
@@ -200,7 +200,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
             expectedRevision.toString(),
         ) == 1L
         if (deleted) {
-            redisCommands.setRemove(keys.groupsIndex, groupKeys.metadata)
+            redisCommands.setRemove(keys.coordinatorMetadata, keys.groupIndexMember(groupKeys.metadata))
         }
         return deleted
     }
@@ -211,11 +211,14 @@ class RedisCoordinatorStateStore @Autowired constructor(
     override fun save(key: GroupKey, group: GroupMetadata) {
         val groupKeys = keys.forGroup(key)
         writeGroupMetadata(groupKeys, group, onlyIfAbsent = false)
-        redisCommands.setAdd(keys.groupsIndex, groupKeys.metadata)
+        redisCommands.setAdd(keys.coordinatorMetadata, keys.groupIndexMember(groupKeys.metadata))
     }
 
     override fun list(): List<GroupMetadata> =
-        redisCommands.setMembers(keys.groupsIndex)
+        keys.groupMetadataIndexMembers(
+            redisCommands.setMembers(keys.coordinatorMetadata),
+            redisCommands.setMembers(keys.legacyGroupsIndex),
+        )
             .mapNotNull(::readIndexedGroupMetadata)
             .distinctBy { it.streamPrefix to it.consumerGroup }
 
@@ -226,7 +229,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
         val streamKey = keys.forStream(stream.streamPrefix)
         val stored = writeStreamMetadata(streamKey, stream, onlyIfAbsent = true)
         if (stored) {
-            redisCommands.setAdd(keys.streamsIndex, streamKey.metadata)
+            redisCommands.setAdd(keys.coordinatorMetadata, keys.streamIndexMember(streamKey.metadata))
         }
         return stored
     }
@@ -239,7 +242,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
             expectedRevision.toString(),
         ) == 1L
         if (deleted) {
-            redisCommands.setRemove(keys.streamsIndex, streamKey.metadata)
+            redisCommands.setRemove(keys.coordinatorMetadata, keys.streamIndexMember(streamKey.metadata))
         }
         return deleted
     }
@@ -247,11 +250,14 @@ class RedisCoordinatorStateStore @Autowired constructor(
     override fun saveStream(stream: StreamMetadata) {
         val streamKey = keys.forStream(stream.streamPrefix)
         writeStreamMetadata(streamKey, stream, onlyIfAbsent = false)
-        redisCommands.setAdd(keys.streamsIndex, streamKey.metadata)
+        redisCommands.setAdd(keys.coordinatorMetadata, keys.streamIndexMember(streamKey.metadata))
     }
 
     override fun listStreams(): List<StreamMetadata> =
-        redisCommands.setMembers(keys.streamsIndex)
+        keys.streamMetadataIndexMembers(
+            redisCommands.setMembers(keys.coordinatorMetadata),
+            redisCommands.setMembers(keys.legacyStreamsIndex),
+        )
             .mapNotNull(::readStreamMetadata)
             .distinctBy { it.streamPrefix }
 
@@ -364,7 +370,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
     private fun migrateLegacyGroupMetadata(keys: RedisCoordinatorGroupKeys, legacyGroup: GroupMetadata) {
         val migrated = writeGroupMetadata(keys, legacyGroup, onlyIfAbsent = true)
         if (migrated) {
-            redisCommands.setAdd(this.keys.groupsIndex, keys.metadata)
+            redisCommands.setAdd(this.keys.coordinatorMetadata, this.keys.groupIndexMember(keys.metadata))
         }
     }
 
@@ -786,8 +792,9 @@ class RedisCoordinatorStateKeys(
 ) {
     private val prefix = keyPrefix
 
-    val groupsIndex: String = "$prefix:groups"
-    val streamsIndex: String = "$prefix:streams"
+    val coordinatorMetadata: String = "coordinator:metadata"
+    val legacyGroupsIndex: String = "$prefix:groups"
+    val legacyStreamsIndex: String = "$prefix:streams"
 
     fun forGroup(key: GroupKey): RedisCoordinatorGroupKeys {
         val tag = "{${key.streamPrefix}:${key.consumerGroup}}"
@@ -800,6 +807,30 @@ class RedisCoordinatorStateKeys(
     fun forStream(streamPrefix: String): RedisCoordinatorStreamKey {
         val tag = "{$streamPrefix}"
         return RedisCoordinatorStreamKey(metadata = "$prefix:$tag:stream")
+    }
+
+    fun groupIndexMember(metadataKey: String): String =
+        "$GROUP_INDEX_MEMBER_PREFIX$metadataKey"
+
+    fun streamIndexMember(metadataKey: String): String =
+        "$STREAM_INDEX_MEMBER_PREFIX$metadataKey"
+
+    fun groupMetadataIndexMembers(coordinatorMembers: Set<String>, legacyMembers: Set<String>): Set<String> =
+        coordinatorMembers.mapNotNull { member ->
+            member.removePrefixOrNull(GROUP_INDEX_MEMBER_PREFIX)
+        }.toSet() + legacyMembers
+
+    fun streamMetadataIndexMembers(coordinatorMembers: Set<String>, legacyMembers: Set<String>): Set<String> =
+        coordinatorMembers.mapNotNull { member ->
+            member.removePrefixOrNull(STREAM_INDEX_MEMBER_PREFIX)
+        }.toSet() + legacyMembers
+
+    private fun String.removePrefixOrNull(prefix: String): String? =
+        takeIf { it.startsWith(prefix) }?.removePrefix(prefix)
+
+    companion object {
+        private const val GROUP_INDEX_MEMBER_PREFIX = "group:"
+        private const val STREAM_INDEX_MEMBER_PREFIX = "stream:"
     }
 }
 

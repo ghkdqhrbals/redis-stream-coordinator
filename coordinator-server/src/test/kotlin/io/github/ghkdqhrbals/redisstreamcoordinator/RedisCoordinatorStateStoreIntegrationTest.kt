@@ -54,8 +54,14 @@ class RedisCoordinatorStateStoreIntegrationTest {
     fun cleanup() {
         touchedGroups.forEach { key ->
             val keys = stateKeys.forGroup(key)
+            val streamKey = stateKeys.forStream(key.streamPrefix)
             redisTemplate.delete(keys.metadata)
-            redisTemplate.opsForSet().remove(stateKeys.groupsIndex, keys.metadata)
+            redisTemplate.delete(streamKey.metadata)
+            redisTemplate.opsForSet().remove(stateKeys.coordinatorMetadata, stateKeys.groupIndexMember(keys.metadata))
+            redisTemplate.opsForSet().remove(stateKeys.coordinatorMetadata, stateKeys.streamIndexMember(streamKey.metadata))
+            redisTemplate.opsForSet().remove(stateKeys.legacyGroupsIndex, keys.metadata)
+            redisTemplate.opsForSet().remove(stateKeys.legacyGroupsIndex, keys.group)
+            redisTemplate.opsForSet().remove(stateKeys.legacyStreamsIndex, streamKey.metadata)
         }
         touchedStreamKeys.forEach { redisTemplate.delete(it) }
     }

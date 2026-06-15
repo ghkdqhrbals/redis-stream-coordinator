@@ -181,6 +181,7 @@ Stream-level metadata and physical shard stream keys are created before any runt
 | Edge case | Risk | Required behavior |
 | --- | --- | --- |
 | Physical stream creation fails after metadata claim | Phantom stream metadata without Redis stream keys | Roll back the stream metadata compare-and-set claim and return the provisioning error |
+| Coordinator runs with memory store while Redis Stream provisioning is enabled | Physical Redis Stream keys and XGROUPs survive restart but coordinator metadata disappears, so consumers receive no durable assignment | Reject startup; Redis Stream provisioning requires `coordinator.store.type=redis` |
 | First heartbeat arrives for an existing stream but missing group | Consumer repeats `UNKNOWN_MEMBER_ID` forever even though stream topology exists | Treat `memberEpoch=0` as group auto-registration, then assign from stream shard metadata |
 | First heartbeat arrives for a missing stream | Consumer accidentally creates topology from local config | Return `UNKNOWN_MEMBER_ID`; stream topology must be created by Admin API or compatibility group-create API |
 | First heartbeat arrives after stream was scaled to zero | Group provisioning tries to create Redis consumer groups for zero shards | Record the group with `shardCount=0`, skip Redis consumer group provisioning, and return an empty assignment |
@@ -314,14 +315,14 @@ Operational controls:
 Indexes are rebuildable only:
 
 ```text
-redis-stream:coord:groups
+coordinator:metadata
 ```
 
 Additional index behavior:
 
 | Edge case | Risk | Required behavior |
 | --- | --- | --- |
-| Group index is deleted | `list()` and tick scan miss groups | Rebuild index through an explicit repair path that scans metadata keys in a controlled operation |
+| Coordinator metadata index is deleted | `list()`, stream listing, and tick scan miss groups/streams | Rebuild index through an explicit repair path that scans metadata keys in a controlled operation |
 | Index points to missing metadata | Phantom group | Skip stale index entry and optionally remove it |
 
 ## Unsupported Redis Version or Command Set

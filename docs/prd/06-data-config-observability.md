@@ -131,12 +131,14 @@ This prevents stale snapshots from overwriting fresh heartbeat, assignment, or r
 
 ## Metadata Store Options
 
+The coordinator defaults to the Redis metadata store. Redis is required for any deployment that provisions physical Redis Stream shard keys. The in-memory store is retained only for isolated tests and local experiments without stream provisioning; `coordinator.store.type=memory` with `coordinator.streams.provisioning-enabled=true` is a configuration error because it can leave Redis Stream keys and consumer groups without durable coordinator metadata after a process restart.
+
 The coordinator supports three metadata stores:
 
 | Store | Use case | Consistency boundary |
 | --- | --- | --- |
-| `memory` | Local development and unit tests only | Process-local map |
-| `redis` | Redis-only deployments | Single group metadata hash plus Redis mutex and `storeRevision` compare-and-set |
+| `memory` | Isolated tests only; never with Redis Stream provisioning | Process-local map |
+| `redis` | Default production store and all Redis Stream provisioning deployments | Per-group metadata hash, `coordinator:metadata` group/stream index, Redis mutex, and `storeRevision` compare-and-set |
 | `jdbc` | Deployments that want metadata in a database | One row per `{streamPrefix, consumerGroup}` with JSON metadata and `storeRevision` compare-and-set |
 
 The JDBC table stores the same aggregate metadata JSON used by the Redis store. The primary key is `{streamPrefix, consumerGroup}` and every update is guarded by the previous `storeRevision`.
@@ -256,4 +258,4 @@ Recommended alerts:
 
 Health checks should report Redis as a required dependency only when Redis-backed state, Redis audit, or Redis Stream provisioning is enabled.
 
-If memory store is used for local development, Redis can be absent unless stream provisioning or Redis audit is enabled.
+If memory store is explicitly used for isolated local tests, Redis can be absent only when stream provisioning and Redis audit are both disabled.
