@@ -131,6 +131,20 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `rejected heartbeat uses native safe empty assignment sets`() {
+        val response = service.heartbeat(
+            streamPrefix = "native-empty-assignment",
+            consumerGroup = "orders-consumer",
+            memberId = "member-a",
+            request = heartbeat("member-a", memberEpoch = 1),
+        )
+
+        assertEquals(HeartbeatStatus.UNKNOWN_MEMBER_ID, response.status)
+        assertNotEquals("kotlin.collections.EmptySet", response.assignment.assignedShards::class.qualifiedName)
+        assertNotEquals("kotlin.collections.EmptySet", response.assignment.pendingShards::class.qualifiedName)
+    }
+
+    @Test
     fun `initial heartbeat joins zero shard stream without provisioning consumer groups`() {
         val groupProvisioner = RecordingStreamShardProvisioner()
         val service = service(clock, streamProvisioner = groupProvisioner)

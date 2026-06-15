@@ -1,0 +1,7 @@
+[
+  [
+    "org.springframework.data.redis.connection.RedisClusterConnection",
+    "org.springframework.data.redis.connection.DefaultedRedisClusterConnection",
+    "org.springframework.data.redis.connection.RedisConnection"
+  ]
+]

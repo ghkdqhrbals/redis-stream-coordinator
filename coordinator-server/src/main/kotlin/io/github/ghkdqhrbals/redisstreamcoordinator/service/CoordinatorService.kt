@@ -2086,7 +2086,7 @@ class CoordinatorService(
             groupEpoch = group.groupEpoch,
             assignmentEpoch = group.assignmentEpoch,
             metadataVersion = group.metadataVersion,
-            assignment = AssignmentView(emptySet(), emptySet(), group.metadataVersion),
+            assignment = AssignmentView(emptyShardSet(), emptyShardSet(), group.metadataVersion),
         )
 
     private fun metadataSyncHeartbeat(
@@ -2195,8 +2195,10 @@ class CoordinatorService(
             groupEpoch = 0,
             assignmentEpoch = 0,
             metadataVersion = 0,
-            assignment = AssignmentView(emptySet(), emptySet(), 0),
+            assignment = AssignmentView(emptyShardSet(), emptyShardSet(), 0),
         )
+
+    private fun emptyShardSet(): Set<ShardId> = linkedSetOf()
 
     /**
      * Expires members that missed their lease deadline and forces a rebalance.
