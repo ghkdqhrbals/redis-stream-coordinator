@@ -305,7 +305,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     private fun readGroupMetadata(keys: RedisCoordinatorGroupKeys): GroupMetadata? =
         redisCommands.hashGet(keys.metadata, METADATA_AGGREGATE_FIELD)
-            ?.let { objectMapper.readRedisGroupMetadata(it) }
+            ?.let { objectMapper.readRedisGroupMetadata(keys.metadata, it) }
             ?: migrateLegacyGroupMetadata(keys)
 
     private fun writeStreamMetadata(
@@ -348,11 +348,11 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     private fun readStreamMetadata(metadataKey: String): StreamMetadata? =
         redisCommands.hashGet(metadataKey, METADATA_AGGREGATE_FIELD)
-            ?.let { objectMapper.readRedisStreamMetadata(it) }
+            ?.let { objectMapper.readRedisStreamMetadata(metadataKey, it) }
 
     private fun readIndexedGroupMetadata(indexMember: String): GroupMetadata? {
         redisCommands.hashGet(indexMember, METADATA_AGGREGATE_FIELD)
-            ?.let { return objectMapper.readRedisGroupMetadata(it) }
+            ?.let { return objectMapper.readRedisGroupMetadata(indexMember, it) }
 
         val legacyRaw = redisCommands.getValue(indexMember) ?: return null
         val legacyGroup = objectMapper.readRedisGroupMetadata(legacyRaw)
@@ -671,9 +671,27 @@ internal fun ObjectMapper.readRedisGroupMetadata(raw: String): GroupMetadata =
     readValue<GroupMetadata>(normalizeRedisGroupMetadata(raw))
         .also { it.requireSupportedRedisMetadataSchema() }
 
+internal fun ObjectMapper.readRedisGroupMetadata(metadataKey: String, raw: String): GroupMetadata =
+    try {
+        readRedisGroupMetadata(raw)
+    } catch (error: RuntimeException) {
+        throw CoordinatorStateSchemaException(
+            "Invalid Redis coordinator group metadata at $metadataKey: ${error.message}",
+        )
+    }
+
 internal fun ObjectMapper.readRedisStreamMetadata(raw: String): StreamMetadata =
     readValue<StreamMetadata>(raw)
         .also { it.requireSupportedRedisMetadataSchema() }
+
+internal fun ObjectMapper.readRedisStreamMetadata(metadataKey: String, raw: String): StreamMetadata =
+    try {
+        readRedisStreamMetadata(raw)
+    } catch (error: RuntimeException) {
+        throw CoordinatorStateSchemaException(
+            "Invalid Redis coordinator stream metadata at $metadataKey: ${error.message}",
+        )
+    }
 
 private fun ObjectMapper.normalizeRedisGroupMetadata(raw: String): String {
     val root = readTree(raw)

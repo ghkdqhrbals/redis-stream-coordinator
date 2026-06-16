@@ -201,6 +201,32 @@ class CoordinatorStateStoreTest {
         assertEquals(listOf("indexed-orders"), store.listStreams().map { it.streamPrefix })
     }
 
+    @Test
+    fun `redis store reports corrupt empty stream aggregate as schema error`() {
+        val redis = FakeStateStoreRedisCommands()
+        val store = RedisCoordinatorStateStore(
+            redisCommands = redis,
+            objectMapper = ObjectMapper(),
+            properties = properties,
+        )
+        val stateKeys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
+        val streamKey = stateKeys.forStream("corrupt-stream")
+        redis.hashes[streamKey.metadata] = mutableMapOf(
+            "aggregate" to "{}",
+            "revision" to "1",
+            "schemaVersion" to "1",
+            "layoutVersion" to "1",
+            "updatedAt" to Instant.now(clock).toString(),
+        )
+
+        val error = assertFailsWith<CoordinatorStateSchemaException> {
+            store.getStream("corrupt-stream")
+        }
+
+        assertTrue(error.message.orEmpty().contains(streamKey.metadata))
+        assertTrue(error.message.orEmpty().contains("stream metadata"))
+    }
+
     private fun service(store: CoordinatorStateStore): CoordinatorService =
         CoordinatorService(
             properties = properties,

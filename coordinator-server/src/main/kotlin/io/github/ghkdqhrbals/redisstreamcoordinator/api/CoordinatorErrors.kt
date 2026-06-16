@@ -1,5 +1,6 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.api
 
+import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateSchemaException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.MethodArgumentNotValidException
@@ -62,6 +63,11 @@ enum class CoordinatorError(
         "COORDINATOR_TERMINATING",
         "Coordinator is terminating; retry the request against another instance",
     ),
+    COORDINATOR_METADATA_CORRUPT(
+        HttpStatus.CONFLICT,
+        "COORDINATOR_METADATA_CORRUPT",
+        "Coordinator metadata is corrupt and requires operator repair",
+    ),
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", "Coordinator API rate limit exceeded"),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Invalid request"),
 }
@@ -96,6 +102,16 @@ class CoordinatorExceptionHandler {
                 CoordinatorError.INVALID_REQUEST.status.name,
                 CoordinatorError.INVALID_REQUEST.code,
                 error.bindingResult.fieldErrors.joinToString("; ") { "${it.field}: ${it.defaultMessage}" },
+            ),
+        )
+
+    @ExceptionHandler(CoordinatorStateSchemaException::class)
+    fun coordinatorStateSchemaException(error: CoordinatorStateSchemaException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(CoordinatorError.COORDINATOR_METADATA_CORRUPT.status).body(
+            ErrorResponse(
+                CoordinatorError.COORDINATOR_METADATA_CORRUPT.status.name,
+                CoordinatorError.COORDINATOR_METADATA_CORRUPT.code,
+                error.message ?: CoordinatorError.COORDINATOR_METADATA_CORRUPT.defaultMessage,
             ),
         )
 

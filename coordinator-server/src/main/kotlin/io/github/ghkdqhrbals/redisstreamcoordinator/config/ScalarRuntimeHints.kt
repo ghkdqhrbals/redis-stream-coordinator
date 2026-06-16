@@ -16,6 +16,13 @@ import com.scalar.maven.core.config.ScalarAgentOptions
 import com.scalar.maven.core.config.ScalarServer
 import com.scalar.maven.core.config.ScalarSource
 import com.scalar.maven.core.internal.ScalarConfiguration
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MemberMetadata
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MetadataCorrection
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.Migration
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardConsumptionProgress
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardId
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamMetadata
 import org.springframework.aot.hint.MemberCategory
 import org.springframework.aot.hint.RuntimeHints
 import org.springframework.aot.hint.RuntimeHintsRegistrar
@@ -29,6 +36,7 @@ class ScalarRuntimeHints : RuntimeHintsRegistrar {
                 MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS,
                 MemberCategory.INTROSPECT_PUBLIC_METHODS,
                 MemberCategory.INVOKE_PUBLIC_METHODS,
+                MemberCategory.DECLARED_FIELDS,
             )
         }
     }
@@ -52,6 +60,13 @@ class ScalarRuntimeHints : RuntimeHintsRegistrar {
             ClientCredentialsFlow::class.java,
             ImplicitFlow::class.java,
             PasswordFlow::class.java,
+            StreamMetadata::class.java,
+            GroupMetadata::class.java,
+            MemberMetadata::class.java,
+            Migration::class.java,
+            MetadataCorrection::class.java,
+            ShardId::class.java,
+            ShardConsumptionProgress::class.java,
         )
     }
 }
