@@ -190,6 +190,39 @@ class CoordinatorService(
         )
     }
 
+    /**
+     * Adopts already-materialized physical Redis Stream shard keys after metadata-only recovery events.
+     */
+    @CriticalSection(operation = "adopt-stream")
+    fun adoptStream(streamPrefix: String, request: AdoptStreamRequest): StreamCreateResponse {
+        if (stateStore.getStream(streamPrefix) != null || stateStore.list().any { it.streamPrefix == streamPrefix }) {
+            throw CoordinatorException(
+                CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
+                "Stream prefix '$streamPrefix' is already managed by coordinator metadata",
+            )
+        }
+        requireExistingPhysicalShardKeys(streamPrefix, request.shardCount)
+        val now = Instant.now(clock)
+        val stream = StreamMetadata(
+            streamPrefix = streamPrefix,
+            metadataVersion = 1,
+            shardCount = request.shardCount,
+            createdAt = now,
+            updatedAt = now,
+        )
+        if (!stateStore.putStreamIfAbsent(stream)) {
+            throw CoordinatorException(
+                CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
+                "Stream prefix '$streamPrefix' is already managed by coordinator metadata",
+            )
+        }
+        return StreamCreateResponse(
+            streamPrefix = stream.streamPrefix,
+            shardCount = stream.shardCount,
+            metadataVersion = stream.metadataVersion,
+        )
+    }
+
     private fun rollbackStreamMetadata(stream: StreamMetadata, error: RuntimeException) {
         runCatching { stateStore.deleteStreamIfRevision(stream.streamPrefix, stream.storeRevision) }
             .exceptionOrNull()
@@ -261,6 +294,21 @@ class CoordinatorService(
             throw CoordinatorException(
                 CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS,
                 "Stream prefix '$streamPrefix' already has Redis key(s): ${existingKeys.joinToString(", ")}",
+            )
+        }
+    }
+
+    private fun requireExistingPhysicalShardKeys(streamPrefix: String, shardCount: Int) {
+        if (!redisCommands.isConfigured()) {
+            throw CoordinatorException(CoordinatorError.REDIS_NOT_CONFIGURED)
+        }
+        val missingKeys = RedisStreamShardKeys.forShardCount(streamPrefix, shardCount)
+            .map { it.value }
+            .filterNot(redisCommands::hasKey)
+        if (missingKeys.isNotEmpty()) {
+            throw CoordinatorException(
+                CoordinatorError.INVALID_REQUEST,
+                "Cannot adopt stream prefix '$streamPrefix'; missing Redis Stream shard key(s): ${missingKeys.joinToString(", ")}",
             )
         }
     }

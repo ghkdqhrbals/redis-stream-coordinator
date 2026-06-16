@@ -34,6 +34,12 @@ Producer 안전성은 제거된 shard key가 제거된 상태로 유지되는 �
 
 Stream metadata가 존재하고 heartbeat가 initial join(`memberEpoch=0`)이면 coordinator가 stream shard count로 consumer group을 기록하고 assignment를 반환한다. Stream metadata가 없으면 `UNKNOWN_MEMBER_ID`를 반환한다. Client는 stream 생성 후 retry할 수 있지만, coordinator가 heartbeat만 보고 stream topology를 추론하지는 않는다.
 
+### Q. Redis store로 재기동한 뒤 consumer가 계속 `UNKNOWN_MEMBER_ID`를 받는 이유는?
+
+이전 coordinator가 memory-backed metadata로 실행됐을 때 발생할 수 있다. Physical Redis Stream shard key는 Redis에 남지만, stream-level coordinator metadata는 재기동 시 사라진다. Redis-backed coordinator는 heartbeat 처리 중 Redis key 목록만 보고 shard topology를 안전하게 추론하지 않는다.
+
+정확한 기존 shard count로 `POST /coord/v1/streams/{streamPrefix}/adopt`를 호출해 stream을 복구한다. Adopt는 stream metadata만 기록한다. 그 뒤 다음 `memberEpoch=0` heartbeat가 설정된 consumer group을 등록하고 assignment를 받는다.
+
 ### Q. 첫 consumer join 시점에 stream shard count가 0이면?
 
 Coordinator는 group을 `shardCount=0`으로 기록하고 `OK`와 빈 assignment를 반환한다. Active shard stream이 없으므로 Redis consumer group provisioning은 생략한다. Producer도 stream-level routing이 빈 shard list를 반환하므로 fail closed한다.

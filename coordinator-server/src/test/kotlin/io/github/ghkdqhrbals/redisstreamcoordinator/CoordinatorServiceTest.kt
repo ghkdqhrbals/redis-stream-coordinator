@@ -131,6 +131,89 @@ class CoordinatorServiceTest {
     }
 
     @Test
+    fun `adopt stream records metadata for existing physical stream keys without creating shards`() {
+        val redis = FakeExistingKeyRedisCommands(setOf("adopted-stream:0", "adopted-stream:1"))
+        val streamCreator = RecordingStreamShardCreator()
+        val groupProvisioner = RecordingStreamShardProvisioner()
+        val service = service(
+            clock = clock,
+            streamShardCreator = streamCreator,
+            streamProvisioner = groupProvisioner,
+            redisCommands = redis,
+        )
+
+        val adopted = service.adoptStream(
+            "adopted-stream",
+            AdoptStreamRequest(shardCount = 2, requestedBy = "test", reason = "memory store migration"),
+        )
+        val joined = service.heartbeat(
+            streamPrefix = "adopted-stream",
+            consumerGroup = "runtime-workers",
+            memberId = "member-a",
+            request = heartbeat("member-a", memberEpoch = 0),
+        )
+
+        assertEquals("adopted-stream", adopted.streamPrefix)
+        assertEquals(2, adopted.shardCount)
+        assertTrue(streamCreator.created.isEmpty())
+        assertEquals(HeartbeatStatus.OK, joined.status)
+        assertEquals(
+            listOf(ProvisionedPlan("adopted-stream", "runtime-workers", 2)),
+            groupProvisioner.provisioned,
+        )
+    }
+
+    @Test
+    fun `adopt stream rejects missing physical shard keys and leaves metadata empty`() {
+        val redis = FakeExistingKeyRedisCommands(setOf("partial-adopt:0"))
+        val service = service(clock, redisCommands = redis)
+
+        val error = kotlin.runCatching {
+            service.adoptStream(
+                "partial-adopt",
+                AdoptStreamRequest(shardCount = 2, requestedBy = "test", reason = "missing shard"),
+            )
+        }.exceptionOrNull() as CoordinatorException
+        val routingError = kotlin.runCatching {
+            service.producerRouting("partial-adopt")
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.INVALID_REQUEST, error.error)
+        assertTrue(error.message.orEmpty().contains("partial-adopt:1"))
+        assertEquals(CoordinatorError.STREAM_NOT_FOUND, routingError.error)
+    }
+
+    @Test
+    fun `adopt stream rejects already managed coordinator metadata before inspecting Redis keys`() {
+        val redis = FakeExistingKeyRedisCommands(setOf("managed-adopt:0", "managed-adopt:1"))
+        val service = service(clock, redisCommands = redis)
+        service.createStream("managed-adopt", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
+
+        val error = kotlin.runCatching {
+            service.adoptStream(
+                "managed-adopt",
+                AdoptStreamRequest(shardCount = 2, requestedBy = "test", reason = "duplicate recovery"),
+            )
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.STREAM_PREFIX_ALREADY_EXISTS, error.error)
+    }
+
+    @Test
+    fun `adopt stream requires configured Redis commands`() {
+        val service = service(clock, redisCommands = CoordinatorRedisCommands())
+
+        val error = kotlin.runCatching {
+            service.adoptStream(
+                "no-redis-adopt",
+                AdoptStreamRequest(shardCount = 1, requestedBy = "test", reason = "no redis"),
+            )
+        }.exceptionOrNull() as CoordinatorException
+
+        assertEquals(CoordinatorError.REDIS_NOT_CONFIGURED, error.error)
+    }
+
+    @Test
     fun `rejected heartbeat uses native safe empty assignment sets`() {
         val response = service.heartbeat(
             streamPrefix = "native-empty-assignment",

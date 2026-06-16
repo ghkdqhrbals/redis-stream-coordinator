@@ -127,6 +127,18 @@ data class CreateStreamRequest(
         )
 }
 
+@Schema(description = "Request body for adopting an existing physical Redis Stream shard layout into coordinator metadata.")
+data class AdoptStreamRequest(
+    @field:Min(1)
+    @field:Schema(description = "Existing physical shard stream count to adopt. Every shard key from 0 to shardCount - 1 must already exist.", example = "20")
+    val shardCount: Int,
+    @field:NotBlank
+    @field:Schema(description = "Operator or automation identity requesting the recovery.", example = "platform-admin")
+    val requestedBy: String,
+    @field:Schema(description = "Human-readable reason stored in audit logs.", example = "recover metadata after memory-store migration")
+    val reason: String? = null,
+)
+
 @Schema(description = "Response for creating a stream-level shard layout.")
 data class StreamCreateResponse(
     @field:Schema(description = "Sharded Redis Stream prefix whose shard layout was created.", example = "create-order")

@@ -1,6 +1,7 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.api.CoordinatorError
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.AdoptStreamRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.CreateStreamRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.CoordinatorStateStore
@@ -93,6 +94,51 @@ class CoordinatorAdminExceptionHttpIntegrationTest {
     }
 
     @Test
+    fun `adopt stream records metadata for existing Redis shard keys`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/adopt-prefix/adopt")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(AdoptStreamRequest(shardCount = 2, requestedBy = "test"))),
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.streamPrefix").value("adopt-prefix"))
+            .andExpect(jsonPath("$.shardCount").value(2))
+
+        mockMvc.perform(
+            post("/coord/v1/streams/adopt-prefix/groups/runtime-workers/members/member-a/heartbeat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "protocolVersion": 1,
+                      "requestId": "hb-member-a-0",
+                      "memberId": "member-a",
+                      "memberEpoch": 0,
+                      "metadataVersion": 0,
+                      "runtimeConsumerCapacity": {"runtimeMaxConcurrency": 4, "availableConcurrency": 4}
+                    }
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("OK"))
+    }
+
+    @Test
+    fun `adopt stream missing shard errors use coordinator error response`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/partial-adopt/adopt")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(AdoptStreamRequest(shardCount = 2, requestedBy = "test"))),
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value(CoordinatorError.INVALID_REQUEST.code))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("partial-adopt:0")))
+    }
+
+    @Test
     fun `consumer concurrency is not exposed as an admin endpoint`() {
         mockMvc.perform(
             patch("/coord/v1/streams/create-payment/groups/payment-low-workers/consumer-concurrency")
@@ -123,7 +169,7 @@ class CoordinatorAdminExceptionHttpIntegrationTest {
                     true
 
                 override fun hasKey(key: String): Boolean =
-                    key == "occupied-prefix:0"
+                    key == "occupied-prefix:0" || key == "adopt-prefix:0" || key == "adopt-prefix:1"
             }
 
         @Bean

@@ -143,7 +143,31 @@ Source-of-truth metadata key가 사라졌거나 Redis가 오래된 backup으로 
 1. 해당 group의 admin mutation을 중단한다.
 2. key가 delete, corruption, 오래된 backup restore 중 무엇으로 사라지거나 rollback됐는지 확인한다.
 3. 가능하면 backup에서 metadata를 restore한다.
-4. backup이 없거나 client가 관측한 최고 version보다 오래된 backup뿐이라면 기대 shard count로 group을 명시적으로 재생성하고, consumer/producer를 새 group lifecycle로 취급한다.
-5. Consumer heartbeat, producer routing cache, stale local state로 group metadata를 자동 재구성하지 않는다.
-6. Client를 낮은 metadata version으로 강제 downgrade하지 않는다. Repair 또는 recreation이 끝날 때까지 fail closed한다.
-7. Rollback된 version 숫자만 증가시켜 repair하지 않는다. 유실된 transition에는 drain, release, shard scale, routing decision이 포함될 수 있고 이를 안전하게 추론할 수 없다.
+4. Memory store에서 Redis store로 전환한 뒤 stream-level metadata만 없다면, 기대 shard count로 기존 physical shard layout을 adopt한다.
+5. Group metadata가 사라졌고 복구할 backup이 없다면 stream metadata가 존재하는 상태에서 runtime consumer가 `memberEpoch=0`으로 group을 재등록하게 하거나, 기대 shard count로 group을 명시적으로 재생성하고 consumer/producer를 새 group lifecycle로 취급한다.
+6. Consumer heartbeat, producer routing cache, stale local state로 group metadata를 자동 재구성하지 않는다.
+7. Client를 낮은 metadata version으로 강제 downgrade하지 않는다. Repair 또는 recreation이 끝날 때까지 fail closed한다.
+8. Rollback된 version 숫자만 증가시켜 repair하지 않는다. 유실된 transition에는 drain, release, shard scale, routing decision이 포함될 수 있고 이를 안전하게 추론할 수 없다.
+
+### Memory Store Migration 뒤 Physical Stream Shard Adopt
+
+모든 physical shard key가 이미 존재하지만 Redis-backed coordinator metadata가 없는 경우에만 사용한다. 먼저 정확한 shard count를 확인한다.
+
+```sh
+redis-cli -u "$REDIS_URL" --scan --pattern 'view-content-v1:*'
+```
+
+이후 stream-level metadata를 adopt한다.
+
+```sh
+curl -sS -X POST "https://coordinator.example.com/coord/v1/streams/view-content-v1/adopt" \
+  -H "Authorization: Bearer $COORDINATOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "shardCount": 8,
+    "requestedBy": "platform-admin",
+    "reason": "recover metadata after memory-store to redis-store migration"
+  }'
+```
+
+Adopt 뒤에는 consumer를 재시작하거나 다음 heartbeat를 기다린다. 다음 `memberEpoch=0` heartbeat가 설정된 consumer group을 등록하고 assignment를 받는다. Endpoint가 missing shard key를 반환하면 그 더 작은 값이 실제 의도한 topology가 아닌 한 임의로 shard count를 줄여 재시도하지 말고 partial create 또는 수동 삭제 여부를 먼저 확인한다.

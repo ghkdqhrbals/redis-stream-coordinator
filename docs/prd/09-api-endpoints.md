@@ -81,6 +81,7 @@ Common status codes:
 | Area | Method | Path | Purpose | Mutates State |
 | --- | --- | --- | --- | --- |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}` | Create a stream shard group. | yes |
+| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/adopt` | Recover stream metadata for existing physical shard keys. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Read group metadata. | no |
 | Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | Delete inactive group metadata. | yes |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/producer-routing` | Read stream producer routing metadata. | no |
@@ -138,6 +139,32 @@ Duplicate request behavior:
 
 * If the stream prefix already has coordinator metadata, the coordinator returns `409 Conflict`.
 * `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` remains only as a compatibility endpoint for older automation.
+
+### Adopt Existing Stream
+
+```http
+POST /coord/v1/streams/{streamPrefix}/adopt
+```
+
+Records stream-level coordinator metadata for physical Redis Stream shard keys that already exist. This is an operational recovery endpoint for cases such as migrating a deployment from memory-backed coordinator metadata to Redis-backed metadata after physical stream keys were already created.
+
+This operation does not create Redis Stream keys and does not create Redis consumer groups. After adoption, the first `memberEpoch=0` heartbeat for a configured consumer group registers that group from the adopted stream shard count.
+
+Request body:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `shardCount` | yes | Existing physical shard count. Every key `{streamPrefix}:0` through `{streamPrefix}:{shardCount - 1}` must already exist. |
+| `requestedBy` | yes | Operator or automation identity for audit. |
+| `reason` | no | Human-readable recovery reason. |
+
+Response: `201 Created` with `StreamCreateResponse`.
+
+Failure behavior:
+
+* If coordinator metadata already exists for the stream prefix, the coordinator returns `409 Conflict`.
+* If any expected physical shard key is missing, the coordinator returns `400 Bad Request` and writes no metadata.
+* If Redis is not configured, the coordinator returns `503 Service Unavailable`.
 
 ### Get Group
 

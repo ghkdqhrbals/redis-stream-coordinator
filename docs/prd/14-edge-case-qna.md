@@ -34,6 +34,12 @@ Producer safety depends on removed shard keys staying removed. The coordinator c
 
 If the stream metadata exists and the heartbeat is an initial join (`memberEpoch=0`), the coordinator records the consumer group using the stream shard count and returns an assignment. If the stream metadata is missing, the coordinator returns `UNKNOWN_MEMBER_ID`; the client may retry after the stream is created but the coordinator does not infer stream topology from heartbeat alone.
 
+### Q. Why does a consumer keep receiving `UNKNOWN_MEMBER_ID` after the coordinator was restarted with Redis store?
+
+That happens when the previous coordinator ran with memory-backed metadata: physical Redis Stream shard keys can remain in Redis, but stream-level coordinator metadata disappears on restart. A Redis-backed coordinator cannot safely infer shard topology from the keys during heartbeat.
+
+Recover the stream with `POST /coord/v1/streams/{streamPrefix}/adopt` and the exact existing shard count. Adoption records stream metadata only. After that, the next `memberEpoch=0` heartbeat registers the configured consumer group and receives an assignment.
+
 ### Q. What if the stream has zero shards when the first consumer joins?
 
 The coordinator records the group with `shardCount=0`, returns `OK`, and sends an empty assignment. Redis consumer group provisioning is skipped because there are no active shard streams. Producers also fail closed because stream-level routing returns an empty shard list.

@@ -185,6 +185,7 @@ Stream-level metadata와 physical shard stream key는 runtime consumer group이 
 | --- | --- | --- |
 | Metadata claim 뒤 physical stream 생성 실패 | Redis stream key 없는 phantom stream metadata | Stream metadata compare-and-set claim을 rollback하고 provisioning error를 반환한다 |
 | Redis Stream provisioning이 켜진 상태에서 coordinator가 memory store로 실행됨 | Physical Redis Stream key와 XGROUP은 restart 뒤에도 남지만 coordinator metadata는 사라져 consumer가 durable assignment를 받지 못함 | Startup을 거부한다. Redis Stream provisioning에는 `coordinator.store.type=redis`가 필수이다 |
+| 이전 deployment가 memory store로 실행됐고 physical shard가 이미 존재한 상태에서 Redis store 이미지로 재기동됨 | Physical shard key는 존재하지만 stream-level coordinator metadata가 없어서 initial heartbeat도 계속 `UNKNOWN_MEMBER_ID`를 받음 | 정확한 기존 shard count로 `POST /coord/v1/streams/{streamPrefix}/adopt`를 호출해 복구한다. Endpoint는 모든 physical shard key 존재를 검증하고 stream metadata만 기록하며, runtime group은 이후 첫 heartbeat가 등록한다 |
 | 기존 stream에 대해 첫 heartbeat가 들어왔지만 group이 없음 | Stream topology가 있는데 consumer가 `UNKNOWN_MEMBER_ID`를 반복 | `memberEpoch=0`을 group auto-registration으로 처리하고 stream shard metadata 기준으로 assign한다 |
 | Missing stream에 첫 heartbeat가 들어옴 | Consumer local config만으로 topology가 만들어짐 | `UNKNOWN_MEMBER_ID`를 반환한다. Stream topology는 Admin API 또는 compatibility group-create API로만 생성된다 |
 | Stream이 0 shard로 scale된 뒤 첫 heartbeat가 들어옴 | 0 shard에 대해 Redis consumer group provisioning을 시도 | Group을 `shardCount=0`으로 기록하고 Redis consumer group provisioning을 생략하며 빈 assignment를 반환한다 |

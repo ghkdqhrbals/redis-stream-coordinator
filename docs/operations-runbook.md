@@ -168,7 +168,31 @@ If a source-of-truth metadata key is lost or Redis is restored to an older backu
 1. Stop admin mutations for the affected group.
 2. Confirm whether the key was deleted, corrupted, or restored from an older backup.
 3. Restore metadata from backup when possible.
-4. If backup is unavailable or older than the highest client-observed version, explicitly recreate the group with the expected shard count and treat consumers/producers as a new group lifecycle.
-5. Do not rely on consumer heartbeats, producer routing caches, or stale local state to reconstruct group metadata automatically.
-6. Do not force clients to downgrade to a lower metadata version; fail closed until repair or recreation is complete.
-7. Do not repair by only incrementing the rolled-back version number. The lost transition contents may include drain, release, shard scale, or routing decisions that cannot be inferred safely.
+4. If only stream-level metadata is missing after a memory-store to Redis-store migration, adopt the existing physical shard layout with the expected shard count.
+5. If group metadata is missing and cannot be restored, let runtime consumers re-register the group with `memberEpoch=0` after stream metadata exists, or explicitly recreate the group with the expected shard count and treat consumers/producers as a new group lifecycle.
+6. Do not rely on consumer heartbeats, producer routing caches, or stale local state to reconstruct group metadata automatically.
+7. Do not force clients to downgrade to a lower metadata version; fail closed until repair or recreation is complete.
+8. Do not repair by only incrementing the rolled-back version number. The lost transition contents may include drain, release, shard scale, or routing decisions that cannot be inferred safely.
+
+### Adopt Physical Stream Shards After Memory Store Migration
+
+Use this only when every physical shard key already exists, but Redis-backed coordinator metadata does not. Confirm the exact shard count first:
+
+```sh
+redis-cli -u "$REDIS_URL" --scan --pattern 'view-content-v1:*'
+```
+
+Then adopt the stream-level metadata:
+
+```sh
+curl -sS -X POST "https://coordinator.example.com/coord/v1/streams/view-content-v1/adopt" \
+  -H "Authorization: Bearer $COORDINATOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "shardCount": 8,
+    "requestedBy": "platform-admin",
+    "reason": "recover metadata after memory-store to redis-store migration"
+  }'
+```
+
+After adoption, restart or wait for consumers. Their next `memberEpoch=0` heartbeat registers the configured consumer group and receives assignments. If the endpoint reports a missing shard key, do not retry with a smaller count unless that smaller count is the actual intended topology; investigate whether the stream was partially created or manually deleted.

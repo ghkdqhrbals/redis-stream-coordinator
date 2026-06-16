@@ -81,6 +81,7 @@ Common status codes:
 | Area | Method | Path | Purpose | Mutates State | Duplicate Request Handling |
 | --- | --- | --- | --- | --- | --- |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}` | stream shard group 생성 | yes | existing stream metadata is `409 Conflict` |
+| Admin | `POST` | `/coord/v1/streams/{streamPrefix}/adopt` | 이미 존재하는 physical shard key를 stream metadata로 복구 | yes | existing stream metadata is `409 Conflict` |
 | Admin | `GET` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | group metadata 조회 | no | not required |
 | Admin | `DELETE` | `/coord/v1/streams/{streamPrefix}/groups/{consumerGroup}` | inactive group metadata 삭제 | yes | live member가 있으면 force 없이는 reject |
 | Admin | `POST` | `/coord/v1/streams/{streamPrefix}/scale` | stream 전체 shard scale-out/in migration 시작 | yes | active migration or same target is rejected/no-op |
@@ -136,6 +137,32 @@ Duplicate request behavior:
 
 * stream prefix에 coordinator metadata가 이미 있으면 `409 Conflict`로 거절한다.
 * `POST /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}`는 이전 automation 호환용으로만 남긴다.
+
+### Adopt Existing Stream
+
+```http
+POST /coord/v1/streams/{streamPrefix}/adopt
+```
+
+이미 존재하는 physical Redis Stream shard key를 기준으로 stream-level coordinator metadata를 기록한다. 메모리 기반 coordinator metadata로 실행하다가 Redis store로 전환한 뒤, physical stream key는 남아 있지만 coordinator metadata만 없는 상황을 복구하기 위한 운영 전용 endpoint이다.
+
+이 operation은 Redis Stream key를 생성하지 않고 Redis consumer group도 생성하지 않는다. Adopt가 끝난 뒤 설정된 consumer group의 첫 `memberEpoch=0` heartbeat가 adopted stream shard count를 기준으로 group을 등록한다.
+
+Request body:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `shardCount` | yes | 이미 존재하는 physical shard count. `{streamPrefix}:0`부터 `{streamPrefix}:{shardCount - 1}`까지 모두 존재해야 한다. |
+| `requestedBy` | yes | Audit용 operator 또는 automation identity. |
+| `reason` | no | 사람이 읽을 수 있는 복구 사유. |
+
+Response: `201 Created` with `StreamCreateResponse`.
+
+Failure behavior:
+
+* stream prefix에 coordinator metadata가 이미 있으면 `409 Conflict`로 거절한다.
+* 기대한 physical shard key 중 하나라도 없으면 `400 Bad Request`를 반환하고 metadata를 쓰지 않는다.
+* Redis가 설정되어 있지 않으면 `503 Service Unavailable`을 반환한다.
 
 ### Get Group Metadata
 

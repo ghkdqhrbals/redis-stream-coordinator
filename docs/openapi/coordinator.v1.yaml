@@ -102,6 +102,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /coord/v1/streams/{streamPrefix}/adopt:
+    parameters:
+      - $ref: "#/components/parameters/streamPrefix"
+    post:
+      tags: [Stream Operations]
+      operationId: adoptExistingStream
+      summary: Adopt existing Redis Stream shards.
+      description: |
+        Records stream-level coordinator metadata for physical Redis Stream shard keys that already exist.
+        Use this only for operational recovery, such as migrating from memory store metadata to Redis store
+        metadata. This operation does not create Redis Stream keys or Redis consumer groups. Runtime
+        consumer groups are registered later by heartbeat.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdoptStreamRequest"
+            examples:
+              adopt:
+                value:
+                  shardCount: 8
+                  requestedBy: operator@example.com
+                  reason: recover metadata after memory-store to redis-store migration
+      responses:
+        "201":
+          description: Existing stream shard layout was adopted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreamCreateResponse"
+        "400":
+          description: At least one expected Redis Stream shard key is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Stream prefix already has coordinator metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Redis is unavailable or not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /coord/v1/streams/{streamPrefix}/groups/{consumerGroup}:
     parameters:
       - $ref: "#/components/parameters/streamPrefix"
@@ -812,6 +862,19 @@ components:
         initialShardCount:
           type: integer
           minimum: 1
+        requestedBy:
+          type: string
+        reason:
+          type: string
+          nullable: true
+    AdoptStreamRequest:
+      type: object
+      required: [shardCount, requestedBy]
+      properties:
+        shardCount:
+          type: integer
+          minimum: 1
+          description: Existing physical shard count. Every shard key from 0 to shardCount - 1 must already exist.
         requestedBy:
           type: string
         reason:

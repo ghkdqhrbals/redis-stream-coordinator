@@ -1,6 +1,7 @@
 package io.github.ghkdqhrbals.redisstreamcoordinator.api
 
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.CreateStreamRequest
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.AdoptStreamRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ProducerRoutingResponse
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ScaleStreamRequest
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamCreateResponse
@@ -49,6 +50,28 @@ class StreamOperationsController(
         @Valid @RequestBody request: CreateStreamRequest,
     ): ResponseEntity<StreamCreateResponse> =
         ResponseEntity.status(HttpStatus.CREATED).body(coordinator.createStream(streamPrefix, request))
+
+    /**
+     * Recovers stream-level metadata for pre-existing physical Redis Stream shard keys.
+     */
+    @Operation(
+        operationId = "adoptExistingStream",
+        summary = "Adopt existing Redis Stream shards",
+        description = "Records stream-level coordinator metadata for physical Redis Stream shard keys that already exist. Use this only for operational recovery, such as migrating from memory store metadata to Redis store metadata. This operation does not create Redis Stream keys or Redis consumer groups.",
+        responses = [
+            ApiResponse(responseCode = "201", description = "Existing stream shard layout was adopted."),
+            ApiResponse(responseCode = "400", description = "At least one expected Redis Stream shard key is missing."),
+            ApiResponse(responseCode = "409", description = "The stream prefix already has coordinator metadata."),
+            ApiResponse(responseCode = "503", description = "Redis is unavailable or not configured."),
+        ],
+    )
+    @PostMapping("/adopt")
+    fun adoptStream(
+        @Parameter(description = "Sharded Redis Stream prefix used to build physical stream keys such as create-order:4.", example = "create-order")
+        @PathVariable streamPrefix: String,
+        @Valid @RequestBody request: AdoptStreamRequest,
+    ): ResponseEntity<StreamCreateResponse> =
+        ResponseEntity.status(HttpStatus.CREATED).body(coordinator.adoptStream(streamPrefix, request))
 
     /**
      * Returns read-only producer routing metadata for a stream-level shard layout.
