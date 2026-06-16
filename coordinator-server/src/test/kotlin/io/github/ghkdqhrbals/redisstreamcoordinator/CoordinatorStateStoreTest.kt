@@ -24,6 +24,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.IdentityHashMap
 
 class CoordinatorStateStoreTest {
     private val clock = Clock.fixed(Instant.parse("2026-05-21T00:00:00Z"), ZoneOffset.UTC)
@@ -227,6 +228,47 @@ class CoordinatorStateStoreTest {
         assertTrue(error.message.orEmpty().contains("stream metadata"))
     }
 
+    @Test
+    fun `redis store normalizes kotlin empty set singletons before writing group metadata`() {
+        val objectMapper = EmptySetRejectingObjectMapper()
+        val redis = FakeStateStoreRedisCommands()
+        val store = RedisCoordinatorStateStore(
+            redisCommands = redis,
+            objectMapper = objectMapper,
+            properties = properties,
+        )
+        val key = GroupKey("native-empty-set", "orders-consumer")
+        val group = groupMetadataWithEmptySetMember(key)
+
+        store.save(key, group)
+
+        val metadataKey = RedisCoordinatorStateKeys(properties.store.keyPrefix).forGroup(key).metadata
+        val raw = redis.hashes.getValue(metadataKey).getValue("aggregate")
+        assertTrue(raw.contains("\"currentAssignment\":[]"))
+        assertTrue(raw.contains("\"grantedAssignment\":[]"))
+        assertTrue(raw.contains("\"revoking\":[]"))
+    }
+
+    @Test
+    fun `jdbc store normalizes kotlin empty set singletons before writing group metadata`() {
+        val dataSource = DriverManagerDataSource().apply {
+            setDriverClassName("org.h2.Driver")
+            url = "jdbc:h2:mem:native-empty-set-${System.nanoTime()};MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
+            username = "sa"
+            password = ""
+        }
+        val store = JdbcCoordinatorStateStore(JdbcTemplate(dataSource), EmptySetRejectingObjectMapper())
+        val key = GroupKey("jdbc-native-empty-set", "orders-consumer")
+
+        assertTrue(store.putIfAbsent(key, groupMetadataWithEmptySetMember(key)))
+
+        val stored = assertNotNull(store.get(key))
+        val member = stored.members.getValue("member-a")
+        assertTrue(member.currentAssignment.isEmpty())
+        assertTrue(member.grantedAssignment.isEmpty())
+        assertTrue(member.revoking.isEmpty())
+    }
+
     private fun service(store: CoordinatorStateStore): CoordinatorService =
         CoordinatorService(
             properties = properties,
@@ -259,6 +301,24 @@ class CoordinatorStateStoreTest {
             updatedAt = Instant.now(clock),
         )
 
+    private fun groupMetadataWithEmptySetMember(key: GroupKey): GroupMetadata =
+        groupMetadata(key).also { group ->
+            group.members["member-a"] = MemberMetadata(
+                memberId = "member-a",
+                memberName = "member-a",
+                state = MemberState.ACTIVE,
+                memberEpoch = 1,
+                metadataVersion = 1,
+                runtimeMaxConcurrency = 1,
+                activeConsumerWorkers = 0,
+                currentAssignment = emptySet(),
+                grantedAssignment = emptySet(),
+                revoking = emptySet(),
+                lastHeartbeatAt = Instant.now(clock),
+                memberLeaseExpiresAt = Instant.now(clock).plusSeconds(15),
+            )
+        }
+
     private fun streamMetadata(streamPrefix: String): StreamMetadata =
         StreamMetadata(
             streamPrefix = streamPrefix,
@@ -287,6 +347,35 @@ class CoordinatorStateStoreTest {
                 availableConcurrency = 4,
             ),
         )
+}
+
+private class EmptySetRejectingObjectMapper : ObjectMapper() {
+    override fun writeValueAsString(value: Any?): String {
+        check(!containsKotlinEmptySet(value, IdentityHashMap())) {
+            "Kotlin EmptySet must be normalized before Redis metadata serialization"
+        }
+        return super.writeValueAsString(value)
+    }
+
+    private fun containsKotlinEmptySet(value: Any?, visited: IdentityHashMap<Any, Boolean>): Boolean {
+        if (value == null) return false
+        if (value::class.qualifiedName == "kotlin.collections.EmptySet") return true
+        if (visited.put(value, true) != null) return false
+        return when (value) {
+            is GroupMetadata ->
+                containsKotlinEmptySet(value.members, visited) ||
+                    containsKotlinEmptySet(value.targetAssignments, visited) ||
+                    containsKotlinEmptySet(value.metadataCorrection, visited)
+            is MemberMetadata ->
+                containsKotlinEmptySet(value.currentAssignment, visited) ||
+                    containsKotlinEmptySet(value.grantedAssignment, visited) ||
+                    containsKotlinEmptySet(value.revoking, visited)
+            is MetadataCorrection -> containsKotlinEmptySet(value.acknowledgedMembers, visited)
+            is Map<*, *> -> value.values.any { containsKotlinEmptySet(it, visited) }
+            is Iterable<*> -> value.any { containsKotlinEmptySet(it, visited) }
+            else -> false
+        }
+    }
 }
 
 private class FakeStateStoreRedisCommands : CoordinatorRedisCommands() {

@@ -4,6 +4,9 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.config.CoordinatorProperties
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.COORDINATOR_METADATA_SCHEMA_VERSION
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupKey
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.GroupMetadata
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MemberMetadata
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.MetadataCorrection
+import io.github.ghkdqhrbals.redisstreamcoordinator.domain.ShardId
 import io.github.ghkdqhrbals.redisstreamcoordinator.domain.StreamMetadata
 import io.github.ghkdqhrbals.redisstreamcoordinator.redis.CoordinatorRedisCommands
 import org.springframework.beans.factory.annotation.Autowired
@@ -277,7 +280,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
             if (onlyIfAbsent) "NX" else "UPSERT",
             previousRevision.toString(),
             nextRevision.toString(),
-            objectMapper.writeValueAsString(group),
+            objectMapper.writeRedisGroupMetadata(group),
             group.schemaVersion.toString(),
             REDIS_METADATA_LAYOUT_VERSION.toString(),
             group.updatedAt.toString(),
@@ -480,7 +483,7 @@ class JdbcCoordinatorStateStore @Autowired constructor(
                 """.trimIndent(),
                 key.streamPrefix,
                 key.consumerGroup,
-                objectMapper.writeValueAsString(group),
+                objectMapper.writeRedisGroupMetadata(group),
                 group.storeRevision,
                 group.schemaVersion,
                 JDBC_METADATA_LAYOUT_VERSION,
@@ -515,7 +518,7 @@ class JdbcCoordinatorStateStore @Autowired constructor(
             SET metadata_json = ?, store_revision = ?, schema_version = ?, layout_version = ?, updated_at = ?
             WHERE stream_prefix = ? AND consumer_group = ? AND store_revision = ?
             """.trimIndent(),
-            objectMapper.writeValueAsString(group),
+            objectMapper.writeRedisGroupMetadata(group),
             nextRevision,
             group.schemaVersion,
             JDBC_METADATA_LAYOUT_VERSION,
@@ -667,6 +670,9 @@ class JdbcCoordinatorStateStore @Autowired constructor(
     }
 }
 
+internal fun ObjectMapper.writeRedisGroupMetadata(group: GroupMetadata): String =
+    writeValueAsString(group.redisMetadataSerializationSnapshot())
+
 internal fun ObjectMapper.readRedisGroupMetadata(raw: String): GroupMetadata =
     readValue<GroupMetadata>(normalizeRedisGroupMetadata(raw))
         .also { it.requireSupportedRedisMetadataSchema() }
@@ -692,6 +698,32 @@ internal fun ObjectMapper.readRedisStreamMetadata(metadataKey: String, raw: Stri
             "Invalid Redis coordinator stream metadata at $metadataKey: ${error.message}",
         )
     }
+
+private fun GroupMetadata.redisMetadataSerializationSnapshot(): GroupMetadata =
+    copy(
+        members = members.mapValuesTo(linkedMapOf()) { (_, member) ->
+            member.redisMetadataSerializationSnapshot()
+        },
+        targetAssignments = targetAssignments.mapValuesTo(linkedMapOf<String, MutableSet<ShardId>>()) { (_, shards) ->
+            shards.toMutableLinkedSet()
+        },
+        migrations = migrations.toMutableMap(),
+        metadataCorrection = metadataCorrection?.redisMetadataSerializationSnapshot(),
+    )
+
+private fun MemberMetadata.redisMetadataSerializationSnapshot(): MemberMetadata =
+    copy(
+        currentAssignment = currentAssignment.toMutableLinkedSet(),
+        grantedAssignment = grantedAssignment.toMutableLinkedSet(),
+        revoking = revoking.toMutableLinkedSet(),
+        shardProgress = shardProgress.toList(),
+    )
+
+private fun MetadataCorrection.redisMetadataSerializationSnapshot(): MetadataCorrection =
+    copy(acknowledgedMembers = acknowledgedMembers.toMutableLinkedSet())
+
+private fun <T> Iterable<T>.toMutableLinkedSet(): MutableSet<T> =
+    toCollection(linkedSetOf())
 
 private fun ObjectMapper.normalizeRedisGroupMetadata(raw: String): String {
     val root = readTree(raw)
