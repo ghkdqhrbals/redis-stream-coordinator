@@ -130,7 +130,11 @@ data class CreateStreamRequest(
 @Schema(description = "Request body for adopting an existing physical Redis Stream shard layout into coordinator metadata.")
 data class AdoptStreamRequest(
     @field:Min(1)
-    @field:Schema(description = "Existing physical shard stream count to adopt. Every shard key from 0 to shardCount - 1 must already exist.", example = "20")
+    @field:Schema(
+        description = "Existing physical shard stream count to adopt. Every shard key from 0 to shardCount - 1 must already exist.",
+        example = "20",
+        requiredMode = Schema.RequiredMode.REQUIRED,
+    )
     val shardCount: Int,
     @field:NotBlank
     @field:Schema(description = "Operator or automation identity requesting the recovery.", example = "platform-admin")

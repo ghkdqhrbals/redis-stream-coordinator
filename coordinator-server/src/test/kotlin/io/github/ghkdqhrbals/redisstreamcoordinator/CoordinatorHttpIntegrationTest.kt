@@ -7,6 +7,7 @@ import io.github.ghkdqhrbals.redisstreamcoordinator.service.CoordinatorService
 import io.github.ghkdqhrbals.redisstreamcoordinator.store.*
 import io.github.ghkdqhrbals.redisstreamcoordinator.stream.*
 
+import org.hamcrest.Matchers.containsInAnyOrder
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -68,6 +69,12 @@ class CoordinatorHttpIntegrationTest {
             .andExpect(jsonPath("$.components.securitySchemes.basicAuth.scheme").value("basic"))
             .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
             .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+            .andExpect(jsonPath("$.paths['/coord/v1/streams/{streamPrefix}/adopt'].post.operationId").value("adoptExistingStream"))
+            .andExpect(
+                jsonPath("$.components.schemas.AdoptStreamRequest.required").value(
+                    containsInAnyOrder("shardCount", "requestedBy"),
+                ),
+            )
 
         mockMvc.perform(get("/swagger-ui.html"))
             .andExpect(status().is3xxRedirection)
