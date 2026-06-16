@@ -85,6 +85,43 @@ interface CoordinatorStateStore {
 class CoordinatorStateConflictException(message: String) : RuntimeException(message)
 class CoordinatorStateSchemaException(message: String) : RuntimeException(message)
 
+interface CoordinatorJsonCodec {
+    fun writeGroupMetadata(group: GroupMetadata): String
+
+    fun readGroupMetadata(raw: String): GroupMetadata
+
+    fun readGroupMetadata(metadataKey: String, raw: String): GroupMetadata
+
+    fun writeStreamMetadata(stream: StreamMetadata): String
+
+    fun readStreamMetadata(raw: String): StreamMetadata
+
+    fun readStreamMetadata(metadataKey: String, raw: String): StreamMetadata
+}
+
+@Component
+class JacksonCoordinatorJsonCodec @Autowired constructor(
+    private val objectMapper: ObjectMapper,
+) : CoordinatorJsonCodec {
+    override fun writeGroupMetadata(group: GroupMetadata): String =
+        objectMapper.writeRedisGroupMetadata(group)
+
+    override fun readGroupMetadata(raw: String): GroupMetadata =
+        objectMapper.readRedisGroupMetadata(raw)
+
+    override fun readGroupMetadata(metadataKey: String, raw: String): GroupMetadata =
+        objectMapper.readRedisGroupMetadata(metadataKey, raw)
+
+    override fun writeStreamMetadata(stream: StreamMetadata): String =
+        objectMapper.writeRedisStreamMetadata(stream)
+
+    override fun readStreamMetadata(raw: String): StreamMetadata =
+        objectMapper.readRedisStreamMetadata(raw)
+
+    override fun readStreamMetadata(metadataKey: String, raw: String): StreamMetadata =
+        objectMapper.readRedisStreamMetadata(metadataKey, raw)
+}
+
 @Component
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "memory")
 class InMemoryCoordinatorStateStore : CoordinatorStateStore {
@@ -157,14 +194,20 @@ class InMemoryCoordinatorStateStore : CoordinatorStateStore {
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "redis", matchIfMissing = true)
 class RedisCoordinatorStateStore @Autowired constructor(
     private val redisCommands: CoordinatorRedisCommands,
-    private val objectMapper: ObjectMapper,
+    private val jsonCodec: CoordinatorJsonCodec,
     private val properties: CoordinatorProperties,
 ) : CoordinatorStateStore {
     constructor(
         redisTemplate: StringRedisTemplate,
         objectMapper: ObjectMapper,
         properties: CoordinatorProperties,
-    ) : this(CoordinatorRedisCommands(redisTemplate = redisTemplate), objectMapper, properties)
+    ) : this(CoordinatorRedisCommands(redisTemplate = redisTemplate), JacksonCoordinatorJsonCodec(objectMapper), properties)
+
+    constructor(
+        redisCommands: CoordinatorRedisCommands,
+        objectMapper: ObjectMapper,
+        properties: CoordinatorProperties,
+    ) : this(redisCommands, JacksonCoordinatorJsonCodec(objectMapper), properties)
 
     private val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
 
@@ -280,7 +323,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
             if (onlyIfAbsent) "NX" else "UPSERT",
             previousRevision.toString(),
             nextRevision.toString(),
-            objectMapper.writeRedisGroupMetadata(group),
+            jsonCodec.writeGroupMetadata(group),
             group.schemaVersion.toString(),
             REDIS_METADATA_LAYOUT_VERSION.toString(),
             group.updatedAt.toString(),
@@ -308,7 +351,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     private fun readGroupMetadata(keys: RedisCoordinatorGroupKeys): GroupMetadata? =
         redisCommands.hashGet(keys.metadata, METADATA_AGGREGATE_FIELD)
-            ?.let { objectMapper.readRedisGroupMetadata(keys.metadata, it) }
+            ?.let { jsonCodec.readGroupMetadata(keys.metadata, it) }
             ?: migrateLegacyGroupMetadata(keys)
 
     private fun writeStreamMetadata(
@@ -326,7 +369,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
             if (onlyIfAbsent) "NX" else "UPSERT",
             previousRevision.toString(),
             nextRevision.toString(),
-            objectMapper.writeValueAsString(stream),
+            jsonCodec.writeStreamMetadata(stream),
             stream.schemaVersion.toString(),
             REDIS_METADATA_LAYOUT_VERSION.toString(),
             stream.updatedAt.toString(),
@@ -351,21 +394,21 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     private fun readStreamMetadata(metadataKey: String): StreamMetadata? =
         redisCommands.hashGet(metadataKey, METADATA_AGGREGATE_FIELD)
-            ?.let { objectMapper.readRedisStreamMetadata(metadataKey, it) }
+            ?.let { jsonCodec.readStreamMetadata(metadataKey, it) }
 
     private fun readIndexedGroupMetadata(indexMember: String): GroupMetadata? {
         redisCommands.hashGet(indexMember, METADATA_AGGREGATE_FIELD)
-            ?.let { return objectMapper.readRedisGroupMetadata(indexMember, it) }
+            ?.let { return jsonCodec.readGroupMetadata(indexMember, it) }
 
         val legacyRaw = redisCommands.getValue(indexMember) ?: return null
-        val legacyGroup = objectMapper.readRedisGroupMetadata(legacyRaw)
+        val legacyGroup = jsonCodec.readGroupMetadata(legacyRaw)
         migrateLegacyGroupMetadata(keys.forGroup(GroupKey(legacyGroup.streamPrefix, legacyGroup.consumerGroup)), legacyGroup)
         return legacyGroup
     }
 
     private fun migrateLegacyGroupMetadata(keys: RedisCoordinatorGroupKeys): GroupMetadata? {
         val legacyRaw = redisCommands.getValue(keys.group) ?: return null
-        val legacyGroup = objectMapper.readRedisGroupMetadata(legacyRaw)
+        val legacyGroup = jsonCodec.readGroupMetadata(legacyRaw)
         migrateLegacyGroupMetadata(keys, legacyGroup)
         return legacyGroup
     }
@@ -435,8 +478,13 @@ class RedisCoordinatorStateStore @Autowired constructor(
 @ConditionalOnProperty(prefix = "coordinator.store", name = ["type"], havingValue = "jdbc")
 class JdbcCoordinatorStateStore @Autowired constructor(
     private val jdbcTemplate: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
+    private val jsonCodec: CoordinatorJsonCodec,
 ) : CoordinatorStateStore {
+    constructor(
+        jdbcTemplate: JdbcTemplate,
+        objectMapper: ObjectMapper,
+    ) : this(jdbcTemplate, JacksonCoordinatorJsonCodec(objectMapper))
+
     init {
         jdbcTemplate.execute(CREATE_TABLE_SQL)
         jdbcTemplate.execute(CREATE_STREAM_TABLE_SQL)
@@ -483,7 +531,7 @@ class JdbcCoordinatorStateStore @Autowired constructor(
                 """.trimIndent(),
                 key.streamPrefix,
                 key.consumerGroup,
-                objectMapper.writeRedisGroupMetadata(group),
+                jsonCodec.writeGroupMetadata(group),
                 group.storeRevision,
                 group.schemaVersion,
                 JDBC_METADATA_LAYOUT_VERSION,
@@ -518,7 +566,7 @@ class JdbcCoordinatorStateStore @Autowired constructor(
             SET metadata_json = ?, store_revision = ?, schema_version = ?, layout_version = ?, updated_at = ?
             WHERE stream_prefix = ? AND consumer_group = ? AND store_revision = ?
             """.trimIndent(),
-            objectMapper.writeRedisGroupMetadata(group),
+            jsonCodec.writeGroupMetadata(group),
             nextRevision,
             group.schemaVersion,
             JDBC_METADATA_LAYOUT_VERSION,
@@ -572,7 +620,7 @@ class JdbcCoordinatorStateStore @Autowired constructor(
                 VALUES (?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
                 stream.streamPrefix,
-                objectMapper.writeValueAsString(stream),
+                jsonCodec.writeStreamMetadata(stream),
                 stream.storeRevision,
                 stream.schemaVersion,
                 JDBC_METADATA_LAYOUT_VERSION,
@@ -606,7 +654,7 @@ class JdbcCoordinatorStateStore @Autowired constructor(
             SET metadata_json = ?, store_revision = ?, schema_version = ?, layout_version = ?, updated_at = ?
             WHERE stream_prefix = ? AND store_revision = ?
             """.trimIndent(),
-            objectMapper.writeValueAsString(stream),
+            jsonCodec.writeStreamMetadata(stream),
             nextRevision,
             stream.schemaVersion,
             JDBC_METADATA_LAYOUT_VERSION,
@@ -633,11 +681,11 @@ class JdbcCoordinatorStateStore @Autowired constructor(
         )
 
     private val rowMapper = RowMapper<GroupMetadata> { rs: ResultSet, _: Int ->
-        objectMapper.readRedisGroupMetadata(rs.getString("metadata_json"))
+        jsonCodec.readGroupMetadata(rs.getString("metadata_json"))
     }
 
     private val streamRowMapper = RowMapper<StreamMetadata> { rs: ResultSet, _: Int ->
-        objectMapper.readRedisStreamMetadata(rs.getString("metadata_json"))
+        jsonCodec.readStreamMetadata(rs.getString("metadata_json"))
     }
 
     companion object {
@@ -672,6 +720,9 @@ class JdbcCoordinatorStateStore @Autowired constructor(
 
 internal fun ObjectMapper.writeRedisGroupMetadata(group: GroupMetadata): String =
     writeValueAsString(group.redisMetadataSerializationSnapshot())
+
+internal fun ObjectMapper.writeRedisStreamMetadata(stream: StreamMetadata): String =
+    writeValueAsString(stream)
 
 internal fun ObjectMapper.readRedisGroupMetadata(raw: String): GroupMetadata =
     readValue<GroupMetadata>(normalizeRedisGroupMetadata(raw))
@@ -716,7 +767,7 @@ private fun MemberMetadata.redisMetadataSerializationSnapshot(): MemberMetadata 
         currentAssignment = currentAssignment.toMutableLinkedSet(),
         grantedAssignment = grantedAssignment.toMutableLinkedSet(),
         revoking = revoking.toMutableLinkedSet(),
-        shardProgress = shardProgress.toList(),
+        shardProgress = shardProgress.toMutableListCopy(),
     )
 
 private fun MetadataCorrection.redisMetadataSerializationSnapshot(): MetadataCorrection =
@@ -724,6 +775,9 @@ private fun MetadataCorrection.redisMetadataSerializationSnapshot(): MetadataCor
 
 private fun <T> Iterable<T>.toMutableLinkedSet(): MutableSet<T> =
     toCollection(linkedSetOf())
+
+private fun <T> Iterable<T>.toMutableListCopy(): MutableList<T> =
+    toCollection(mutableListOf())
 
 private fun ObjectMapper.normalizeRedisGroupMetadata(raw: String): String {
     val root = readTree(raw)

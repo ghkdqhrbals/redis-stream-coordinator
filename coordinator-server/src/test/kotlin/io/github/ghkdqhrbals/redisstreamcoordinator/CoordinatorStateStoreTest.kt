@@ -229,16 +229,16 @@ class CoordinatorStateStoreTest {
     }
 
     @Test
-    fun `redis store normalizes kotlin empty set singletons before writing group metadata`() {
-        val objectMapper = EmptySetRejectingObjectMapper()
+    fun `redis store normalizes kotlin empty collection singletons before writing group metadata`() {
+        val objectMapper = KotlinEmptyCollectionRejectingObjectMapper()
         val redis = FakeStateStoreRedisCommands()
         val store = RedisCoordinatorStateStore(
             redisCommands = redis,
             objectMapper = objectMapper,
             properties = properties,
         )
-        val key = GroupKey("native-empty-set", "orders-consumer")
-        val group = groupMetadataWithEmptySetMember(key)
+        val key = GroupKey("native-empty-collections", "orders-consumer")
+        val group = groupMetadataWithEmptyCollectionMember(key)
 
         store.save(key, group)
 
@@ -247,26 +247,28 @@ class CoordinatorStateStoreTest {
         assertTrue(raw.contains("\"currentAssignment\":[]"))
         assertTrue(raw.contains("\"grantedAssignment\":[]"))
         assertTrue(raw.contains("\"revoking\":[]"))
+        assertTrue(raw.contains("\"shardProgress\":[]"))
     }
 
     @Test
-    fun `jdbc store normalizes kotlin empty set singletons before writing group metadata`() {
+    fun `jdbc store normalizes kotlin empty collection singletons before writing group metadata`() {
         val dataSource = DriverManagerDataSource().apply {
             setDriverClassName("org.h2.Driver")
-            url = "jdbc:h2:mem:native-empty-set-${System.nanoTime()};MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
+            url = "jdbc:h2:mem:native-empty-collections-${System.nanoTime()};MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
             username = "sa"
             password = ""
         }
-        val store = JdbcCoordinatorStateStore(JdbcTemplate(dataSource), EmptySetRejectingObjectMapper())
-        val key = GroupKey("jdbc-native-empty-set", "orders-consumer")
+        val store = JdbcCoordinatorStateStore(JdbcTemplate(dataSource), KotlinEmptyCollectionRejectingObjectMapper())
+        val key = GroupKey("jdbc-native-empty-collections", "orders-consumer")
 
-        assertTrue(store.putIfAbsent(key, groupMetadataWithEmptySetMember(key)))
+        assertTrue(store.putIfAbsent(key, groupMetadataWithEmptyCollectionMember(key)))
 
         val stored = assertNotNull(store.get(key))
         val member = stored.members.getValue("member-a")
         assertTrue(member.currentAssignment.isEmpty())
         assertTrue(member.grantedAssignment.isEmpty())
         assertTrue(member.revoking.isEmpty())
+        assertTrue(member.shardProgress.isEmpty())
     }
 
     private fun service(store: CoordinatorStateStore): CoordinatorService =
@@ -301,7 +303,7 @@ class CoordinatorStateStoreTest {
             updatedAt = Instant.now(clock),
         )
 
-    private fun groupMetadataWithEmptySetMember(key: GroupKey): GroupMetadata =
+    private fun groupMetadataWithEmptyCollectionMember(key: GroupKey): GroupMetadata =
         groupMetadata(key).also { group ->
             group.members["member-a"] = MemberMetadata(
                 memberId = "member-a",
@@ -316,6 +318,7 @@ class CoordinatorStateStoreTest {
                 revoking = emptySet(),
                 lastHeartbeatAt = Instant.now(clock),
                 memberLeaseExpiresAt = Instant.now(clock).plusSeconds(15),
+                shardProgress = emptyList(),
             )
         }
 
@@ -349,30 +352,42 @@ class CoordinatorStateStoreTest {
         )
 }
 
-private class EmptySetRejectingObjectMapper : ObjectMapper() {
+private class KotlinEmptyCollectionRejectingObjectMapper : ObjectMapper() {
     override fun writeValueAsString(value: Any?): String {
-        check(!containsKotlinEmptySet(value, IdentityHashMap())) {
-            "Kotlin EmptySet must be normalized before Redis metadata serialization"
+        check(!containsKotlinEmptyCollection(value, IdentityHashMap())) {
+            "Kotlin empty collection singletons must be normalized before Redis metadata serialization"
         }
         return super.writeValueAsString(value)
     }
 
-    private fun containsKotlinEmptySet(value: Any?, visited: IdentityHashMap<Any, Boolean>): Boolean {
+    private fun containsKotlinEmptyCollection(value: Any?, visited: IdentityHashMap<Any, Boolean>): Boolean {
         if (value == null) return false
-        if (value::class.qualifiedName == "kotlin.collections.EmptySet") return true
+        if (
+            value::class.qualifiedName in setOf(
+                "kotlin.collections.EmptySet",
+                "kotlin.collections.EmptyList",
+                "kotlin.collections.EmptyMap",
+            )
+        ) {
+            return true
+        }
         if (visited.put(value, true) != null) return false
         return when (value) {
             is GroupMetadata ->
-                containsKotlinEmptySet(value.members, visited) ||
-                    containsKotlinEmptySet(value.targetAssignments, visited) ||
-                    containsKotlinEmptySet(value.metadataCorrection, visited)
+                containsKotlinEmptyCollection(value.members, visited) ||
+                    containsKotlinEmptyCollection(value.targetAssignments, visited) ||
+                    containsKotlinEmptyCollection(value.migrations, visited) ||
+                    containsKotlinEmptyCollection(value.metadataCorrection, visited)
             is MemberMetadata ->
-                containsKotlinEmptySet(value.currentAssignment, visited) ||
-                    containsKotlinEmptySet(value.grantedAssignment, visited) ||
-                    containsKotlinEmptySet(value.revoking, visited)
-            is MetadataCorrection -> containsKotlinEmptySet(value.acknowledgedMembers, visited)
-            is Map<*, *> -> value.values.any { containsKotlinEmptySet(it, visited) }
-            is Iterable<*> -> value.any { containsKotlinEmptySet(it, visited) }
+                containsKotlinEmptyCollection(value.currentAssignment, visited) ||
+                    containsKotlinEmptyCollection(value.grantedAssignment, visited) ||
+                    containsKotlinEmptyCollection(value.revoking, visited) ||
+                    containsKotlinEmptyCollection(value.shardProgress, visited)
+            is MetadataCorrection -> containsKotlinEmptyCollection(value.acknowledgedMembers, visited)
+            is Map<*, *> ->
+                value.keys.any { containsKotlinEmptyCollection(it, visited) } ||
+                    value.values.any { containsKotlinEmptyCollection(it, visited) }
+            is Iterable<*> -> value.any { containsKotlinEmptyCollection(it, visited) }
             else -> false
         }
     }
