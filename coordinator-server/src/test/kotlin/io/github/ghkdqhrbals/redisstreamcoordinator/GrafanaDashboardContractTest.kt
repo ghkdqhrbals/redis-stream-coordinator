@@ -304,7 +304,9 @@ class GrafanaDashboardContractTest {
 
         assertTrue(provisioning.contains("uid: rsc-loki"))
         assertTrue(provisioning.contains("type: loki"))
+        assertTrue(provisioning.contains("isDefault: false"))
         assertTrue(provisioning.contains("uid: rsc-coordinator-api"))
+        assertTrue(!provisioning.contains("isDefault: true"))
         assertTrue(!provisioning.contains("uid: rsc-prometheus"))
         assertTrue(!provisioning.contains("type: prometheus"))
     }
