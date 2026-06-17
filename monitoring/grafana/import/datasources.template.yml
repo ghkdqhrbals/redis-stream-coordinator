@@ -1,11 +1,11 @@
 apiVersion: 1
 
 datasources:
-  - name: Redis Stream Coordinator Prometheus
-    uid: rsc-prometheus
-    type: prometheus
+  - name: Redis Stream Coordinator Loki
+    uid: rsc-loki
+    type: loki
     access: proxy
-    url: ${PROMETHEUS_URL}
+    url: ${LOKI_URL}
     isDefault: false
     editable: true
     jsonData:

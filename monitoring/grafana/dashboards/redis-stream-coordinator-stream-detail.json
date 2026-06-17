@@ -57,8 +57,8 @@
   "panels": [
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -84,10 +84,7 @@
             ]
           },
           "unit": "none",
-          "custom": {
-            "spanNulls": true,
-            "insertNulls": false
-          }
+          "custom": {}
         },
         "overrides": []
       },
@@ -118,15 +115,26 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "last_over_time(redis_stream_coord_up[$__range])",
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/health",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "status",
+              "text": "Status",
+              "type": "string"
+            }
+          ]
         }
       ],
       "title": "Coordinator Availability",
@@ -134,8 +142,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -161,10 +169,7 @@
             ]
           },
           "unit": "none",
-          "custom": {
-            "spanNulls": true,
-            "insertNulls": false
-          }
+          "custom": {}
         },
         "overrides": []
       },
@@ -195,15 +200,26 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "sum(last_over_time(redis_stream_coord_members{state=\"active\", stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[$__range]))",
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/groups",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "activeMembers",
+              "text": "Active Members",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Active Consumer Members",
@@ -211,8 +227,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -238,10 +254,7 @@
             ]
           },
           "unit": "none",
-          "custom": {
-            "spanNulls": true,
-            "insertNulls": false
-          }
+          "custom": {}
         },
         "overrides": []
       },
@@ -272,15 +285,31 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "sum(last_over_time(redis_stream_coord_shard_stream_length{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[$__range]))",
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=$streamPrefix&consumerGroup=$consumerGroup",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "streamLength",
+              "text": "Entries",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Selected Shard Entries",
@@ -288,8 +317,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -315,10 +344,7 @@
             ]
           },
           "unit": "bytes",
-          "custom": {
-            "spanNulls": true,
-            "insertNulls": false
-          }
+          "custom": {}
         },
         "overrides": []
       },
@@ -349,15 +375,31 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "sum(last_over_time(redis_stream_coord_shard_memory_usage_bytes{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[$__range]))",
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=$streamPrefix&consumerGroup=$consumerGroup",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "memoryUsageBytes",
+              "text": "Memory",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Selected Shard Memory (bytes)",
@@ -365,8 +407,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -392,10 +434,7 @@
             ]
           },
           "unit": "none",
-          "custom": {
-            "spanNulls": true,
-            "insertNulls": false
-          }
+          "custom": {}
         },
         "overrides": []
       },
@@ -426,15 +465,31 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "sum(last_over_time(redis_stream_coord_shard_lag{stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[$__range]))",
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup=",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "lag",
+              "text": "Lag",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Total Lag",
@@ -442,8 +497,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -469,10 +524,7 @@
             ]
           },
           "unit": "none",
-          "custom": {
-            "spanNulls": true,
-            "insertNulls": false
-          }
+          "custom": {}
         },
         "overrides": []
       },
@@ -503,15 +555,31 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "sum(last_over_time(redis_stream_coord_shard_pending{stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[$__range]))",
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup=",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "pendingCount",
+              "text": "Pending",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Pending Entries",
@@ -634,8 +702,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -657,7 +725,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -665,7 +732,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -714,24 +780,40 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "last_over_time(redis_stream_coord_shard_lag{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[$__range])",
-          "instant": false,
-          "legendFormat": "shard {{shard}}",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=$streamPrefix&consumerGroup=$consumerGroup",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "lag",
+              "text": "Lag",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Shard Lag by Shard",
-      "type": "timeseries"
+      "type": "bargauge"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -753,7 +835,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -761,7 +842,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -810,24 +890,40 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "last_over_time(redis_stream_coord_shard_stream_length{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[$__range])",
-          "instant": false,
-          "legendFormat": "shard {{shard}}",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=$streamPrefix&consumerGroup=$consumerGroup",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "streamLength",
+              "text": "Entries",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Shard Entries by Shard",
-      "type": "timeseries"
+      "type": "bargauge"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -849,7 +945,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -857,7 +952,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -905,19 +999,35 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "last_over_time(redis_stream_coord_shard_memory_usage_bytes{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[$__range])",
-          "instant": false,
-          "legendFormat": "shard {{shard}}",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=$streamPrefix&consumerGroup=$consumerGroup",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "memoryUsageBytes",
+              "text": "Memory",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Shard Memory by Shard (bytes)",
-      "type": "timeseries"
+      "type": "bargauge"
     },
     {
       "datasource": {
@@ -1117,8 +1227,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -1141,7 +1251,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
@@ -1149,7 +1258,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -1197,21 +1305,50 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "expr": "rate(redis_stream_coord_heartbeat_total{stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[2m])",
-          "legendFormat": "{{status}}",
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/members?streamPrefix=$streamPrefix&consumerGroup=$consumerGroup",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "memberId",
+              "text": "Member",
+              "type": "string"
+            },
+            {
+              "selector": "state",
+              "text": "State",
+              "type": "string"
+            },
+            {
+              "selector": "memberEpoch",
+              "text": "Epoch",
+              "type": "number"
+            },
+            {
+              "selector": "lastHeartbeatAt",
+              "text": "Last Heartbeat",
+              "type": "string"
+            }
+          ]
         }
       ],
       "title": "Heartbeat Requests",
-      "type": "timeseries"
+      "type": "table"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -1234,7 +1371,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
@@ -1242,7 +1378,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -1291,21 +1426,50 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "expr": "last_over_time(redis_stream_coord_member_heartbeat_age_seconds{stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[$__range])",
-          "legendFormat": "{{member}}",
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/members?streamPrefix=$streamPrefix&consumerGroup=$consumerGroup",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "memberId",
+              "text": "Member",
+              "type": "string"
+            },
+            {
+              "selector": "state",
+              "text": "State",
+              "type": "string"
+            },
+            {
+              "selector": "lastHeartbeatAt",
+              "text": "Last Heartbeat",
+              "type": "string"
+            },
+            {
+              "selector": "memberLeaseExpiresAt",
+              "text": "Lease Expires",
+              "type": "string"
+            }
+          ]
         }
       ],
       "title": "Heartbeat Age by Member",
-      "type": "timeseries"
+      "type": "table"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -1328,7 +1492,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
@@ -1336,7 +1499,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -1384,34 +1546,50 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "expr": "last_over_time(redis_stream_coord_revoke_pending{stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[$__range])",
-          "legendFormat": "revoke pending",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/groups",
+          "url_options": {
+            "method": "GET"
           },
-          "expr": "last_over_time(redis_stream_coord_migration_active{stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[$__range])",
-          "legendFormat": "resharding active",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
-          },
-          "expr": "last_over_time(redis_stream_coord_invariant_violations{stream=~\"$streamPrefix\", group=~\"$consumerGroup\"}[$__range])",
-          "legendFormat": "invariant violations",
-          "refId": "C"
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "streamPrefix",
+              "text": "Stream",
+              "type": "string"
+            },
+            {
+              "selector": "consumerGroup",
+              "text": "Group",
+              "type": "string"
+            },
+            {
+              "selector": "state",
+              "text": "State",
+              "type": "string"
+            },
+            {
+              "selector": "groupEpoch",
+              "text": "Group Epoch",
+              "type": "number"
+            },
+            {
+              "selector": "assignmentEpoch",
+              "text": "Assignment Epoch",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Rebalance and Safety Signals",
-      "type": "timeseries"
+      "type": "table"
     },
     {
       "datasource": {
@@ -1916,8 +2094,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -1939,7 +2117,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1947,7 +2124,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -1997,24 +2173,45 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "sum by (shard) (clamp_min(deriv(redis_stream_coord_shard_stream_length{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[2m]), 0))",
-          "instant": false,
-          "legendFormat": ":{{shard}} produced/s",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup=",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "streamPrefix",
+              "text": "Stream",
+              "type": "string"
+            },
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "producedPerSecond",
+              "text": "Produced/s",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Shard Produced Rate",
-      "type": "timeseries"
+      "type": "bargauge"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "rsc-coordinator-api"
       },
       "fieldConfig": {
         "defaults": {
@@ -2036,7 +2233,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -2044,7 +2240,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -2094,19 +2289,40 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "rsc-coordinator-api"
           },
-          "editorMode": "code",
-          "expr": "sum by (shard) (clamp_min(deriv(redis_stream_coord_shard_stream_length{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[2m]) - deriv(redis_stream_coord_shard_lag{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", shard=~\"$shardIndex\"}[2m]), 0))",
-          "instant": false,
-          "legendFormat": ":{{shard}} consumed/s",
-          "range": true,
-          "refId": "A"
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup=",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "streamPrefix",
+              "text": "Stream",
+              "type": "string"
+            },
+            {
+              "selector": "shardLabel",
+              "text": "Shard",
+              "type": "string"
+            },
+            {
+              "selector": "consumedPerSecond",
+              "text": "Consumed/s",
+              "type": "number"
+            }
+          ]
         }
       ],
       "title": "Shard Consumed Rate",
-      "type": "timeseries"
+      "type": "bargauge"
     }
   ],
   "preload": false,

@@ -57,8 +57,8 @@
   "panels": [
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "loki",
+        "uid": "rsc-loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -118,11 +118,12 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "loki",
+            "uid": "rsc-loki"
           },
-          "expr": "max(last_over_time(redis_stream_coord_api_request_duration_seconds{quantile=\"0.95\", stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "expr": "quantile_over_time(0.95, $lokiSelector |= \"redis-stream-coordinator.audit\" | pattern `<_> audit action=<action> outcome=<outcome> status=<status> principal=<principal> requestedBy=<requestedBy> reason=<reason> requestId=<requestId> coordinatorId=<coordinatorId> streamPrefix=<stream> consumerGroup=<group> reshardingId=<reshardingId> method=<method> path=<path> route=<route> queryString=<queryString> durationMs=<durationMs> roles=<roles> requestSummary=<requestSummary> requestBodySha256=<sha>` | stream=~\"$streamPrefix\" | group=~\"$consumerGroup\" | route=~\"$apiRoute\" | unwrap durationMs [5m]) / 1000",
           "legendFormat": "API p95 Latency",
+          "queryType": "range",
           "refId": "A"
         }
       ],
@@ -131,8 +132,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "loki",
+        "uid": "rsc-loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -192,11 +193,12 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "loki",
+            "uid": "rsc-loki"
           },
-          "expr": "max(last_over_time(redis_stream_coord_api_request_duration_seconds_max{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "expr": "max_over_time($lokiSelector |= \"redis-stream-coordinator.audit\" | pattern `<_> audit action=<action> outcome=<outcome> status=<status> principal=<principal> requestedBy=<requestedBy> reason=<reason> requestId=<requestId> coordinatorId=<coordinatorId> streamPrefix=<stream> consumerGroup=<group> reshardingId=<reshardingId> method=<method> path=<path> route=<route> queryString=<queryString> durationMs=<durationMs> roles=<roles> requestSummary=<requestSummary> requestBodySha256=<sha>` | stream=~\"$streamPrefix\" | group=~\"$consumerGroup\" | route=~\"$apiRoute\" | unwrap durationMs [5m]) / 1000",
           "legendFormat": "API Max Latency",
+          "queryType": "range",
           "refId": "A"
         }
       ],
@@ -205,8 +207,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "loki",
+        "uid": "rsc-loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -286,20 +288,22 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "loki",
+            "uid": "rsc-loki"
           },
-          "expr": "max by (route) (last_over_time(redis_stream_coord_api_request_duration_seconds{quantile=\"0.95\", stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "expr": "quantile_over_time(0.95, $lokiSelector |= \"redis-stream-coordinator.audit\" | pattern `<_> audit action=<action> outcome=<outcome> status=<status> principal=<principal> requestedBy=<requestedBy> reason=<reason> requestId=<requestId> coordinatorId=<coordinatorId> streamPrefix=<stream> consumerGroup=<group> reshardingId=<reshardingId> method=<method> path=<path> route=<route> queryString=<queryString> durationMs=<durationMs> roles=<roles> requestSummary=<requestSummary> requestBodySha256=<sha>` | stream=~\"$streamPrefix\" | group=~\"$consumerGroup\" | route=~\"$apiRoute\" | unwrap durationMs [5m]) / 1000",
           "legendFormat": "{{route}} p95",
+          "queryType": "range",
           "refId": "A"
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "loki",
+            "uid": "rsc-loki"
           },
-          "expr": "max by (route) (last_over_time(redis_stream_coord_api_request_duration_seconds_max{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[5m]))",
+          "expr": "max_over_time($lokiSelector |= \"redis-stream-coordinator.audit\" | pattern `<_> audit action=<action> outcome=<outcome> status=<status> principal=<principal> requestedBy=<requestedBy> reason=<reason> requestId=<requestId> coordinatorId=<coordinatorId> streamPrefix=<stream> consumerGroup=<group> reshardingId=<reshardingId> method=<method> path=<path> route=<route> queryString=<queryString> durationMs=<durationMs> roles=<roles> requestSummary=<requestSummary> requestBodySha256=<sha>` | stream=~\"$streamPrefix\" | group=~\"$consumerGroup\" | route=~\"$apiRoute\" | unwrap durationMs [5m]) / 1000",
           "legendFormat": "{{route}} max",
+          "queryType": "range",
           "refId": "B"
         }
       ],
@@ -308,8 +312,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "rsc-prometheus"
+        "type": "loki",
+        "uid": "rsc-loki"
       },
       "fieldConfig": {
         "defaults": {
@@ -389,11 +393,12 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "rsc-prometheus"
+            "type": "loki",
+            "uid": "rsc-loki"
           },
-          "expr": "sum by (route, status) (rate(redis_stream_coord_api_request_duration_seconds_count{stream=~\"$streamPrefix\", group=~\"$consumerGroup\", route=~\"$apiRoute\"}[2m]))",
+          "expr": "sum by (route, status) (count_over_time($lokiSelector |= \"redis-stream-coordinator.audit\" | pattern `<_> audit action=<action> outcome=<outcome> status=<status> principal=<principal> requestedBy=<requestedBy> reason=<reason> requestId=<requestId> coordinatorId=<coordinatorId> streamPrefix=<stream> consumerGroup=<group> reshardingId=<reshardingId> method=<method> path=<path> route=<route> queryString=<queryString> durationMs=<durationMs> roles=<roles> requestSummary=<requestSummary> requestBodySha256=<sha>` | stream=~\"$streamPrefix\" | group=~\"$consumerGroup\" | route=~\"$apiRoute\" [2m])) / 120",
           "legendFormat": "{{route}} {{status}}",
+          "queryType": "range",
           "refId": "A"
         }
       ],
@@ -514,23 +519,35 @@
       {
         "current": {
           "selected": false,
-          "text": "All",
+          "text": ".*",
           "value": ".*"
         },
-        "definition": "label_values(redis_stream_coord_api_request_duration_seconds_count, route)",
+        "definition": ".*",
         "includeAll": true,
         "label": "API Route",
         "multi": false,
         "name": "apiRoute",
         "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(redis_stream_coord_api_request_duration_seconds_count, route)",
-          "refId": "PrometheusVariableQueryEditor-ApiRoute"
-        },
+        "query": ".*",
         "refresh": 1,
         "regex": "",
-        "type": "query"
+        "type": "textbox",
+        "datasource": null
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "{container=~\".*coordinator.*\"}",
+          "value": "{container=~\".*coordinator.*\"}"
+        },
+        "description": "Loki stream selector for coordinator logs. Override this to match your Loki labels, for example {container_name=\"rsc-coordinator\"}.",
+        "hide": 0,
+        "label": "Loki Selector",
+        "name": "lokiSelector",
+        "options": [],
+        "query": "{container=~\".*coordinator.*\"}",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },

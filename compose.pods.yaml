@@ -31,7 +31,9 @@ services:
         target: spring.data.redis.password
         mode: 0444
     networks:
-      - redis-stream-pods
+      redis-stream-pods:
+        aliases:
+          - rsc-coordinator
 
   coordinator-group-init:
     image: alpine:3.20
@@ -309,27 +311,21 @@ services:
     networks:
       - redis-stream-pods
 
-  prometheus:
-    image: prom/prometheus:v3.5.0
-    depends_on:
-      coordinator:
-        condition: service_started
+  loki:
+    image: grafana/loki:3.5.0
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --web.enable-lifecycle
+      - -config.file=/etc/loki/local-config.yaml
     ports:
-      - "9091:9090"
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
+      - "3100:3100"
     networks:
-      - redis-stream-pods
+      redis-stream-pods:
+        aliases:
+          - rsc-loki
 
   grafana:
     image: grafana/grafana:12.3.0
     depends_on:
-      prometheus:
+      loki:
         condition: service_started
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -354,7 +350,6 @@ networks:
     name: redis-stream-coordinator-pods
 
 volumes:
-  prometheus-data:
   grafana-data:
 
 secrets:

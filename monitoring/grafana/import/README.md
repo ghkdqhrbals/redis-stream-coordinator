@@ -12,6 +12,7 @@ Install these Grafana plugins before importing the full operator dashboards:
 The public overview dashboard only requires:
 
 * `yesoreyeram-infinity-datasource`
+* a Loki datasource
 
 It intentionally avoids custom HTML/JavaScript panels so Grafana external/public dashboards can extract and run every panel query on the backend.
 
@@ -19,7 +20,7 @@ It intentionally avoids custom HTML/JavaScript panels so Grafana external/public
 
 Create or provision two datasources:
 
-* Prometheus datasource scraping the coordinator `/actuator/prometheus` endpoint.
+* Loki datasource containing coordinator application and audit logs.
 * Infinity datasource for the coordinator monitoring API.
 
 For the Infinity datasource, configure:
@@ -35,7 +36,7 @@ The password belongs in the Grafana datasource secure settings, not in the dashb
 For file provisioning, copy `datasources.template.yml` and provide these environment variables:
 
 ```bash
-export PROMETHEUS_URL=http://prometheus:9090
+export LOKI_URL=http://loki:3100
 export COORDINATOR_API_URL=http://coordinator:8080
 export COORDINATOR_API_USERNAME=grafana
 export COORDINATOR_API_PASSWORD='your-password'
@@ -52,7 +53,7 @@ Import these dashboard JSON files:
 
 During import, select:
 
-* the Prometheus datasource,
+* the Loki datasource,
 * the Coordinator API Infinity datasource,
 * the Coordinator API URL.
 
@@ -61,7 +62,7 @@ The imported dashboards do not pin the repository-local datasource UIDs.
 ## Public Dashboard
 
 Use `redis-stream-coordinator-public.json` when sharing a dashboard externally.
-It contains only Prometheus and Infinity backend-parser panels. It does not include the custom Stream Sharding Overview or Stream Messages panels because those panels fetch data from browser-side JavaScript and Grafana external/public dashboards cannot extract backend queries from them.
+It contains only Loki and Infinity backend-parser panels. It does not include the custom Stream Sharding Overview or Stream Messages panels because those panels fetch data from browser-side JavaScript and Grafana external/public dashboards cannot extract backend queries from them.
 
 For a MacBook Air deployment where Grafana runs in Docker and the coordinator is exposed on the host at port `8080`, configure the Coordinator API datasource as:
 

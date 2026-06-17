@@ -40,7 +40,7 @@ def test_compose_pod_stack() -> None:
         "consumer-pod-1:",
         "consumer-pod-2:",
         "publisher-pod:",
-        "prometheus:",
+        "loki:",
         "grafana:",
         "COORDINATOR_STORE_TYPE: redis",
         "SPRING_DATA_REDIS_CLUSTER_NODES: ${AWS_REDIS_CLUSTER_NODES:-}",

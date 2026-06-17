@@ -298,15 +298,15 @@ curl -sS http://localhost:18081/sample/events
 curl -sS http://localhost:18082/sample/events
 ```
 
-The pod smoke stack also starts Prometheus and Grafana for coordinator-owned metrics:
+The pod smoke stack also starts Loki and Grafana for coordinator-owned dashboarding:
 
-* Prometheus: `http://localhost:9091`
+* Loki: `http://localhost:3100`
 * Grafana: `http://localhost:3001` (`admin` / `admin`)
 * Dashboard: `Redis Stream Coordinator`
 
-Prometheus scrapes `rsc-coordinator:8080/actuator/prometheus`. Grafana also provisions a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The local Docker topology gives the coordinator the same `rsc-coordinator` network alias used by the EC2 deployment so the monitoring configuration can be reused without hostname drift. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat rate, member heartbeat age, epochs, revoke progress, resharding state, invariant violations, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
+Grafana provisions a Loki datasource for audit-log-based API latency and request-rate panels, plus a `Coordinator API` datasource that calls coordinator monitoring APIs directly with Basic Auth managed by Grafana provisioning. The local Docker topology gives the coordinator the same `rsc-coordinator` network alias used by the EC2 deployment so the monitoring configuration can be reused without hostname drift. The dashboard includes coordinator liveness, active consumers, total lag, pending entries, shard stream length, shard lag, heartbeat/member tables, group/member/assignment/shard tables, and a stream message explorer with shard chips, cursor-based pagination, and exact record-id search across every shard.
 
-For an existing Grafana instance, import the dashboards in `monitoring/grafana/import/`. Configure a Prometheus datasource and an Infinity datasource for the coordinator API first; enter the coordinator URL, monitoring username, and password on the datasource, then select those datasources during dashboard import. The dashboard JSON does not store the coordinator password.
+For an existing Grafana instance, import the dashboards in `monitoring/grafana/import/`. Configure a Loki datasource for coordinator logs and an Infinity datasource for the coordinator API first; enter the coordinator URL, monitoring username, and password on the datasource, then select those datasources during dashboard import. The dashboard JSON does not store the coordinator password.
 
 Swagger UI is available for interactive local testing:
 

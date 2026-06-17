@@ -206,7 +206,9 @@ class GrafanaDashboardContractTest {
         assertTrue(dashboard.contains(""""title": "Stream Sharding Overview""""))
         assertTrue(dashboard.contains(""""title": "Produced Rate by Stream""""))
         assertTrue(dashboard.contains(""""title": "Consumed Rate by Stream""""))
-        assertTrue(dashboard.contains("""{{stream}} / {{group}} lag"""))
+        assertTrue(dashboard.contains("producedPerSecond"))
+        assertTrue(dashboard.contains("consumedPerSecond"))
+        assertTrue(dashboard.contains(""""selector": "lag""""))
         assertTrue(dashboard.contains(""""h": 24"""))
         assertTrue(dashboard.contains(""""overflow": "auto""""))
         assertTrue(dashboard.contains(""""y": 12"""))
@@ -220,33 +222,38 @@ class GrafanaDashboardContractTest {
     }
 
     @Test
-    fun `grafana gauge queries carry previous values across dashboard range`() {
+    fun `grafana dashboards do not query Prometheus`() {
         listOf(
             "redis-stream-coordinator.json",
             "redis-stream-coordinator-stream-detail.json",
+            "redis-stream-coordinator-api.json",
+            "redis-stream-coordinator-public.json",
         ).forEach { fileName ->
             val dashboard = readDashboard(fileName)
+            val importDashboard = readImportDashboard(fileName)
 
-            assertTrue(dashboard.contains("last_over_time("), "$fileName should use Prometheus lookback for gauge graphs")
-            assertTrue(dashboard.contains("[${'$'}__range]"), "$fileName should carry previous gauge samples from the dashboard range")
-            assertTrue(
-                !Regex("""last_over_time\([^"\n]+?\[2m]""").containsMatchIn(dashboard),
-                "$fileName should not use the old short gauge lookback window",
-            )
-            assertTrue(!dashboard.contains("[1m]"), "$fileName should not use the old one-minute rate window")
+            listOf(dashboard, importDashboard).forEach { content ->
+                assertTrue(!content.contains(""""type": "prometheus""""), "$fileName should not use Prometheus datasource")
+                assertTrue(!content.contains(""""uid": "rsc-prometheus""""), "$fileName should not pin the local Prometheus datasource")
+                assertTrue(!content.contains("DS_RSC_PROMETHEUS"), "$fileName should not require a Prometheus import datasource")
+                assertTrue(!content.contains("last_over_time("), "$fileName should not contain PromQL lookback queries")
+                assertTrue(!content.contains("redis_stream_coord_"), "$fileName should not query Prometheus metric names")
+            }
         }
     }
 
     @Test
-    fun `api dashboard latency panels use recent window instead of sticky full-range maxima`() {
+    fun `api dashboard uses Loki audit logs for latency and request rate`() {
         val dashboard = readDashboard("redis-stream-coordinator-api.json")
+        val importDashboard = readImportDashboard("redis-stream-coordinator-api.json")
 
-        assertTrue(dashboard.contains("redis_stream_coord_api_request_duration_seconds"))
-        assertTrue(dashboard.contains("[5m]"), "API latency should represent a recent operational window")
-        assertTrue(
-            !Regex("""redis_stream_coord_api_request_duration_seconds[^"\n]+?\[\${'$'}__range]""").containsMatchIn(dashboard),
-            "API latency should not keep old deployment spikes for the whole selected range",
-        )
+        listOf(dashboard, importDashboard).forEach { content ->
+            assertTrue(content.contains(""""type": "loki""""), "API dashboard should use Loki datasource")
+            assertTrue(content.contains("redis-stream-coordinator.audit"), "API dashboard should derive telemetry from audit logs")
+            assertTrue(content.contains("durationMs"), "API dashboard should parse audit durationMs")
+            assertTrue(content.contains("count_over_time("), "API dashboard should derive request rate from log counts")
+            assertTrue(content.contains("quantile_over_time("), "API dashboard should derive p95 latency from log durations")
+        }
     }
 
     @Test
@@ -275,17 +282,31 @@ class GrafanaDashboardContractTest {
         ).forEach { fileName ->
             val dashboard = readImportDashboard(fileName)
 
-            assertTrue(dashboard.contains(""""name": "DS_RSC_PROMETHEUS""""), "$fileName should prompt for Prometheus datasource")
+            assertTrue(dashboard.contains(""""name": "DS_RSC_LOKI""""), "$fileName should prompt for Loki datasource")
             assertTrue(dashboard.contains(""""name": "DS_RSC_COORDINATOR_API""""), "$fileName should prompt for Coordinator API datasource")
             assertTrue(dashboard.contains(""""name": "COORDINATOR_API_URL""""), "$fileName should prompt for Coordinator API URL")
             assertTrue(dashboard.contains(""""pluginId": "yesoreyeram-infinity-datasource""""), "$fileName should require Infinity datasource")
-            assertTrue(dashboard.contains(""""pluginId": "prometheus""""), "$fileName should require Prometheus datasource")
+            assertTrue(dashboard.contains(""""pluginId": "loki""""), "$fileName should require Loki datasource")
             assertTrue(dashboard.contains(""""value": "http://coordinator:8080""""), "$fileName should have a concrete import default URL")
             assertTrue(dashboard.contains("""${'$'}{DS_RSC_COORDINATOR_API}"""), "$fileName should not pin the local Coordinator API datasource uid")
             assertTrue(dashboard.contains("""${'$'}{COORDINATOR_API_URL}"""), "$fileName should use the import URL input")
             assertTrue(!dashboard.contains(""""uid": "rsc-coordinator-api""""), "$fileName should not pin the local Coordinator API datasource")
-            assertTrue(!dashboard.contains(""""uid": "rsc-prometheus""""), "$fileName should not pin the local Prometheus datasource")
+            assertTrue(!dashboard.contains(""""uid": "rsc-loki""""), "$fileName should not pin the local Loki datasource")
         }
+
+        val apiDashboard = readImportDashboard("redis-stream-coordinator-api.json")
+        assertTrue(apiDashboard.contains("""${'$'}{DS_RSC_LOKI}"""), "API dashboard should not pin the local Loki datasource")
+    }
+
+    @Test
+    fun `provisioned grafana datasource uses Loki and coordinator API only`() {
+        val provisioning = readGrafanaProvisioning("datasources", "datasources.yml")
+
+        assertTrue(provisioning.contains("uid: rsc-loki"))
+        assertTrue(provisioning.contains("type: loki"))
+        assertTrue(provisioning.contains("uid: rsc-coordinator-api"))
+        assertTrue(!provisioning.contains("uid: rsc-prometheus"))
+        assertTrue(!provisioning.contains("type: prometheus"))
     }
 
     @Test
@@ -304,7 +325,6 @@ class GrafanaDashboardContractTest {
         assertTrue(!importDashboard.contains("gapit-htmlgraphics-panel"))
         assertTrue(!importDashboard.contains(""""id": "gapit-htmlgraphics-panel""""))
         assertTrue(importDashboard.contains(""""parser": "backend""""))
-        assertTrue(importDashboard.contains("""${'$'}{DS_RSC_PROMETHEUS}"""))
         assertTrue(importDashboard.contains("""${'$'}{DS_RSC_COORDINATOR_API}"""))
         assertTrue(importDashboard.contains("""${'$'}{COORDINATOR_API_URL}/coord/v1/monitoring/grafana/groups"""))
         assertTrue(importDashboard.contains("""${'$'}{COORDINATOR_API_URL}/coord/v1/monitoring/grafana/shards?streamPrefix=&consumerGroup="""))
@@ -337,6 +357,14 @@ class GrafanaDashboardContractTest {
         )
         val path = candidates.firstOrNull(Files::exists)
             ?: error("Static console file not found: $fileName")
+        return Files.readString(path)
+    }
+
+    private fun readGrafanaProvisioning(vararg pathSegments: String): String {
+        val relative = Path.of("monitoring", "grafana", "provisioning", *pathSegments)
+        val candidates = listOf(relative, Path.of("..").resolve(relative))
+        val path = candidates.firstOrNull(Files::exists)
+            ?: error("Grafana provisioning file not found: $relative")
         return Files.readString(path)
     }
 }
