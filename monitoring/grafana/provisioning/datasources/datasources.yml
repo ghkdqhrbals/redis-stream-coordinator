@@ -16,8 +16,9 @@ datasources:
     type: yesoreyeram-infinity-datasource
     access: proxy
     url: http://rsc-coordinator:8080
+    version: 2
     basicAuth: true
-    basicAuthUser: ${COORDINATOR_API_USERNAME}
+    basicAuthUser: $COORDINATOR_API_USERNAME
     editable: true
     jsonData:
       auth_method: basicAuth
@@ -25,4 +26,4 @@ datasources:
         - http://rsc-coordinator:8080
       timeoutInSeconds: 10
     secureJsonData:
-      basicAuthPassword: ${COORDINATOR_API_PASSWORD}
+      basicAuthPassword: $COORDINATOR_API_PASSWORD

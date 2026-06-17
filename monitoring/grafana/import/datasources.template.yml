@@ -15,14 +15,15 @@ datasources:
     uid: rsc-coordinator-api
     type: yesoreyeram-infinity-datasource
     access: proxy
-    url: ${COORDINATOR_API_URL}
+    url: $COORDINATOR_API_URL
+    version: 2
     basicAuth: true
-    basicAuthUser: ${COORDINATOR_API_USERNAME}
+    basicAuthUser: $COORDINATOR_API_USERNAME
     editable: true
     jsonData:
       auth_method: basicAuth
       allowedHosts:
-        - ${COORDINATOR_API_URL}
+        - $COORDINATOR_API_URL
       timeoutInSeconds: 10
     secureJsonData:
-      basicAuthPassword: ${COORDINATOR_API_PASSWORD}
+      basicAuthPassword: $COORDINATOR_API_PASSWORD
