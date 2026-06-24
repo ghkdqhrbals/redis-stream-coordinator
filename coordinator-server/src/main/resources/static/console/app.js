@@ -2,6 +2,7 @@ const API_BASE = "/coord/v1/monitoring";
 const GRAFANA_BASE = "/coord/v1/monitoring/grafana";
 const AUTH_KEY = "redisStreamCoordinator.console.auth";
 const USER_KEY = "redisStreamCoordinator.console.user";
+const TOKEN_EXPIRES_KEY = "redisStreamCoordinator.console.tokenExpires";
 const REQUEST_TIMEOUT_MS = 5000;
 
 const state = {
@@ -36,7 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
         refreshAll();
         scheduleRefresh();
     } else {
-        showLogin();
+        redirectToSignIn("monitoring");
     }
 });
 
@@ -44,19 +45,11 @@ function bindElements() {
     [
         "loginView",
         "appView",
-        "loginForm",
-        "username",
-        "password",
-        "loginButton",
-        "loginError",
         "logoutButton",
         "refreshButton",
         "autoRefresh",
         "refreshInterval",
         "coordinatorId",
-        "healthBadge",
-        "redisStatus",
-        "loopStatus",
         "groupList",
         "pageTitle",
         "pageSubtitle",
@@ -86,9 +79,6 @@ function bindElements() {
         "globalMessageRows",
         "apiMetricStatus",
         "apiMetricList",
-        "grafanaOverviewLink",
-        "grafanaDetailLink",
-        "grafanaApiLink",
         "detailView",
         "memberSignal",
         "memberSignalHint",
@@ -128,7 +118,6 @@ function bindElements() {
 }
 
 function bindEvents() {
-    elements.loginForm.addEventListener("submit", handleLogin);
     elements.logoutButton.addEventListener("click", logout);
     elements.refreshButton.addEventListener("click", refreshAll);
     elements.messageRefreshButton.addEventListener("click", () => loadMessages(true));
@@ -205,36 +194,6 @@ function bindEvents() {
     elements.refreshInterval.addEventListener("change", scheduleRefresh);
 }
 
-async function handleLogin(event) {
-    event.preventDefault();
-
-    const username = elements.username.value.trim();
-    const password = elements.password.value;
-    if (!username || !password) {
-        showLoginError("Enter username and password.");
-        return;
-    }
-
-    elements.loginButton.disabled = true;
-    showLoginError("");
-
-    const authHeader = createBasicAuth(username, password);
-    try {
-        await apiRequest("/session", authHeader);
-        state.authHeader = authHeader;
-        state.username = username;
-        writeSession(AUTH_KEY, authHeader);
-        writeSession(USER_KEY, username);
-        showApp();
-        refreshAll();
-        scheduleRefresh();
-    } catch (error) {
-        showLoginError(error.status === 401 ? "Invalid credentials." : error.message);
-    } finally {
-        elements.loginButton.disabled = false;
-    }
-}
-
 function logout() {
     clearTimeout(state.refreshTimer);
     state.refreshTimer = null;
@@ -244,8 +203,8 @@ function logout() {
     state.selectedKey = null;
     removeSession(AUTH_KEY);
     removeSession(USER_KEY);
-    elements.password.value = "";
-    showLogin();
+    removeSession(TOKEN_EXPIRES_KEY);
+    redirectToSignIn("monitoring");
 }
 
 async function refreshAll() {
@@ -430,9 +389,6 @@ async function fetchPrometheusMetrics() {
 
 function renderHealth(health) {
     elements.coordinatorId.textContent = health.coordinatorId || "Unknown coordinator";
-    elements.redisStatus.textContent = health.redis || "-";
-    elements.loopStatus.textContent = health.loop || "-";
-    setBadge(elements.healthBadge, health.status || "Unknown", health.status === "UP" ? "ok" : "bad");
 }
 
 function renderConsoleOverview(health, prometheusText) {
@@ -459,7 +415,6 @@ function renderConsoleOverview(health, prometheusText) {
     renderGrafanaGroupsTable(groups);
     renderGlobalMessageSelectors();
     renderApiMetrics(prometheusText || "");
-    renderGrafanaLinks();
     if (shouldLoadGlobalMessages()) {
         loadGlobalMessages();
     }
@@ -728,15 +683,6 @@ function parsePrometheusLabels(source) {
     return labels;
 }
 
-function renderGrafanaLinks() {
-    const origin = "https://monitor.ghkdqhrbals.org";
-    const stream = encodeURIComponent(state.globalMessages.streamPrefix || "create-order");
-    const group = encodeURIComponent(state.globalMessages.consumerGroup || "demo-workers");
-    elements.grafanaOverviewLink.href = `${origin}/d/redis-stream-coordinator/redis-stream-coordinator-overview?orgId=1&from=now-15m&to=now&timezone=browser&refresh=30s`;
-    elements.grafanaDetailLink.href = `${origin}/d/redis-stream-coordinator-stream-detail/redis-stream-coordinator-stream-detail?orgId=1&from=now-15m&to=now&timezone=browser&var-streamPrefix=${stream}&var-consumerGroup=${group}&var-shardIndex=all&refresh=30s`;
-    elements.grafanaApiLink.href = `${origin}/d/redis-stream-coordinator-api/redis-stream-coordinator-api-performance?orgId=1&from=now-15m&to=now&timezone=browser&var-streamPrefix=${stream}&var-consumerGroup=${group}&var-apiRoute=$__all&refresh=30s`;
-}
-
 function renderGroups() {
     if (state.groups.length === 0) {
         elements.groupList.innerHTML = `<p class="empty-line">No streams.</p>`;
@@ -798,7 +744,6 @@ function selectGroup(key) {
     renderStreamOverview(state.grafanaShards, state.grafanaGroups);
     renderGlobalMessageSelectors();
     loadGlobalMessages();
-    renderGrafanaLinks();
 }
 
 function renderGroupDetail(group) {
@@ -1182,11 +1127,7 @@ function scheduleRefresh() {
 }
 
 function showLogin() {
-    elements.loginView.classList.remove("hidden");
-    elements.appView.classList.add("hidden");
-    elements.username.value = state.username || "";
-    elements.username.focus();
-    showLoginError("");
+    redirectToSignIn("monitoring");
 }
 
 function showApp() {
@@ -1201,24 +1142,23 @@ function showEmptyState() {
     elements.pageSubtitle.textContent = "No active stream group selected.";
 }
 
-function showLoginError(message) {
-    elements.loginError.textContent = message;
-}
-
 function handleApiError(error) {
     if (error.status === 401) {
         logout();
-        showLoginError("Session expired. Sign in again.");
         return;
     }
     renderErrorState(error.message || "Monitoring request failed.");
     console.error(error);
 }
 
+function redirectToSignIn(section) {
+    const url = new URL("/console/sign-in.html", window.location.origin);
+    url.searchParams.set("section", section);
+    url.searchParams.set("next", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    window.location.replace(url.toString());
+}
+
 function renderErrorState(message) {
-    setBadge(elements.healthBadge, "Error", "bad");
-    elements.redisStatus.textContent = "UNREACHABLE";
-    elements.loopStatus.textContent = "-";
     elements.groupList.innerHTML = `<p class="empty-line">${escapeHtml(message)}</p>`;
 }
 
@@ -1263,7 +1203,7 @@ function renderMonitoringRequestPreview(path, status) {
     if (!elements.monitorCurlPreview || !elements.monitorRequestPath) {
         return;
     }
-    const requestPath = path || "/coord/v1/monitoring/grafana/shards";
+    const requestPath = path || "/coord/v1/monitoring/groups";
     elements.monitorRequestPath.textContent = requestPath;
     elements.monitorCurlPreview.textContent = [
         `curl ${window.location.origin}${requestPath} \\`,
@@ -1277,17 +1217,8 @@ function renderMonitoringRequestPreview(path, status) {
         const selected = selectedGroup();
         elements.monitorResponsePreview.textContent = selected
             ? `Stream: ${selected.streamPrefix}\nGroup: ${selected.consumerGroup}\nLast request: ${requestPath}`
-            : `GET /coord/v1/monitoring/grafana/shards\nGET /coord/v1/monitoring/groups\nGET /coord/v1/monitoring/grafana/messages`;
+            : `GET /coord/v1/monitoring/health\nGET /coord/v1/monitoring/groups\nGET /coord/v1/monitoring/streams/{stream}/groups/{group}`;
     }
-}
-
-function createBasicAuth(username, password) {
-    const bytes = new TextEncoder().encode(`${username}:${password}`);
-    let binary = "";
-    bytes.forEach((byte) => {
-        binary += String.fromCharCode(byte);
-    });
-    return `Basic ${btoa(binary)}`;
 }
 
 function setBadge(element, value, tone) {
@@ -1523,23 +1454,16 @@ function escapeAttr(value) {
 
 function readSession(key) {
     try {
-        return sessionStorage.getItem(key) || "";
+        return window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || "";
     } catch (_error) {
         return "";
     }
 }
 
-function writeSession(key, value) {
-    try {
-        sessionStorage.setItem(key, value);
-    } catch (_error) {
-        // Session storage can be disabled by browser policy. The console still works for the active page.
-    }
-}
-
 function removeSession(key) {
     try {
-        sessionStorage.removeItem(key);
+        window.localStorage.removeItem(key);
+        window.sessionStorage.removeItem(key);
     } catch (_error) {
         // Ignore storage cleanup failures.
     }

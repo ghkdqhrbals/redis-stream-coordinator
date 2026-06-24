@@ -8,19 +8,7 @@
 </head>
 <body class="message-explorer-page console-docs-page">
 <main class="message-explorer-shell">
-    <section id="messageLoginView" class="message-login-panel">
-        <div>
-            <p class="eyebrow">Redis Stream Coordinator</p>
-            <h1>Message Explorer</h1>
-            <p class="page-subtitle">Sign in with a coordinator user that has monitor access.</p>
-        </div>
-        <form id="messageLoginForm" class="message-login-form">
-            <input id="messageUsername" autocomplete="username" placeholder="Username" required>
-            <input id="messagePassword" autocomplete="current-password" type="password" placeholder="Password" required>
-            <button id="messageLoginButton" type="submit">Sign in</button>
-        </form>
-        <p id="messageLoginError" class="form-error" role="alert"></p>
-    </section>
+    <section id="messageLoginView" class="hidden" aria-hidden="true"></section>
 
     <section id="messageAppView" class="message-app hidden" data-messages-shell>
         <aside class="message-sidebar scalar-sidebar" aria-label="Message explorer navigation">

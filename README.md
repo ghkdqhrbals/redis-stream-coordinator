@@ -101,6 +101,33 @@ Once the coordinator is running, open:
 
 The API operations are named by stable `operationId`s so teams can follow endpoint changes in git history and client code generation.
 
+## Coordinator Console
+
+The coordinator serves a built-in operator console under `/console`. All console pages use the same Bearer-token session stored in browser storage, so signing in once keeps Monitoring, Admin, and Messages aligned. The shared left navigation is intentionally narrow and stable across pages so operators can move between read-only inspection and mutation workflows without layout drift.
+
+Open the console pages directly:
+
+* `http://localhost:8080/console/sign-in.html` signs in through `POST /coord/v1/auth/login` and stores the returned seven-day token.
+* `http://localhost:8080/console/index.html` shows stream-first monitoring from coordinator monitoring APIs. It focuses on streams, groups, shard ownership, lag, pending entries, message inspection, and cURL previews for the read calls it makes. Grafana links and low-level health dependency cards are intentionally not shown here.
+* `http://localhost:8080/console/admin.html` exposes the main control-plane operations: active session, stream/group selection, stream creation, and stream-level shard scale in/out. It shows the exact cURL command and response for each operation.
+* `http://localhost:8080/console/messages.html` is a dedicated Redis Stream record explorer with stream/group/shard selectors, cursor pagination, resizable table columns, and the exact message-inspection cURL preview.
+
+### Sign In
+
+![Redis Stream Coordinator sign-in console](docs/assets/console/sign-in.png)
+
+### Monitoring
+
+![Redis Stream Coordinator monitoring console](docs/assets/console/monitoring.png)
+
+### Admin
+
+![Redis Stream Coordinator admin console](docs/assets/console/admin.png)
+
+### Messages
+
+![Redis Stream Coordinator message explorer](docs/assets/console/messages.png)
+
 For annotation-based consumers, the starter creates the runtime `memberId` automatically from `POD_IP`, local host address, or hostname. In Kubernetes, expose `status.podIP` as the `POD_IP` environment variable with the Downward API. `id` is the listener endpoint identity, not the coordinator member ID.
 
 For advanced configuration, provide a `RedisStreamMessageHandler` bean and code-defined consumer settings directly:
@@ -285,7 +312,7 @@ curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/health
 ```
 
-The Docker quick start uses the external Redis Cluster declared through `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD`; this repository no longer keeps a local Redis Cluster compose file. The coordinator monitoring console is available at `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default. The access-control view is available at `http://localhost:8080/console/access.html` and shows the current principal roles.
+The Docker quick start uses the external Redis Cluster declared through `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD`; this repository no longer keeps a local Redis Cluster compose file. The coordinator console is available under `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default.
 
 The runtime API reference is available at `http://localhost:8080/scalar`. The published static API reference is generated from `docs/openapi/coordinator.v1.yaml`.
 

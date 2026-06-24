@@ -7,6 +7,6 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets:
-          - coordinator:8080
+          - rsc-coordinator:8080
         labels:
           service: coordinator

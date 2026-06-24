@@ -213,6 +213,21 @@ Monitoring responses should include:
 * active resharding,
 * audit metadata for recent mutations.
 
+## Built-in Console
+
+The coordinator serves a first-party HTML console under `/console`. It is an operator surface over the same HTTP APIs documented in OpenAPI; it is not a separate control plane and it does not embed Grafana.
+
+Console pages:
+
+| Page | Purpose |
+| --- | --- |
+| `/console/sign-in.html` | Authenticates through `POST /coord/v1/auth/login`, stores the returned Bearer token in browser storage, and redirects back to the requested console page. |
+| `/console/index.html` | Stream-first monitoring view for streams, groups, shard ownership, member liveness, lag, pending entries, and recent messages. Low-level dependency health cards and Grafana jump links are intentionally omitted so the page stays focused on coordinator-owned stream operations. |
+| `/console/admin.html` | Admin view for the active session, stream/group selection, stream creation, and stream-level shard scale in/out. Each operation renders the exact cURL request and latest response. |
+| `/console/messages.html` | Dedicated Redis Stream record explorer with stream/group/shard selectors, cursor pagination, resizable table columns, and cURL preview for message inspection. |
+
+All console pages share the same side navigation, title alignment, and token storage keys. A user who signs in once can move between Monitoring, Admin, and Messages without re-authenticating until the token expires or is removed.
+
 ## Metrics
 
 Coordinator metrics are the primary observability surface. Consumer and producer modules should avoid owning long-lived metric definitions unless needed for local application debugging.

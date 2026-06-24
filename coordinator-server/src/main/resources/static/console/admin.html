@@ -6,42 +6,42 @@
     <title>Redis Stream Coordinator Admin</title>
     <link rel="stylesheet" href="/console/styles.css">
 </head>
-<body>
-<main class="access-shell admin-shell" data-admin-shell>
-    <section class="access-header admin-hero">
-        <div class="brand-lockup">
+<body class="console-docs-page">
+<main class="admin-shell" data-admin-shell>
+    <aside class="admin-sidebar scalar-sidebar" aria-label="Admin console navigation">
+        <div class="brand-lockup compact">
             <div class="brand-mark" aria-hidden="true">RC</div>
             <div>
-                <h1>Admin Operations</h1>
-                <p>Stream-level shard topology and resharding controls</p>
+                <h1>Coordinator</h1>
+                <p>Admin Console</p>
             </div>
         </div>
-        <div class="admin-header-actions">
-            <a class="ghost-link" href="/console">Monitoring</a>
-            <a class="ghost-link" href="/console/messages.html">Messages</a>
-        </div>
-    </section>
+        <nav class="scalar-nav" aria-label="Console">
+            <a href="/console/index.html">Monitoring</a>
+            <a class="selected" href="/console/admin.html" aria-current="page">Admin</a>
+            <a href="/console/messages.html">Messages</a>
+        </nav>
+        <button id="adminSignOut" class="ghost-button small" type="button">Sign out</button>
+    </aside>
 
-    <section class="admin-workbench">
+    <section class="admin-workspace">
+        <header class="topbar admin-topbar">
+            <div>
+                <p class="eyebrow">Admin</p>
+                <h1>Admin Operations</h1>
+                <p class="page-subtitle">Stream-level shard topology and resharding controls.</p>
+            </div>
+        </header>
+
+        <section class="admin-workbench">
         <div class="admin-operation-list">
             <article class="access-card admin-card admin-card-primary">
                 <div class="admin-operation-heading">
-                    <span class="admin-operation-id">loginCoordinatorApi</span>
-                    <span class="admin-method-pill post">POST</span>
+                    <span class="admin-operation-id">currentSession</span>
+                    <span class="admin-method-pill get">GET</span>
                 </div>
-                <h2>Issue Coordinator API Token</h2>
-                <p class="admin-note">Sign in with coordinator credentials. The console stores only the issued bearer token in browser storage.</p>
-                <form id="adminLoginForm" class="access-login-form">
-                    <label>
-                        Username
-                        <input id="adminUsername" autocomplete="username">
-                    </label>
-                    <label>
-                        Password
-                        <input id="adminPassword" type="password" autocomplete="current-password">
-                    </label>
-                    <button type="submit">Sign in</button>
-                </form>
+                <h2>Coordinator API Session</h2>
+                <p class="admin-note">Authentication is handled by the shared console sign-in page. This panel shows the active bearer token session.</p>
                 <dl class="access-session">
                     <div>
                         <dt>Username</dt>
@@ -148,6 +148,7 @@
             <h2 class="admin-result-title">Operation Result</h2>
             <pre id="adminResult" class="config-block admin-result-block"><code>No operation executed.</code></pre>
         </aside>
+        </section>
     </section>
 </main>
 <script src="/console/admin.js"></script>

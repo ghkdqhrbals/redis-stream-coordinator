@@ -1,6 +1,7 @@
 const MESSAGE_API_BASE = "/coord/v1/monitoring";
 const MESSAGE_AUTH_KEY = "redisStreamCoordinator.console.auth";
 const MESSAGE_USER_KEY = "redisStreamCoordinator.console.user";
+const MESSAGE_TOKEN_EXPIRES_KEY = "redisStreamCoordinator.console.tokenExpires";
 const MESSAGE_REQUEST_TIMEOUT_MS = 5000;
 
 const messageState = {
@@ -22,7 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showMessageApp();
         refreshMessageExplorer();
     } else {
-        showMessageLogin();
+        redirectToSignIn("messages");
     }
 });
 
@@ -30,11 +31,6 @@ function bindMessageElements() {
     [
         "messageLoginView",
         "messageAppView",
-        "messageLoginForm",
-        "messageUsername",
-        "messagePassword",
-        "messageLoginButton",
-        "messageLoginError",
         "messageExplorerSubtitle",
         "messageExplorerRefresh",
         "messageExplorerSignOut",
@@ -63,7 +59,6 @@ function bindMessageElements() {
 }
 
 function bindMessageEvents() {
-    messageElements.messageLoginForm.addEventListener("submit", handleMessageLogin);
     messageElements.messageExplorerSignOut.addEventListener("click", messageLogout);
     messageElements.messageExplorerRefresh.addEventListener("click", () => refreshMessageExplorer());
     messageElements.messageGroupSelect.addEventListener("change", () => {
@@ -93,33 +88,6 @@ function bindMessageEvents() {
     messageElements.messageNextPage.addEventListener("click", () => loadMessagePage(false));
 }
 
-async function handleMessageLogin(event) {
-    event.preventDefault();
-    const username = messageElements.messageUsername.value.trim();
-    const password = messageElements.messagePassword.value;
-    if (!username || !password) {
-        messageElements.messageLoginError.textContent = "Enter username and password.";
-        return;
-    }
-
-    messageElements.messageLoginButton.disabled = true;
-    messageElements.messageLoginError.textContent = "";
-    const authHeader = createBasicAuth(username, password);
-    try {
-        await messageApiRequest("/session", authHeader);
-        messageState.authHeader = authHeader;
-        messageState.username = username;
-        writeSession(MESSAGE_AUTH_KEY, authHeader);
-        writeSession(MESSAGE_USER_KEY, username);
-        showMessageApp();
-        await refreshMessageExplorer();
-    } catch (error) {
-        messageElements.messageLoginError.textContent = error.status === 401 ? "Invalid credentials." : error.message;
-    } finally {
-        messageElements.messageLoginButton.disabled = false;
-    }
-}
-
 function messageLogout() {
     messageState.authHeader = "";
     messageState.username = "";
@@ -130,7 +98,8 @@ function messageLogout() {
     messageState.cursor = null;
     removeSession(MESSAGE_AUTH_KEY);
     removeSession(MESSAGE_USER_KEY);
-    showMessageLogin();
+    removeSession(MESSAGE_TOKEN_EXPIRES_KEY);
+    redirectToSignIn("messages");
 }
 
 async function refreshMessageExplorer() {
@@ -144,6 +113,10 @@ async function refreshMessageExplorer() {
         renderMessageGroups();
         await refreshSelectedMessageGroup();
     } catch (error) {
+        if (error.status === 401) {
+            messageLogout();
+            return;
+        }
         showMessageError(error.message || "Failed to refresh message explorer.");
     }
 }
@@ -170,6 +143,10 @@ async function refreshSelectedMessageGroup() {
         renderSelectedOffset();
         await loadMessagePage(true);
     } catch (error) {
+        if (error.status === 401) {
+            messageLogout();
+            return;
+        }
         showMessageError(error.message || "Failed to load shard offsets.");
     }
 }
@@ -198,6 +175,10 @@ async function loadMessagePage(reset) {
         renderMessagePage(page, reset);
         renderMessageRequestPreview(path, `${(page.records || []).length} records`);
     } catch (error) {
+        if (error.status === 401) {
+            messageLogout();
+            return;
+        }
         showMessageError(error.message || "Failed to load stream records.");
     }
 }
@@ -331,6 +312,11 @@ async function messageApiRequest(path, authOverride) {
         error.status = 401;
         throw error;
     }
+    if (response.status === 403) {
+        const error = new Error("This account does not have monitor access.");
+        error.status = 403;
+        throw error;
+    }
     if (!response.ok) {
         const text = await response.text();
         throw new Error(text || `Request failed with HTTP ${response.status}`);
@@ -339,8 +325,7 @@ async function messageApiRequest(path, authOverride) {
 }
 
 function showMessageLogin() {
-    messageElements.messageLoginView.classList.remove("hidden");
-    messageElements.messageAppView.classList.add("hidden");
+    redirectToSignIn("messages");
 }
 
 function showMessageApp() {
@@ -368,37 +353,28 @@ function shardIdentity(shard) {
     return `${shard.shardIndex}`;
 }
 
-function createBasicAuth(username, password) {
-    const bytes = new TextEncoder().encode(`${username}:${password}`);
-    let binary = "";
-    bytes.forEach((byte) => {
-        binary += String.fromCharCode(byte);
-    });
-    return `Basic ${btoa(binary)}`;
-}
-
 function readSession(key) {
     try {
-        return window.localStorage.getItem(key) || "";
+        return window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || "";
     } catch {
         return "";
-    }
-}
-
-function writeSession(key, value) {
-    try {
-        window.localStorage.setItem(key, value);
-    } catch {
-        // Ignore storage failures in embedded dashboards.
     }
 }
 
 function removeSession(key) {
     try {
         window.localStorage.removeItem(key);
+        window.sessionStorage.removeItem(key);
     } catch {
         // Ignore storage failures in embedded dashboards.
     }
+}
+
+function redirectToSignIn(section) {
+    const url = new URL("/console/sign-in.html", window.location.origin);
+    url.searchParams.set("section", section);
+    url.searchParams.set("next", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    window.location.replace(url.toString());
 }
 
 function showMessageError(message) {

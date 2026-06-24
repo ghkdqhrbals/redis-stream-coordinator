@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-06-07
+Last updated: 2026-06-24
 
 ## Snapshot
 
@@ -22,7 +22,7 @@ Overall status:
 | Redis state store | Done | Memory and Redis stores are available. Redis state access uses a distributed mutex, store revision compare-and-set, schema version guard, and Lua metadata-hash updates. |
 | Redis Stream shard provisioning | Done | Optional stream/consumer-group provisioning is implemented and gated by config. Idempotent retry and partial failure behavior are covered. |
 | Security and audit | Done for MVP | Basic Auth, role ACL, structured audit logs, optional Redis audit sink, and per-caller/group admin mutation rate limiting are implemented. |
-| Observability | Done for MVP | Coordinator Micrometer/Prometheus metrics, monitoring APIs, consumer shard progress, shard offset/lag gauges, the built-in monitoring console, and local Prometheus/Grafana provisioning are implemented. Starter modules do not publish their own Micrometer meters. |
+| Observability | Done for MVP | Coordinator Micrometer/Prometheus metrics, monitoring APIs, consumer shard progress, shard offset/lag gauges, the built-in Monitoring/Admin/Messages console, and local Loki/Grafana provisioning are implemented. Starter modules do not publish their own Micrometer meters. |
 | Consumer starter | Done for MVP | Heartbeat lifecycle, shard callbacks, runtime capacity/progress reporting, runtime concurrency enforcement, fencing/rejoin, pending/revoking handling, graceful leave, and opt-in Redis polling adapter are implemented. |
 | Producer starter | Done for MVP | Producer routing cache, routing validation, stale-cache invalidation after write failure, opt-in publish retry, Redis Stream publisher, payload helper, and batch publish are implemented. |
 | Processing guarantee | Done for MVP | Public guarantee is at-least-once. Single-processing guarantees are not provided because application business side effects cannot be atomically committed with Redis Stream ACKs. |
@@ -64,7 +64,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Member heartbeat API.
 * [x] Monitoring health, group, member, assignment, and migration APIs.
 * [x] Monitoring consumption progress API.
-* [x] Built-in monitoring console at `/console`.
+* [x] Built-in console pages at `/console/sign-in.html`, `/console/index.html`, `/console/admin.html`, and `/console/messages.html`.
 * [x] Shared error enum for HTTP status, error code, and default message.
 * [x] Scheduled coordinator event loop for lease expiry, rebalance timeout, and migration drain progress.
 * [x] Redis-backed distributed state mutex so multiple coordinator pods can be deployed without user-managed single-active rollout rules.
@@ -125,7 +125,10 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Optional per-caller/group admin mutation rate limiting with `Retry-After` response.
 * [x] Structured admin audit logs for create, delete, scale, and rollback.
 * [x] Optional Redis-backed group-scoped admin audit log.
-* [x] Built-in monitoring console that signs in with coordinator Basic Auth and reads monitoring APIs.
+* [x] Shared console sign-in page that exchanges coordinator credentials for a seven-day Bearer token.
+* [x] Monitoring console that uses coordinator monitoring APIs for stream/group/member/assignment/shard/message inspection.
+* [x] Admin console that exposes active session, stream selection, stream creation, and stream-level shard scale operations with exact cURL and response previews.
+* [x] Messages console that exposes stream/group/shard selectors, cursor pagination, resizable message table columns, and exact cURL previews for record inspection.
 * [x] Coordinator Micrometer metrics:
   * `redis_stream_coord_up`
   * `redis_stream_coord_group_epoch`
@@ -172,8 +175,9 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
   * `redis_stream_coord_shard_group_last_delivered_seq`
   * `redis_stream_coord_shard_consumer_last_acked_ms`
   * `redis_stream_coord_shard_consumer_last_acked_seq`
-* [x] Local Prometheus/Grafana Docker provisioning:
-  * Prometheus scrape config for `/actuator/prometheus`.
+* [x] Local Loki/Grafana Docker provisioning:
+  * Optional Prometheus scrape config for `/actuator/prometheus`.
+  * Loki datasource provisioning for audit-log-derived API latency and request-rate panels.
   * Grafana datasource provisioning.
   * Redis Stream Coordinator dashboard.
   * Coordinator API datasource with Grafana-managed Basic Auth.

@@ -20,15 +20,15 @@ document.addEventListener("DOMContentLoaded", () => {
     bindAdminElements();
     bindAdminEvents();
     if (adminState.authHeader) {
-        loadAdminSession(adminState.authHeader).then(refreshAdminGroups).catch(showAdminError);
+        loadAdminSession(adminState.authHeader).then(refreshAdminGroups).catch(() => redirectToSignIn("admin"));
+    } else {
+        redirectToSignIn("admin");
     }
 });
 
 function bindAdminElements() {
     [
-        "adminLoginForm",
-        "adminUsername",
-        "adminPassword",
+        "adminSignOut",
         "adminSessionUsername",
         "adminSessionRoles",
         "adminTokenExpires",
@@ -58,7 +58,7 @@ function bindAdminElements() {
 }
 
 function bindAdminEvents() {
-    adminElements.adminLoginForm.addEventListener("submit", handleAdminLogin);
+    adminElements.adminSignOut.addEventListener("click", logoutAdmin);
     adminElements.adminRefreshGroups.addEventListener("click", refreshAdminGroups);
     adminElements.adminGroupSelect.addEventListener("change", () => {
         adminState.selectedKey = adminElements.adminGroupSelect.value;
@@ -74,41 +74,6 @@ function bindAdminEvents() {
     adminElements.adminCopyCurl.addEventListener("click", copyAdminCurl);
 }
 
-async function handleAdminLogin(event) {
-    event.preventDefault();
-    const username = adminElements.adminUsername.value.trim();
-    const password = adminElements.adminPassword.value;
-    if (!username || !password) {
-        showAdminError("Enter username and password.");
-        return;
-    }
-    try {
-        const login = await loginAdmin(username, password);
-        const authHeader = `Bearer ${login.accessToken}`;
-        adminState.authHeader = authHeader;
-        adminState.username = username;
-        adminState.tokenExpiresAt = login.expiresAt || "";
-        writeSession(ADMIN_AUTH_KEY, authHeader);
-        writeSession(ADMIN_USER_KEY, username);
-        writeSession(ADMIN_TOKEN_EXPIRES_KEY, adminState.tokenExpiresAt);
-        renderTokenExpiry();
-        await loadAdminSession(authHeader);
-        await refreshAdminGroups();
-        adminElements.adminPassword.value = "";
-    } catch (error) {
-        showAdminError(error.status === 401 ? "Invalid credentials." : error.message);
-    }
-}
-
-async function loginAdmin(username, password) {
-    return adminRequest("/coord/v1/auth/login", {
-        method: "POST",
-        authHeader: "",
-        body: { username, password },
-        baseOverride: "",
-    });
-}
-
 async function loadAdminSession(authHeader) {
     const session = await adminRequest(`${ADMIN_MONITORING_BASE}/session`, {
         authHeader,
@@ -119,6 +84,16 @@ async function loadAdminSession(authHeader) {
     renderTokenExpiry();
     showAdminError("");
     return session;
+}
+
+function logoutAdmin() {
+    adminState.authHeader = "";
+    adminState.username = "";
+    adminState.tokenExpiresAt = "";
+    removeSession(ADMIN_AUTH_KEY);
+    removeSession(ADMIN_USER_KEY);
+    removeSession(ADMIN_TOKEN_EXPIRES_KEY);
+    redirectToSignIn("admin");
 }
 
 async function refreshAdminGroups() {
@@ -378,11 +353,19 @@ function readSession(key) {
     }
 }
 
-function writeSession(key, value) {
+function redirectToSignIn(section) {
+    const url = new URL("/console/sign-in.html", window.location.origin);
+    url.searchParams.set("section", section);
+    url.searchParams.set("next", `${window.location.pathname}${window.location.search}${window.location.hash}`);
+    window.location.replace(url.toString());
+}
+
+function removeSession(key) {
     try {
-        window.localStorage.setItem(key, value);
+        window.localStorage.removeItem(key);
+        window.sessionStorage.removeItem(key);
     } catch {
-        // Ignore browser storage failures.
+        // Ignore browser storage cleanup failures.
     }
 }
 

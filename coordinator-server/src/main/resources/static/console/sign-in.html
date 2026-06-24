@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Redis Stream Coordinator Sign In</title>
+    <link rel="stylesheet" href="/console/styles.css">
+</head>
+<body class="console-docs-page">
+<main class="console-auth-shell">
+    <aside class="console-auth-sidebar scalar-sidebar" aria-label="Console navigation">
+        <div class="brand-lockup compact">
+            <div class="brand-mark" aria-hidden="true">RC</div>
+            <div>
+                <h1>Coordinator</h1>
+                <p>Sign in</p>
+            </div>
+        </div>
+        <nav class="scalar-nav" aria-label="Console">
+            <a id="signInNavMonitoring" href="/console/index.html">Monitoring</a>
+            <a id="signInNavAdmin" href="/console/admin.html">Admin</a>
+            <a id="signInNavMessages" href="/console/messages.html">Messages</a>
+        </nav>
+    </aside>
+    <section class="console-auth-workspace">
+        <section class="console-auth-panel console-sign-in-panel">
+            <div class="console-sign-in-heading">
+                <div class="brand-mark sign-in-mark" aria-hidden="true">RC</div>
+                <div>
+                    <p id="signInEyebrow" class="eyebrow">Redis Stream Coordinator</p>
+                    <h1 id="signInTitle">Redis Stream Coordinator</h1>
+                    <p id="signInSubtitle" class="page-subtitle">Sign in with a coordinator user.</p>
+                </div>
+            </div>
+            <form id="signInForm" class="login-form sign-in-form">
+                <label>
+                    Username
+                    <input id="signInUsername" autocomplete="username" placeholder="admin" required>
+                </label>
+                <label>
+                    Password
+                    <input id="signInPassword" autocomplete="current-password" type="password" placeholder="Password" required>
+                </label>
+                <button id="signInButton" type="submit">Sign in</button>
+                <p id="signInError" class="form-error" role="alert"></p>
+            </form>
+        </section>
+    </section>
+</main>
+<script src="/console/sign-in.js"></script>
+</body>
+</html>
