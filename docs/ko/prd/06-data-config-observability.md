@@ -191,6 +191,21 @@ Monitoring response에는 다음 요약만 포함한다.
 * 관측 기반 초당 produce/consume 수
 * active migration progress
 
+## Built-in Console
+
+Coordinator는 `/console` 아래에 first-party HTML console을 제공한다. 이 console은 OpenAPI에 문서화된 같은 HTTP API를 호출하는 운영자 화면이며, 별도 control plane이 아니고 Grafana를 iframe으로 embed하지 않는다.
+
+Console page:
+
+| Page | 역할 |
+| --- | --- |
+| `/console/sign-in.html` | `POST /coord/v1/auth/login`으로 로그인하고 반환된 Bearer token을 browser storage에 저장한 뒤 요청된 console page로 redirect한다. |
+| `/console/index.html` | Stream, group, shard ownership, member liveness, lag, pending, recent message를 보는 stream-first monitoring view이다. Low-level dependency health card와 Grafana 이동 link는 의도적으로 제외해 coordinator-owned stream 운영에 집중한다. |
+| `/console/admin.html` | Active session, stream/group selection, stream creation, stream-level shard scale in/out을 제공하는 admin view이다. 각 operation은 실제 전송할 cURL과 최신 response를 같이 보여준다. |
+| `/console/messages.html` | Stream/group/shard selector, cursor pagination, resizable table column, message inspection cURL preview를 제공하는 Redis Stream record explorer이다. |
+
+모든 console page는 같은 side navigation, title alignment, token storage key를 공유한다. 사용자는 한 번 로그인하면 token 만료 또는 제거 전까지 Monitoring, Admin, Messages 사이를 다시 로그인하지 않고 이동할 수 있다.
+
 ## Metrics
 
 Coordinator metric is the public observability surface. Consumer and producer modules may keep local diagnostics internally, but open-source users should rely on Coordinator metrics and monitoring APIs for group-level operation.

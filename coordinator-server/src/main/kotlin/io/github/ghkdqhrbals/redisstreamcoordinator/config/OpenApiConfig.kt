@@ -12,9 +12,11 @@ import io.swagger.v3.oas.models.tags.Tag
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.context.annotation.ImportRuntimeHints
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(SpringBootScalarProperties::class)
+@ImportRuntimeHints(ScalarRuntimeHints::class)
 class OpenApiConfig {
     @Bean
     fun scalarWebMvcController(): ScalarWebMvcController =

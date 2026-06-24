@@ -1,6 +1,6 @@
 # 구현 상태
 
-마지막 업데이트: 2026-06-07
+마지막 업데이트: 2026-06-24
 
 ## 요약
 
@@ -23,7 +23,7 @@
 * [x] Resharding 조회와 rollback API
 * [x] Member heartbeat API
 * [x] Health, group, member, assignment, resharding monitoring API
-* [x] `/console` built-in monitoring console
+* [x] `/console/sign-in.html`, `/console/index.html`, `/console/admin.html`, `/console/messages.html` built-in console pages
 * [x] HTTP status, error code, default message를 enum으로 관리하는 error model
 * [x] Member lease expiry, rebalance timeout, drain progress를 처리하는 scheduled event loop
 * [x] 여러 coordinator pod가 떠도 state 접근을 직렬화할 수 있는 Redis-backed state mutex
@@ -87,8 +87,11 @@
 * [x] Coordinator-owned Micrometer/Prometheus metrics
 * [x] Consumer shard progress gauges
 * [x] Redis Stream shard offset, length, pending, lag gauges
-* [x] Local Prometheus/Grafana Docker provisioning and Redis Stream Coordinator dashboard
-* [x] Coordinator Basic Auth로 로그인하고 monitoring API를 조회하는 built-in monitoring console
+* [x] Local Loki/Grafana Docker provisioning and Redis Stream Coordinator dashboard
+* [x] Coordinator credential로 로그인해 7일 Bearer token을 공유하는 console sign-in page
+* [x] Stream/group/member/assignment/shard/message 상태를 coordinator monitoring API로 조회하는 Monitoring console
+* [x] Active session, stream selection, stream creation, stream-level shard scale을 제공하고 cURL/response preview를 보여주는 Admin console
+* [x] Stream/group/shard selector, cursor pagination, resizable message table, message inspection cURL preview를 제공하는 Messages console
 
 ### Spring Boot Starter
 

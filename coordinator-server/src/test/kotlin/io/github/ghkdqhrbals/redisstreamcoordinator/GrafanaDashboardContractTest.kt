@@ -3,6 +3,7 @@ package io.github.ghkdqhrbals.redisstreamcoordinator
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GrafanaDashboardContractTest {
@@ -75,18 +76,34 @@ class GrafanaDashboardContractTest {
     fun `admin console exposes shard scaling without producer stress controls`() {
         val adminHtml = readStaticConsole("admin.html")
         val adminJs = readStaticConsole("admin.js")
+        val signInJs = readStaticConsole("sign-in.js")
         val indexHtml = readStaticConsole("index.html")
 
         assertTrue(indexHtml.contains("""href="/console/admin.html""""))
         assertTrue(adminHtml.contains("Apply shard scale"))
         assertTrue(adminHtml.contains("Create stream"))
+        assertTrue(adminHtml.contains("Coordinator API Session"))
+        assertTrue(adminHtml.contains("""id="adminSignOut""""))
         assertTrue(adminHtml.contains("Token expires"))
         assertTrue(adminHtml.contains("Selected Stream"))
         assertTrue(adminHtml.contains("data-admin-shell"))
-        assertTrue(adminJs.contains("/coord/v1/auth/login"))
+        assertTrue(adminHtml.contains("admin-request-panel"))
+        assertTrue(adminHtml.contains("adminCurlPreview"))
+        assertTrue(adminHtml.contains("Copy cURL"))
+        assertTrue(adminHtml.contains("adminResponsePreview"))
+        assertTrue(signInJs.contains("/coord/v1/auth/login"))
         assertTrue(adminJs.contains("Bearer "))
-        assertTrue(adminJs.contains("expiresAt"))
+        assertTrue(adminJs.contains("function logoutAdmin"))
+        assertTrue(adminJs.contains("function buildAdminCurl"))
+        assertTrue(adminJs.contains("function maskAuthorization"))
+        assertTrue(adminJs.contains("function maskSensitivePayload"))
+        assertTrue(adminJs.contains("<redacted>"))
+        assertTrue(adminJs.contains("renderAdminRequestPreview(path, options, headers)"))
+        assertTrue(adminJs.contains("navigator.clipboard.writeText"))
+        assertTrue(adminJs.contains("tokenExpiresAt"))
+        assertFalse(adminHtml.contains("""id="adminLoginForm""""))
         assertTrue(!adminJs.contains("createBasicAuth"))
+        assertTrue(!adminJs.contains("/coord/v1/auth/login"))
         assertTrue(!adminJs.contains("/consumer-concurrency"))
         assertTrue(!adminHtml.contains("Update concurrency policy"))
         assertTrue(!adminHtml.contains("Producer Stress"))
@@ -94,6 +111,159 @@ class GrafanaDashboardContractTest {
         assertTrue(!adminJs.contains("/sample/stress"))
         assertTrue(!adminJs.contains("handleStressProduce"))
         assertTrue(adminJs.contains("/scale"))
+    }
+
+    @Test
+    fun `monitoring and message consoles use scalar style request panels`() {
+        val indexHtml = readStaticConsole("index.html")
+        val messagesHtml = readStaticConsole("messages.html")
+        val adminHtml = readStaticConsole("admin.html")
+        val styles = readStaticConsole("styles.css")
+
+        assertTrue(indexHtml.contains("data-monitoring-shell"))
+        assertTrue(indexHtml.contains("monitorCurlPreview"))
+        assertTrue(indexHtml.contains("GET /coord/v1/monitoring/groups"))
+        assertFalse(indexHtml.contains("<h2>Health</h2>"))
+        assertFalse(indexHtml.contains("healthBadge"))
+        assertFalse(indexHtml.contains("redisStatus"))
+        assertFalse(indexHtml.contains("loopStatus"))
+        assertFalse(indexHtml.contains("<h3>Grafana</h3>"))
+        assertFalse(indexHtml.contains("grafanaOverviewLink"))
+        assertFalse(indexHtml.contains("grafanaDetailLink"))
+        assertFalse(indexHtml.contains("grafanaApiLink"))
+        assertTrue(indexHtml.contains("""href="/console/admin.html""""))
+        assertTrue(indexHtml.contains("""href="/console/messages.html""""))
+
+        assertTrue(messagesHtml.contains("data-messages-shell"))
+        assertTrue(messagesHtml.contains("messageCurlPreview"))
+        assertTrue(messagesHtml.contains("Message Operations"))
+        assertTrue(messagesHtml.contains("""href="/console/admin.html""""))
+        assertTrue(messagesHtml.contains("""href="/console/index.html""""))
+
+        assertTrue(adminHtml.contains("data-admin-shell"))
+        assertTrue(adminHtml.contains("""class="admin-sidebar scalar-sidebar""""))
+        assertTrue(adminHtml.contains("""href="/console/index.html""""))
+        assertTrue(adminHtml.contains("""href="/console/messages.html""""))
+
+        assertTrue(styles.contains(".console-docs-page"))
+        assertTrue(styles.contains(".monitor-request-panel"))
+        assertTrue(styles.contains(".message-request-panel"))
+    }
+
+    @Test
+    fun `console pages expose shared side navigation`() {
+        val indexHtml = readStaticConsole("index.html")
+        val adminHtml = readStaticConsole("admin.html")
+        val messagesHtml = readStaticConsole("messages.html")
+        val signInHtml = readStaticConsole("sign-in.html")
+        val styles = readStaticConsole("styles.css")
+
+        assertTrue(indexHtml.contains("""<nav class="scalar-nav" aria-label="Console">"""))
+        assertTrue(indexHtml.contains("""<a class="selected" href="/console/index.html" aria-current="page">Monitoring</a>"""))
+        assertTrue(indexHtml.contains("""<a href="/console/admin.html">Admin</a>"""))
+        assertTrue(indexHtml.contains("""<a href="/console/messages.html">Messages</a>"""))
+        assertTrue(indexHtml.contains("""id="logoutButton" class="ghost-button small""""))
+
+        assertTrue(adminHtml.contains("""<nav class="scalar-nav" aria-label="Console">"""))
+        assertTrue(adminHtml.contains("""<a href="/console/index.html">Monitoring</a>"""))
+        assertTrue(adminHtml.contains("""<a class="selected" href="/console/admin.html" aria-current="page">Admin</a>"""))
+        assertTrue(adminHtml.contains("""<a href="/console/messages.html">Messages</a>"""))
+        assertTrue(adminHtml.contains("""id="adminSignOut" class="ghost-button small""""))
+
+        assertTrue(messagesHtml.contains("""<nav class="scalar-nav" aria-label="Console">"""))
+        assertTrue(messagesHtml.contains("""<a href="/console/index.html">Monitoring</a>"""))
+        assertTrue(messagesHtml.contains("""<a href="/console/admin.html">Admin</a>"""))
+        assertTrue(messagesHtml.contains("""<a class="selected" href="/console/messages.html">Messages</a>"""))
+        assertTrue(messagesHtml.contains("""id="messageExplorerSignOut" class="ghost-button small""""))
+
+        assertTrue(signInHtml.contains("""<main class="console-auth-shell">"""))
+        assertTrue(signInHtml.contains("""<script src="/console/sign-in.js"></script>"""))
+        assertTrue(signInHtml.contains("""id="signInNavMonitoring""""))
+        assertTrue(signInHtml.contains("""id="signInNavAdmin""""))
+        assertTrue(signInHtml.contains("""id="signInNavMessages""""))
+        assertTrue(signInHtml.contains("""id="signInForm""""))
+        assertFalse(indexHtml.contains("""id="loginForm""""))
+        assertFalse(messagesHtml.contains("""id="messageLoginForm""""))
+        assertTrue(styles.contains(".console-auth-shell"))
+        assertTrue(styles.contains(".console-auth-sidebar"))
+        assertTrue(styles.contains(".console-auth-panel"))
+        assertTrue(styles.contains("--console-nav-width: 260px;"))
+        assertTrue(styles.contains("grid-template-columns: var(--console-nav-width)"))
+        assertTrue(styles.contains(".console-docs-shell .topbar h2,\n.admin-topbar h1,\n.message-header h1"))
+        assertTrue(styles.contains(""".console-docs-shell .toolbar select,
+.console-docs-shell .browser-controls select,
+.message-controls select,
+.message-login-form input {
+    border: 1px solid #d8dee8;
+    background: #ffffff;
+    color: #202632;
+}"""))
+        assertTrue(styles.contains(""".console-docs-shell .toolbar select option {
+    background: #ffffff;
+    color: #202632;
+}"""))
+        assertTrue(styles.contains(""".message-header {
+    border-radius: 0;
+    border-width: 0 0 1px;
+    background: transparent;
+    padding: 0 0 18px;
+}"""))
+        assertTrue(styles.contains(".console-auth-panel .login-form input"))
+        assertTrue(styles.contains(".console-auth-panel .login-form button"))
+
+        assertTrue(styles.contains(""".message-explorer-shell {
+    min-height: 100vh;
+    padding: 0;
+}"""))
+        assertTrue(styles.contains(""".message-app {
+    grid-template-columns: var(--console-nav-width) minmax(0, 1fr) minmax(340px, 420px);
+    gap: 0;
+    min-height: 100vh;
+    background: #f7f8fb;
+}"""))
+    }
+
+    @Test
+    fun `console pages share persistent auth storage`() {
+        val appJs = readStaticConsole("app.js")
+        val adminJs = readStaticConsole("admin.js")
+        val messagesJs = readStaticConsole("messages.js")
+        val signInJs = readStaticConsole("sign-in.js")
+
+        listOf(appJs, adminJs, messagesJs, signInJs).forEach { content ->
+            assertTrue(content.contains("redisStreamCoordinator.console.auth"))
+            assertTrue(content.contains("redisStreamCoordinator.console.user"))
+            assertTrue(content.contains("window.localStorage.getItem(key) || window.sessionStorage.getItem(key)"))
+        }
+        assertTrue(signInJs.contains("window.localStorage.setItem(key, value)"))
+        listOf(appJs, adminJs, messagesJs, signInJs).forEach { content ->
+            assertTrue(content.contains("window.localStorage.removeItem(key)"))
+            assertTrue(content.contains("window.sessionStorage.removeItem(key)"))
+        }
+    }
+
+    @Test
+    fun `console pages redirect unauthenticated users to shared sign in page`() {
+        val appJs = readStaticConsole("app.js")
+        val adminJs = readStaticConsole("admin.js")
+        val messagesJs = readStaticConsole("messages.js")
+        val signInJs = readStaticConsole("sign-in.js")
+
+        listOf(appJs, adminJs, messagesJs).forEach { content ->
+            assertTrue(content.contains("""new URL("/console/sign-in.html", window.location.origin)"""))
+            assertTrue(content.contains("""url.searchParams.set("section", section)"""))
+            assertTrue(content.contains("""url.searchParams.set("next""""))
+            assertTrue(content.contains("window.location.pathname"))
+            assertTrue(content.contains("window.location.search"))
+            assertTrue(content.contains("window.location.hash"))
+        }
+        assertTrue(appJs.contains("""redirectToSignIn("monitoring")"""))
+        assertTrue(adminJs.contains("""redirectToSignIn("admin")"""))
+        assertTrue(messagesJs.contains("""redirectToSignIn("messages")"""))
+        assertTrue(signInJs.contains("""safeNextPath"""))
+        assertTrue(signInJs.contains("""window.location.replace(signInState.next)"""))
+        assertTrue(signInJs.contains(""""/coord/v1/auth/login""""))
+        assertTrue(signInJs.contains(""""/coord/v1/monitoring/session""""))
     }
 
     @Test

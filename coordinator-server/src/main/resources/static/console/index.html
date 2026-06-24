@@ -6,32 +6,10 @@
     <title>Redis Stream Coordinator Console</title>
     <link rel="stylesheet" href="/console/styles.css">
 </head>
-<body>
-<main id="loginView" class="login-shell">
-    <section class="login-panel" aria-labelledby="loginTitle">
-        <div class="brand-lockup">
-            <div class="brand-mark" aria-hidden="true">RC</div>
-            <div>
-                <h1 id="loginTitle">Redis Stream Coordinator</h1>
-                <p>Monitoring Console</p>
-            </div>
-        </div>
-        <form id="loginForm" class="login-form">
-            <label>
-                Username
-                <input id="username" name="username" autocomplete="username" required>
-            </label>
-            <label>
-                Password
-                <input id="password" name="password" type="password" autocomplete="current-password" required>
-            </label>
-            <button id="loginButton" type="submit">Sign in</button>
-            <p id="loginError" class="form-error" role="alert"></p>
-        </form>
-    </section>
-</main>
+<body class="console-docs-page">
+<main id="loginView" class="hidden" aria-hidden="true"></main>
 
-<main id="appView" class="app-shell hidden">
+<main id="appView" class="app-shell console-docs-shell hidden" data-monitoring-shell>
     <aside class="sidebar">
         <header class="sidebar-header">
             <div class="brand-lockup compact">
@@ -41,26 +19,13 @@
                     <p id="coordinatorId">Not connected</p>
                 </div>
             </div>
-            <a class="ghost-link" href="/console/admin.html">Admin</a>
-            <button id="logoutButton" class="ghost-button" type="button">Sign out</button>
+            <nav class="scalar-nav" aria-label="Console">
+                <a class="selected" href="/console/index.html" aria-current="page">Monitoring</a>
+                <a href="/console/admin.html">Admin</a>
+                <a href="/console/messages.html">Messages</a>
+            </nav>
+            <button id="logoutButton" class="ghost-button small" type="button">Sign out</button>
         </header>
-
-        <section class="side-panel">
-            <div class="panel-heading">
-                <h2>Health</h2>
-                <span id="healthBadge" class="status-badge muted">Unknown</span>
-            </div>
-            <dl class="health-list">
-                <div>
-                    <dt>Redis</dt>
-                    <dd id="redisStatus">-</dd>
-                </div>
-                <div>
-                    <dt>Loop</dt>
-                    <dd id="loopStatus">-</dd>
-                </div>
-            </dl>
-        </section>
 
         <section class="side-panel group-panel">
             <div class="panel-heading">
@@ -224,19 +189,6 @@
                 <div id="apiMetricList" class="api-metric-list"></div>
             </section>
 
-            <section class="content-panel compact-panel">
-                <div class="panel-heading">
-                    <h3>Grafana</h3>
-                    <span class="count-label">external</span>
-                </div>
-                <div class="export-list">
-                    <a id="grafanaOverviewLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open Overview</a>
-                    <a id="grafanaDetailLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open Stream Detail</a>
-                    <a id="grafanaApiLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open API Performance</a>
-                    <a class="ghost-link" href="https://github.com/ghkdqhrbals/redis-stream-coordinator/tree/feature/coordinator/monitoring/grafana/import" target="_blank" rel="noreferrer">Dashboard JSON</a>
-                </div>
-                <p class="admin-note">Use Grafana public dashboards for a read-only external link. Use dashboard JSON when someone should import the same dashboards into their own Grafana.</p>
-            </section>
         </section>
 
         <section id="detailView" class="dashboard-grid hidden" aria-live="polite">
@@ -367,6 +319,26 @@
             </section>
         </section>
     </section>
+
+    <aside class="admin-request-panel monitor-request-panel" aria-label="Monitoring request preview">
+        <div class="admin-request-header">
+            <div>
+                <span id="monitorRequestMethod" class="admin-method-pill get">GET</span>
+                <span id="monitorRequestPath" class="admin-request-path">/coord/v1/monitoring/groups</span>
+            </div>
+            <button id="monitorCopyCurl" class="ghost-button small" type="button">Copy cURL</button>
+        </div>
+        <pre id="monitorCurlPreview" class="admin-code-block"><code>curl https://coordinator.ghkdqhrbals.org/coord/v1/monitoring/groups \
+  --request GET \
+  --header 'Authorization: Bearer &lt;token&gt;'</code></pre>
+        <div class="admin-response-header">
+            <h2>Monitoring Operations</h2>
+            <span id="monitorResponseStatus" class="admin-status-pill pending">Ready</span>
+        </div>
+        <pre id="monitorResponsePreview" class="admin-response-block"><code>GET /coord/v1/monitoring/health
+GET /coord/v1/monitoring/groups
+GET /coord/v1/monitoring/streams/{stream}/groups/{group}</code></pre>
+    </aside>
 </main>
 
 <script src="/console/table-resize.js"></script>

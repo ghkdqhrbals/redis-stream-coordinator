@@ -6,117 +6,149 @@
     <title>Redis Stream Coordinator Admin</title>
     <link rel="stylesheet" href="/console/styles.css">
 </head>
-<body>
-<main class="access-shell admin-shell" data-admin-shell>
-    <section class="access-header admin-hero">
-        <div class="brand-lockup">
+<body class="console-docs-page">
+<main class="admin-shell" data-admin-shell>
+    <aside class="admin-sidebar scalar-sidebar" aria-label="Admin console navigation">
+        <div class="brand-lockup compact">
             <div class="brand-mark" aria-hidden="true">RC</div>
             <div>
+                <h1>Coordinator</h1>
+                <p>Admin Console</p>
+            </div>
+        </div>
+        <nav class="scalar-nav" aria-label="Console">
+            <a href="/console/index.html">Monitoring</a>
+            <a class="selected" href="/console/admin.html" aria-current="page">Admin</a>
+            <a href="/console/messages.html">Messages</a>
+        </nav>
+        <button id="adminSignOut" class="ghost-button small" type="button">Sign out</button>
+    </aside>
+
+    <section class="admin-workspace">
+        <header class="topbar admin-topbar">
+            <div>
+                <p class="eyebrow">Admin</p>
                 <h1>Admin Operations</h1>
-                <p>Stream-level shard topology and resharding controls</p>
+                <p class="page-subtitle">Stream-level shard topology and resharding controls.</p>
             </div>
+        </header>
+
+        <section class="admin-workbench">
+        <div class="admin-operation-list">
+            <article class="access-card admin-card admin-card-primary">
+                <div class="admin-operation-heading">
+                    <span class="admin-operation-id">currentSession</span>
+                    <span class="admin-method-pill get">GET</span>
+                </div>
+                <h2>Coordinator API Session</h2>
+                <p class="admin-note">Authentication is handled by the shared console sign-in page. This panel shows the active bearer token session.</p>
+                <dl class="access-session">
+                    <div>
+                        <dt>Username</dt>
+                        <dd id="adminSessionUsername">-</dd>
+                    </div>
+                    <div>
+                        <dt>Roles</dt>
+                        <dd id="adminSessionRoles">-</dd>
+                    </div>
+                    <div>
+                        <dt>Token expires</dt>
+                        <dd id="adminTokenExpires">-</dd>
+                    </div>
+                </dl>
+                <p id="adminError" class="form-error" role="alert"></p>
+            </article>
+
+            <article class="access-card admin-card">
+                <div class="admin-operation-heading">
+                    <span class="admin-operation-id">selectStreamGroup</span>
+                    <span class="admin-method-pill get">GET</span>
+                </div>
+                <h2>Selected Stream</h2>
+                <label class="admin-label">
+                    Stream / Consumer Group
+                    <select id="adminGroupSelect"></select>
+                </label>
+                <button id="adminRefreshGroups" class="ghost-button" type="button">Refresh groups</button>
+                <dl class="access-session admin-current-state">
+                    <div>
+                        <dt>Shard count</dt>
+                        <dd id="adminCurrentShardCount">-</dd>
+                    </div>
+                    <div>
+                        <dt>Consumer group</dt>
+                        <dd id="adminSelectedConsumerGroup">-</dd>
+                    </div>
+                    <div>
+                        <dt>Parallelism</dt>
+                        <dd>Configured in consumer pods</dd>
+                    </div>
+                </dl>
+            </article>
+
+            <article class="access-card admin-card">
+                <div class="admin-operation-heading">
+                    <span class="admin-operation-id">createStream</span>
+                    <span class="admin-method-pill post">POST</span>
+                </div>
+                <h2>Create Stream</h2>
+                <form id="adminCreateStreamForm" class="admin-form">
+                    <label>
+                        Stream prefix
+                        <input id="adminCreateStreamPrefix" placeholder="create-order">
+                    </label>
+                    <label>
+                        Initial shards
+                        <input id="adminCreateShardCount" type="number" min="1" value="20">
+                    </label>
+                    <button type="submit">Create stream</button>
+                </form>
+                <p class="admin-note">Creates stream-level shard metadata. Runtime consumer groups join through their configured group name.</p>
+            </article>
+
+            <article class="access-card admin-card">
+                <div class="admin-operation-heading">
+                    <span class="admin-operation-id">scaleStream</span>
+                    <span class="admin-method-pill post">POST</span>
+                </div>
+                <h2>Shard Scale</h2>
+                <form id="adminScaleForm" class="admin-form">
+                    <label>
+                        Target shard count
+                        <input id="adminTargetShardCount" type="number" min="0" value="20">
+                    </label>
+                    <label>
+                        Reason
+                        <input id="adminScaleReason" value="operator shard scale">
+                    </label>
+                    <button type="submit">Apply shard scale</button>
+                </form>
+                <div class="admin-button-row">
+                    <button id="adminScaleOut" class="ghost-button" type="button">+1 shard</button>
+                    <button id="adminScaleIn" class="ghost-button" type="button">-1 shard</button>
+                </div>
+                <p class="admin-note">Scale-in starts a resharding flow. Producers refresh routing after write failures or cache refresh, and consumers drain revoked shards before removed shards are retired.</p>
+            </article>
         </div>
-        <div class="admin-header-actions">
-            <a class="ghost-link" href="/console">Monitoring</a>
-            <a class="ghost-link" href="/console/messages.html">Messages</a>
-        </div>
-    </section>
 
-    <section class="access-grid admin-grid">
-        <article class="access-card admin-card admin-card-primary">
-            <h2>Session</h2>
-            <p class="admin-note">Sign in with coordinator credentials. The console stores only the issued bearer token in browser storage.</p>
-            <form id="adminLoginForm" class="access-login-form">
-                <label>
-                    Username
-                    <input id="adminUsername" autocomplete="username">
-                </label>
-                <label>
-                    Password
-                    <input id="adminPassword" type="password" autocomplete="current-password">
-                </label>
-                <button type="submit">Sign in</button>
-            </form>
-            <dl class="access-session">
+        <aside class="admin-request-panel" aria-label="Request preview and response">
+            <div class="admin-request-header">
                 <div>
-                    <dt>Username</dt>
-                    <dd id="adminSessionUsername">-</dd>
+                    <span id="adminRequestMethod" class="admin-method-pill get">GET</span>
+                    <span id="adminRequestPath" class="admin-request-path">/coord/v1/monitoring/groups</span>
                 </div>
-                <div>
-                    <dt>Roles</dt>
-                    <dd id="adminSessionRoles">-</dd>
-                </div>
-                <div>
-                    <dt>Token expires</dt>
-                    <dd id="adminTokenExpires">-</dd>
-                </div>
-            </dl>
-            <p id="adminError" class="form-error" role="alert"></p>
-        </article>
-
-        <article class="access-card admin-card">
-            <h2>Selected Stream</h2>
-            <label class="admin-label">
-                Stream / Consumer Group
-                <select id="adminGroupSelect"></select>
-            </label>
-            <button id="adminRefreshGroups" class="ghost-button" type="button">Refresh groups</button>
-            <dl class="access-session admin-current-state">
-                <div>
-                    <dt>Shard count</dt>
-                    <dd id="adminCurrentShardCount">-</dd>
-                </div>
-                <div>
-                    <dt>Consumer group</dt>
-                    <dd id="adminSelectedConsumerGroup">-</dd>
-                </div>
-                <div>
-                    <dt>Parallelism</dt>
-                    <dd>Configured in consumer pods</dd>
-                </div>
-            </dl>
-        </article>
-
-        <article class="access-card admin-card">
-            <h2>Create Stream</h2>
-            <form id="adminCreateStreamForm" class="admin-form">
-                <label>
-                    Stream prefix
-                    <input id="adminCreateStreamPrefix" placeholder="create-order">
-                </label>
-                <label>
-                    Initial shards
-                    <input id="adminCreateShardCount" type="number" min="1" value="20">
-                </label>
-                <button type="submit">Create stream</button>
-            </form>
-            <p class="admin-note">Creates stream-level shard metadata. Runtime consumer groups join through their configured group name.</p>
-        </article>
-
-        <article class="access-card admin-card">
-            <h2>Shard Scale</h2>
-            <form id="adminScaleForm" class="admin-form">
-                <label>
-                    Target shard count
-                    <input id="adminTargetShardCount" type="number" min="0" value="20">
-                </label>
-                <label>
-                    Reason
-                    <input id="adminScaleReason" value="operator shard scale">
-                </label>
-                <button type="submit">Apply shard scale</button>
-            </form>
-            <div class="admin-button-row">
-                <button id="adminScaleOut" class="ghost-button" type="button">+1 shard</button>
-                <button id="adminScaleIn" class="ghost-button" type="button">-1 shard</button>
+                <button id="adminCopyCurl" class="ghost-button small" type="button">Copy cURL</button>
             </div>
-            <p class="admin-note">Scale-in starts a resharding flow. Producers refresh routing after write failures or cache refresh, and consumers drain revoked shards before removed shards are retired.</p>
-        </article>
-
-        <article class="access-card admin-card wide">
-            <h2>Operation Result</h2>
-            <pre id="adminResult" class="config-block"><code>No operation executed.</code></pre>
-        </article>
+            <pre id="adminCurlPreview" class="admin-code-block"><code>curl https://coordinator.ghkdqhrbals.org/coord/v1/monitoring/groups</code></pre>
+            <div class="admin-response-header">
+                <h2>Response</h2>
+                <span id="adminResponseStatus" class="admin-status-pill">Not sent</span>
+            </div>
+            <pre id="adminResponsePreview" class="admin-response-block"><code>No operation executed.</code></pre>
+            <h2 class="admin-result-title">Operation Result</h2>
+            <pre id="adminResult" class="config-block admin-result-block"><code>No operation executed.</code></pre>
+        </aside>
+        </section>
     </section>
 </main>
 <script src="/console/admin.js"></script>
