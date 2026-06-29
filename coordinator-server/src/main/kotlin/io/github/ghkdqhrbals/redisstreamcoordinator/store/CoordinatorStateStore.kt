@@ -228,6 +228,10 @@ class RedisCoordinatorStateStore @Autowired constructor(
             migrateLegacyGroupMetadata(groupKeys)
             return false
         }
+        deleteEmptyMetadataHashIfPresent(
+            metadataKey = groupKeys.metadata,
+            indexMember = keys.groupIndexMember(groupKeys.metadata),
+        )
         val stored = writeGroupMetadata(groupKeys, group, onlyIfAbsent = true)
         if (stored) {
             redisCommands.setAdd(keys.coordinatorMetadata, keys.groupIndexMember(groupKeys.metadata))
@@ -273,6 +277,10 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     override fun putStreamIfAbsent(stream: StreamMetadata): Boolean {
         val streamKey = keys.forStream(stream.streamPrefix)
+        deleteEmptyMetadataHashIfPresent(
+            metadataKey = streamKey.metadata,
+            indexMember = keys.streamIndexMember(streamKey.metadata),
+        )
         val stored = writeStreamMetadata(streamKey, stream, onlyIfAbsent = true)
         if (stored) {
             redisCommands.setAdd(keys.coordinatorMetadata, keys.streamIndexMember(streamKey.metadata))
@@ -351,6 +359,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     private fun readGroupMetadata(keys: RedisCoordinatorGroupKeys): GroupMetadata? =
         redisCommands.hashGet(keys.metadata, METADATA_AGGREGATE_FIELD)
+            ?.takeUnless(::isEmptyMetadataAggregate)
             ?.let { jsonCodec.readGroupMetadata(keys.metadata, it) }
             ?: migrateLegacyGroupMetadata(keys)
 
@@ -394,6 +403,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
 
     private fun readStreamMetadata(metadataKey: String): StreamMetadata? =
         redisCommands.hashGet(metadataKey, METADATA_AGGREGATE_FIELD)
+            ?.takeUnless(::isEmptyMetadataAggregate)
             ?.let { jsonCodec.readStreamMetadata(metadataKey, it) }
 
     private fun readIndexedGroupMetadata(indexMember: String): GroupMetadata? {
@@ -420,6 +430,25 @@ class RedisCoordinatorStateStore @Autowired constructor(
         }
     }
 
+    private fun deleteEmptyMetadataHashIfPresent(metadataKey: String, indexMember: String) {
+        val aggregate = redisCommands.hashGet(metadataKey, METADATA_AGGREGATE_FIELD) ?: return
+        if (!isEmptyMetadataAggregate(aggregate)) {
+            return
+        }
+        val revision = redisCommands.hashGet(metadataKey, METADATA_REVISION_FIELD) ?: return
+        val deleted = redisCommands.executeLong(
+            DELETE_GROUP_IF_REVISION_SCRIPT,
+            listOf(metadataKey),
+            revision,
+        ) == 1L
+        if (deleted) {
+            redisCommands.setRemove(keys.coordinatorMetadata, indexMember)
+        }
+    }
+
+    private fun isEmptyMetadataAggregate(raw: String): Boolean =
+        EMPTY_JSON_OBJECT.matches(raw)
+
     companion object {
         private const val METADATA_AGGREGATE_FIELD = "aggregate"
         private const val METADATA_REVISION_FIELD = "revision"
@@ -427,6 +456,7 @@ class RedisCoordinatorStateStore @Autowired constructor(
         private const val METADATA_LAYOUT_VERSION_FIELD = "layoutVersion"
         private const val METADATA_UPDATED_AT_FIELD = "updatedAt"
         private const val REDIS_METADATA_LAYOUT_VERSION = 1
+        private val EMPTY_JSON_OBJECT = Regex("""^\s*\{\s*\}\s*$""")
 
         private val UPSERT_GROUP_METADATA_SCRIPT = DefaultRedisScript(
             """

@@ -19,6 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import java.time.Clock
 import java.time.Duration
@@ -203,15 +204,46 @@ class CoordinatorStateStoreTest {
     }
 
     @Test
-    fun `redis store reports corrupt empty stream aggregate as schema error`() {
+    fun `redis store replaces empty group metadata hash during put if absent`() {
+        val objectMapper = ObjectMapper()
         val redis = FakeStateStoreRedisCommands()
         val store = RedisCoordinatorStateStore(
             redisCommands = redis,
-            objectMapper = ObjectMapper(),
+            objectMapper = objectMapper,
             properties = properties,
         )
-        val stateKeys = RedisCoordinatorStateKeys(properties.store.keyPrefix)
-        val streamKey = stateKeys.forStream("corrupt-stream")
+        val key = GroupKey("corrupt-orders", "orders-consumer")
+        val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix).forGroup(key)
+        redis.hashes[keys.metadata] = mutableMapOf(
+            "aggregate" to "{}",
+            "revision" to "1",
+            "schemaVersion" to "1",
+            "layoutVersion" to "1",
+            "updatedAt" to Instant.now(clock).toString(),
+        )
+
+        assertTrue(store.putIfAbsent(key, groupMetadata(key)))
+
+        val loaded = assertNotNull(store.get(key))
+        assertEquals("corrupt-orders", loaded.streamPrefix)
+        assertEquals("orders-consumer", loaded.consumerGroup)
+        assertEquals(1, loaded.storeRevision)
+        assertEquals(
+            setOf(RedisCoordinatorStateKeys(properties.store.keyPrefix).groupIndexMember(keys.metadata)),
+            redis.setMembers("coordinator:metadata"),
+        )
+    }
+
+    @Test
+    fun `redis store replaces empty stream metadata hash during put if absent`() {
+        val objectMapper = ObjectMapper()
+        val redis = FakeStateStoreRedisCommands()
+        val store = RedisCoordinatorStateStore(
+            redisCommands = redis,
+            objectMapper = objectMapper,
+            properties = properties,
+        )
+        val streamKey = RedisCoordinatorStateKeys(properties.store.keyPrefix).forStream("corrupt-stream")
         redis.hashes[streamKey.metadata] = mutableMapOf(
             "aggregate" to "{}",
             "revision" to "1",
@@ -220,12 +252,46 @@ class CoordinatorStateStoreTest {
             "updatedAt" to Instant.now(clock).toString(),
         )
 
-        val error = assertFailsWith<CoordinatorStateSchemaException> {
-            store.getStream("corrupt-stream")
-        }
+        assertNull(store.getStream("corrupt-stream"))
+        assertTrue(store.putStreamIfAbsent(streamMetadata("corrupt-stream")))
 
-        assertTrue(error.message.orEmpty().contains(streamKey.metadata))
-        assertTrue(error.message.orEmpty().contains("stream metadata"))
+        val loaded = assertNotNull(store.getStream("corrupt-stream"))
+        assertEquals("corrupt-stream", loaded.streamPrefix)
+        assertEquals(1, loaded.storeRevision)
+    }
+
+    @Test
+    fun `initial heartbeat recovers empty group metadata hash when stream metadata exists`() {
+        val objectMapper = ObjectMapper()
+        val redis = FakeStateStoreRedisCommands()
+        val store = RedisCoordinatorStateStore(
+            redisCommands = redis,
+            objectMapper = objectMapper,
+            properties = properties,
+        )
+        assertTrue(store.putStreamIfAbsent(streamMetadata("heartbeat-corrupt")))
+        val key = GroupKey("heartbeat-corrupt", "orders-consumer")
+        val keys = RedisCoordinatorStateKeys(properties.store.keyPrefix).forGroup(key)
+        redis.hashes[keys.metadata] = mutableMapOf(
+            "aggregate" to "{}",
+            "revision" to "1",
+            "schemaVersion" to "1",
+            "layoutVersion" to "1",
+            "updatedAt" to Instant.now(clock).toString(),
+        )
+
+        val response = service(store).heartbeat(
+            streamPrefix = "heartbeat-corrupt",
+            consumerGroup = "orders-consumer",
+            memberId = "member-a",
+            request = heartbeat("member-a", memberEpoch = 0),
+        )
+
+        assertEquals(HeartbeatStatus.OK, response.status)
+        val recovered = assertNotNull(store.get(key))
+        assertEquals("heartbeat-corrupt", recovered.streamPrefix)
+        assertEquals("orders-consumer", recovered.consumerGroup)
+        assertEquals(1, recovered.members.size)
     }
 
     @Test

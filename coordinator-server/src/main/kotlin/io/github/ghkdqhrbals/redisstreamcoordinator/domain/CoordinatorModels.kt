@@ -278,8 +278,8 @@ data class ShardConsumptionProgress(
 @Schema(description = "Consumer heartbeat request used for join, lease renewal, leave, revoke progress, and shard progress reporting.")
 data class HeartbeatRequest(
     @field:Min(1)
-    @field:Schema(description = "Coordination protocol version supported by the consumer module.", example = "1")
-    val protocolVersion: Int,
+    @field:Schema(description = "Coordination protocol version supported by the consumer module. Missing values are treated as the current v1 protocol for older clients.", example = "1")
+    val protocolVersion: Int = CoordinatorProtocol.DEFAULT_COORDINATION_VERSION,
     @field:NotBlank
     @field:Schema(description = "Idempotency/correlation id for this heartbeat attempt.", example = "hb-member-a-000042")
     val requestId: String,
@@ -293,8 +293,11 @@ data class HeartbeatRequest(
     @field:Schema(description = "Metadata version currently cached by the consumer.", example = "7")
     val metadataVersion: Long,
     @field:Valid
-    @field:Schema(description = "Runtime worker capacity and current availability.")
-    val runtimeConsumerCapacity: RuntimeConsumerCapacity,
+    @field:Schema(description = "Runtime worker capacity and current availability. Missing values are treated as a single idle worker for older clients.")
+    val runtimeConsumerCapacity: RuntimeConsumerCapacity = RuntimeConsumerCapacity(
+        runtimeMaxConcurrency = 1,
+        availableConcurrency = 1,
+    ),
     @field:Schema(description = "Shards the member currently owns and may read.")
     val ownedShards: Set<ShardId> = emptySet(),
     @field:Schema(description = "Shards the member is draining after coordinator revocation.")

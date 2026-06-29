@@ -240,6 +240,40 @@ class CoordinatorHttpIntegrationTest {
     }
 
     @Test
+    fun `http api accepts legacy heartbeat body without protocol metadata fields`() {
+        mockMvc.perform(
+            post("/coord/v1/streams/http-legacy-heartbeat/groups/orders-consumer")
+                .header(HttpHeaders.AUTHORIZATION, basicAuth())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createGroupRequest(initialShardCount = 2))),
+        )
+            .andExpect(status().isCreated)
+
+        mockMvc.perform(
+            post("/coord/v1/streams/http-legacy-heartbeat/groups/orders-consumer/members/member-a/heartbeat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "requestId": "legacy-hb-member-a",
+                      "memberId": "member-a",
+                      "memberName": "member-a",
+                      "memberEpoch": 0,
+                      "metadataVersion": 0,
+                      "ownedShards": [],
+                      "revokingShards": [],
+                      "shardProgress": []
+                    }
+                    """.trimIndent(),
+                ),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.status").value("OK"))
+            .andExpect(jsonPath("$.metadataVersion").value(2))
+            .andExpect(jsonPath("$.assignment.assignedShards.length()").value(2))
+    }
+
+    @Test
     fun `http api returns producer routing metadata from stream endpoint`() {
         mockMvc.perform(
             post("/coord/v1/streams/http-routing/groups/orders-consumer")

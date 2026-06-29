@@ -19,12 +19,29 @@ const adminElements = {};
 document.addEventListener("DOMContentLoaded", () => {
     bindAdminElements();
     bindAdminEvents();
-    if (adminState.authHeader) {
-        loadAdminSession(adminState.authHeader).then(refreshAdminGroups).catch(() => redirectToSignIn("admin"));
-    } else {
-        redirectToSignIn("admin");
-    }
+    initializeAdmin();
 });
+
+async function initializeAdmin() {
+    if (!adminState.authHeader) {
+        redirectToSignIn("admin");
+        return;
+    }
+    try {
+        await loadAdminSession(adminState.authHeader);
+    } catch (_error) {
+        redirectToSignIn("admin");
+        return;
+    }
+    try {
+        await refreshAdminGroups();
+    } catch (error) {
+        adminState.groups = [];
+        renderAdminGroups();
+        renderAdminSelection();
+        showAdminError(error.message);
+    }
+}
 
 function bindAdminElements() {
     [
