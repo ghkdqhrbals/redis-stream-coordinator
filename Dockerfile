@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM eclipse-temurin:24-jdk AS build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:24-jdk AS build
 
 WORKDIR /workspace
 ARG APP_TASK=:coordinator-server:bootJar
@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/root/.gradle \
     && find "$APP_LIB_DIR" -maxdepth 1 -type f -name "*.jar" ! -name "*-plain.jar" \
       -exec cp {} /workspace/application.jar \;
 
-FROM eclipse-temurin:24-jre AS runtime
+FROM --platform=$TARGETPLATFORM eclipse-temurin:24-jre AS runtime
 
 WORKDIR /app
 

@@ -251,7 +251,7 @@ data class ShardConsumptionProgress(
 data class HeartbeatRequest(
     @field:Min(1)
     @field:Schema(description = "Coordination protocol version supported by the consumer module.", example = "1")
-    val protocolVersion: Int,
+    val protocolVersion: Int = CoordinatorProtocol.DEFAULT_COORDINATION_VERSION,
     @field:NotBlank
     @field:Schema(description = "Idempotency/correlation id for this heartbeat attempt.", example = "hb-member-a-000042")
     val requestId: String,
