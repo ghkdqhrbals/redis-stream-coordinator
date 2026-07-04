@@ -2,13 +2,31 @@
 
 This guide explains how to run Redis Stream Coordinator as a container.
 
-## Local Coordinator With External Redis Cluster
+## Local Coordinator With External Redis
 
-Start the coordinator and sample pod topology against an external Redis Cluster:
+Start the coordinator and sample pod topology against standalone Redis:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+```
+
+For Redis Cluster:
+
+```bash
+export REDIS_CLUSTER_NODES=10.0.0.10:6379,10.0.0.11:6379,10.0.0.12:6379
+export REDIS_PASSWORD='your-redis-password'
+docker compose -f compose.pods.yaml -p rsc-pods up -d --build
+```
+
+For Redis Sentinel:
+
+```bash
+export REDIS_SENTINEL_MASTER=rsc-master
+export REDIS_SENTINEL_NODES=10.0.0.10:26379,10.0.0.11:26379,10.0.0.12:26379
+export REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 ```
 
@@ -26,7 +44,7 @@ curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/health
 ```
 
-The repository intentionally does not keep a local Redis Cluster compose file. Local Docker runs should use the same Redis Cluster style as production by setting `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD`.
+The repository intentionally does not keep a local Redis compose service. Local Docker runs can point at standalone Redis, Sentinel, or Cluster. Empty `SPRING_DATA_REDIS_CLUSTER_NODES` and `SPRING_DATA_REDIS_SENTINEL_NODES` values are ignored so a configtree or empty environment variable does not accidentally force Cluster or Sentinel mode.
 
 Create a group:
 
@@ -56,7 +74,10 @@ The coordinator image uses the same Spring Boot configuration keys as the jar. I
 | `REDIS_STREAM_COORDINATOR_TOKEN_TTL` | Bearer token lifetime. Default is `7d`. |
 | `COORDINATOR_STORE_TYPE` | `redis` for durable coordinator state. The image defaults to `redis`; `memory` is only for isolated local tests and is rejected when stream provisioning is enabled. |
 | `COORDINATOR_STREAMS_PROVISIONING_ENABLED` | Enables Redis Stream and consumer-group provisioning. |
-| `SPRING_DATA_REDIS_CLUSTER_NODES` | Comma-separated Redis Cluster seed nodes. |
+| `REDIS_URL` / `SPRING_DATA_REDIS_URL` | Optional Redis URL. |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_DATABASE`, `REDIS_USERNAME`, `REDIS_PASSWORD` | Standalone Redis connection settings. |
+| `REDIS_CLUSTER_NODES` / `SPRING_DATA_REDIS_CLUSTER_NODES` | Comma-separated Redis Cluster seed nodes. |
+| `REDIS_SENTINEL_MASTER`, `REDIS_SENTINEL_NODES` | Redis Sentinel master name and comma-separated Sentinel nodes. |
 | `COORDINATOR_API_RATE_LIMIT_ENABLED` | Enables admin mutation API rate limiting. |
 | `COORDINATOR_AUDIT_SINK` | `log` or `redis`. |
 

@@ -227,7 +227,7 @@ Important response fields:
 | `metadataVersion` | Coordinator metadata version for producer cache invalidation. |
 | `shardCount` | Shard count producers must route against. |
 | `streamKeyPattern` | Redis Stream key pattern. |
-| `shards[]` | Concrete shard keys and Redis Cluster slots. |
+| `shards[]` | Concrete shard keys and Redis hash slots. Cluster deployments can map these slots to node placement. |
 
 ### Scale Stream
 

@@ -242,7 +242,7 @@ Response summary:
 | `metadataVersion` | Coordinator metadata version for producer cache invalidation. |
 | `shardCount` | Shard count producers must route against. |
 | `streamKeyPattern` | Redis Stream key pattern with `{shardIndex}` placeholders. |
-| `shards` | Concrete shard keys and Redis Cluster slots. |
+| `shards` | Concrete shard keys와 Redis hash slot. Cluster 배포에서는 이 slot을 node placement와 연결할 수 있다. |
 
 ### Scale Stream
 

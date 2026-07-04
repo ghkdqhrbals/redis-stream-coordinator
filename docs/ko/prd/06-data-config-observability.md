@@ -31,9 +31,38 @@ redis-stream:coord:{streamPrefix:consumerGroup}:metadata
 
 Data-plane key는 coordinator 문서의 config에 넣지 않는다. 예를 들어 processing marker, stream read cursor, handler retry state는 member/consumer 구현 소관이다.
 
+## Redis Deployment Topologies
+
+Coordinator server와 Spring Boot starter는 Redis 접속에 Spring Boot 표준 `spring.data.redis.*` property를 사용한다.
+
+| Topology | 필수 property | 비고 |
+| --- | --- | --- |
+| Standalone | `spring.data.redis.host`, `spring.data.redis.port` 또는 `spring.data.redis.url` | local/simple deployment 기본 경로이다. |
+| Sentinel | `spring.data.redis.sentinel.master`, `spring.data.redis.sentinel.nodes` | Sentinel이 선택한 primary를 통해 같은 shard metadata와 Redis Stream command를 사용한다. |
+| Cluster | `spring.data.redis.cluster.nodes` | shard key hash slot 분산으로 Redis Cluster node 분산 효과를 얻는다. |
+
+빈 `spring.data.redis.cluster.nodes`, `spring.data.redis.sentinel.nodes`, `spring.data.redis.masterreplica.nodes` 값은 coordinator와 starter의 connection details normalization에서 없는 값으로 처리한다. 빈 환경변수나 configtree 파일 때문에 잘못된 Redis mode가 강제되지 않도록 하기 위함이다.
+
 ## Minimal Configuration
 
 ```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_TLS:false}
+      # topology block은 하나만 사용한다.
+      # cluster:
+      #   nodes: ${REDIS_CLUSTER_NODES:}
+      # sentinel:
+      #   master: ${REDIS_SENTINEL_MASTER:}
+      #   nodes: ${REDIS_SENTINEL_NODES:}
+
 coordinator:
   # Coordinator HTTP API 설정이다. group 식별자는 이 API path/body로 들어오며 YAML에 고정하지 않는다.
   api:
@@ -70,21 +99,6 @@ coordinator:
     # local 개발은 memory, Redis 기반 metadata는 redis, DB 기반 metadata는 jdbc를 사용한다.
     type: redis
     key-prefix: redis-stream:coord
-
-  # Redis Stream data plane과 optional stream provisioning에 사용할 Redis 접속 정보이다.
-  redis:
-    # Redis host이다.
-    host: localhost
-    # Redis port이다.
-    port: 6379
-    # Redis database index이다.
-    database: 0
-    # Redis ACL username이다. ACL을 쓰지 않으면 비워둘 수 있다.
-    username:
-    # Redis password이다. 운영 환경에서는 환경변수/secret으로 주입한다.
-    password: ${REDIS_PASSWORD:}
-    # Redis TLS 사용 여부이다.
-    ssl: false
 
   # KIP-848 스타일 rebalance control plane의 동작 주기와 정책 경계이다.
   # member에게 HeartbeatResponse.heartbeatIntervalMs로 내려줄 권장 heartbeat 주기이다.

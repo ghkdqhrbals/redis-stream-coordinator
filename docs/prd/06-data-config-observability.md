@@ -46,9 +46,38 @@ Coordinator YAML should not contain:
 
 Per-group shard count is created or changed through the Admin API. Consumer parallelism is controlled by the consumer deployment or listener configuration; the coordinator observes the resulting logical members through heartbeat.
 
+## Redis Deployment Topologies
+
+The coordinator server and the Spring Boot starter use Spring Boot `spring.data.redis.*` properties for Redis connectivity. Supported topologies:
+
+| Topology | Required properties | Notes |
+| --- | --- | --- |
+| Standalone | `spring.data.redis.host`, `spring.data.redis.port` or `spring.data.redis.url` | Default local and simple deployment mode. |
+| Sentinel | `spring.data.redis.sentinel.master`, `spring.data.redis.sentinel.nodes` | Uses the same shard metadata and Redis Stream commands through the Sentinel-selected primary. |
+| Cluster | `spring.data.redis.cluster.nodes` | Enables Redis Cluster slot distribution for shard keys. |
+
+Empty `spring.data.redis.cluster.nodes`, `spring.data.redis.sentinel.nodes`, or `spring.data.redis.masterreplica.nodes` values are ignored by the coordinator and starter connection-details normalization. This prevents an empty environment variable or configtree file from forcing the wrong Redis mode.
+
 ## Example Configuration
 
 ```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_TLS:false}
+      # Use one topology block at a time.
+      # cluster:
+      #   nodes: ${REDIS_CLUSTER_NODES:}
+      # sentinel:
+      #   master: ${REDIS_SENTINEL_MASTER:}
+      #   nodes: ${REDIS_SENTINEL_NODES:}
+
 coordinator:
   api:
     base-path: /coord/v1
@@ -72,13 +101,6 @@ coordinator:
     key-prefix: redis-stream:coord
   audit:
     sink: redis
-  redis:
-    host: ${REDIS_HOST:127.0.0.1}
-    port: ${REDIS_PORT:6379}
-    database: ${REDIS_DATABASE:0}
-    username: ${REDIS_USERNAME:}
-    password: ${REDIS_PASSWORD:}
-    tls: ${REDIS_TLS:false}
   coordination:
     heartbeat-interval: 1s
     member-lease-ttl: 10s

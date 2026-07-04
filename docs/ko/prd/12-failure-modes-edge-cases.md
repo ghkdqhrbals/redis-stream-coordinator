@@ -337,7 +337,8 @@ coordinator:metadata
 | Cluster redirect가 unreachable address 반환 | Coordinator, consumer, producer | configured node mapping 사용 또는 clear connection error |
 | ACL에 stream command 권한 없음 | Consumer 또는 producer | startup 또는 첫 command에서 명확히 실패 |
 | ACL에 metadata command 권한 없음 | Coordinator | health degraded, mutation 거절 |
-| standalone/cluster mode mismatch | 모든 Redis client | clear mode mismatch로 startup fail |
+| 빈 Cluster/Sentinel node property | Coordinator, consumer, producer | 빈 node list는 없는 설정으로 보고 standalone으로 fallback |
+| standalone/cluster mode mismatch | 모든 Redis client | non-empty topology 설정이 실제 Redis 배포와 맞지 않으면 clear mode mismatch로 startup fail |
 
 ## New Edge Case Design Checklist
 

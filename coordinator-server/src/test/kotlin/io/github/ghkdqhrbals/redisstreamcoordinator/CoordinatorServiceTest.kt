@@ -68,7 +68,7 @@ class CoordinatorServiceTest {
             service.createStream("{bad}", CreateStreamRequest(initialShardCount = 2, requestedBy = "test"))
         }.exceptionOrNull() as IllegalArgumentException
 
-        assertEquals("streamPrefix must not contain Redis Cluster hash tag braces", error.message)
+        assertEquals("streamPrefix must not contain Redis hash tag braces", error.message)
     }
 
     @Test

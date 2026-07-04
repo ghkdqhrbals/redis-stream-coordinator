@@ -2,7 +2,7 @@
 
 Redis Stream Coordinator adapts the coordinator-managed consumer rebalance idea from Kafka KIP-848 to Redis Stream sharding. The project provides a dedicated coordinator server, a Spring Boot consumer integration module, a Spring Boot producer routing/publishing module, and monitoring/API documentation for operating the system.
 
-The reason for this module is practical: Redis Stream is useful as a lightweight log, but a single stream key can become a BigKey and a single Redis Cluster hash-slot hotspot. Redis itself does not provide a broker-side coordinator that owns shard assignment, membership, producer routing metadata, revoke-before-assign handoff, and resharding protocol for a logical stream. There are also very few public references that combine Redis Stream BigKey mitigation, Redis Cluster slot distribution, and consumer ownership coordination. This project fills that gap with a reusable open-source control plane and Spring Boot integration.
+The reason for this module is practical: Redis Stream is useful as a lightweight log, but a single stream key can become a BigKey and, on Redis Cluster, a hash-slot hotspot. Redis itself does not provide a broker-side coordinator that owns shard assignment, membership, producer routing metadata, revoke-before-assign handoff, and resharding protocol for a logical stream. There are also very few public references that combine Redis Stream BigKey mitigation, optional Redis Cluster slot distribution, and consumer ownership coordination. This project fills that gap with a reusable open-source control plane and Spring Boot integration.
 
 ## Design Index
 
@@ -36,7 +36,7 @@ Redis Stream Coordinator is a control-plane server that centrally manages Redis 
 
 The consumer module connects Spring Boot applications to coordinator heartbeat, assignment, revocation, fencing, and optional Redis Stream polling. The producer module resolves coordinator-managed routing metadata and publishes records to the active Redis Stream shard.
 
-The system is designed for Redis Stream workloads that need to avoid single-stream BigKey growth and distribute traffic across Redis Cluster hash slots while retaining a coordinator-managed rebalance model.
+The system is designed for Redis Stream workloads that need to avoid single-stream BigKey growth on standalone, Sentinel, or Cluster Redis, and distribute traffic across Redis Cluster hash slots when Cluster is used, while retaining a coordinator-managed rebalance model.
 
 ## Core Decisions
 

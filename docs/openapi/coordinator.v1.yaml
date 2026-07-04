@@ -9,10 +9,11 @@ info:
     resharding, and exposes monitoring data for dashboards and operators.
 
     The project exists because Redis Stream by itself does not provide a broker-side group coordinator,
-    cluster-aware stream sharding, or a built-in way to prevent one stream key from becoming a BigKey.
-    Redis Cluster distributes keys by hash slot, so a single stream key can still concentrate memory and write
-    traffic on one node. This API treats a logical stream as multiple physical shard stream keys and lets a
-    dedicated coordinator own the assignment protocol.
+    logical stream sharding, or a built-in way to prevent one stream key from becoming a BigKey.
+    The Redis data plane can run on standalone Redis, Sentinel, or Cluster. When Redis Cluster is used,
+    shard keys also distribute across hash slots so one hot logical stream does not concentrate memory and
+    write traffic on one node. This API treats a logical stream as multiple physical shard stream keys and
+    lets a dedicated coordinator own the assignment protocol.
 servers:
   - url: https://coordinator.ghkdqhrbals.org
     description: Public coordinator HTTPS endpoint.
@@ -1025,6 +1026,7 @@ components:
           type: string
         redisSlot:
           type: integer
+          description: Redis hash slot for the stream key. Cluster deployments use it for node placement; standalone and Sentinel deployments expose it as a stable diagnostic value.
     HeartbeatRequest:
       type: object
       required: [protocolVersion, requestId, memberId, memberEpoch, metadataVersion, runtimeConsumerCapacity]
@@ -1299,9 +1301,11 @@ components:
           type: string
         redisSlot:
           type: integer
+          description: Redis hash slot for this stream key. Cluster deployments use it for node placement; standalone and Sentinel deployments expose it as a diagnostic value.
         redisNodeEndpoint:
           type: string
           nullable: true
+          description: Redis node endpoint that owns this slot when Cluster metadata is available. Null for standalone and Sentinel deployments.
         streamLength:
           type: integer
           format: int64

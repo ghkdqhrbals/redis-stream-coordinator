@@ -42,11 +42,12 @@ python3 .github/scripts/test_docker_distribution.py
 docker build -t redis-stream-coordinator/coordinator-server:jvm-ci .
 ```
 
-Redis integration tests are gated and require an external Redis Cluster:
+Redis integration tests are gated and require an external Redis deployment:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
 REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --tests '*RedisCoordinatorStateStoreIntegrationTest'
 REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --tests '*RedisStreamProvisioningIntegrationTest'
 ```
@@ -91,7 +92,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 
 ### Redis Integration
 
-* [x] External Redis Cluster Docker Compose profiles for sample pods and stress smoke tests.
+* [x] External Redis Docker Compose profiles for standalone, Sentinel, or Cluster-backed sample pods and stress smoke tests.
 * [x] Redis health check in coordinator health response when Redis is required by active configuration.
 * [x] `CoordinatorStateStore` abstraction.
 * [x] In-memory state store.
@@ -102,6 +103,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 * [x] Redis metadata `schemaVersion` guard for persisted group aggregate reads and writes.
 * [x] Lua metadata hash updates to avoid stale writer overwrites.
 * [x] Redis Cluster hash-slot-safe coordinator keys.
+* [x] Standalone/Sentinel/Cluster Redis connection mode support with empty topology values ignored.
 * [x] Redis Stream shard key helper and hash-slot distribution helper.
 * [x] Optional Redis Stream shard and consumer-group provisioning.
 * [x] Redis Stream provisioning idempotent retry coverage after partial Redis failure.
@@ -222,7 +224,7 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test --te
 ### Docker, CI, And Open Source Docs
 
 * [x] Coordinator server Dockerfile with Java 24 runtime and non-root user.
-* [x] `compose.pods.yaml` for coordinator, sample pods, Prometheus, and Grafana against an external Redis Cluster.
+* [x] `compose.pods.yaml` for coordinator, sample pods, Prometheus, and Grafana against an external Redis deployment.
 * [x] `compose.stress.yaml` for external-Redis producer/consumer stress smoke.
 * [x] Docker smoke workflow that builds the image and checks `/coord/v1/monitoring/health`.
 * [x] Manual GHCR publish workflow for versioned coordinator image tags.

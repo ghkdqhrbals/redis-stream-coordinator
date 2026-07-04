@@ -119,6 +119,21 @@ class CoordinatorRedisCommandsTest {
         Mockito.verify(connection).close()
     }
 
+    @Test
+    fun `standalone redis does not run cluster slots command when resolving slot owners`() {
+        val factory = Mockito.mock(RedisConnectionFactory::class.java)
+        val connection = Mockito.mock(RedisConnection::class.java)
+
+        Mockito.`when`(factory.connection).thenReturn(connection)
+        Mockito.`when`(connection.nativeConnection).thenReturn(Any())
+
+        val owners = CoordinatorRedisCommands(redisConnectionFactory = factory).clusterSlotOwners(listOf(0, 9_192))
+
+        assertEquals(emptyMap(), owners)
+        Mockito.verify(connection, Mockito.never()).execute(Mockito.eq("CLUSTER"), Mockito.any())
+        Mockito.verify(connection).close()
+    }
+
     private fun clusterCommandsProxy(
         future: RedisFuture<Long>,
         dispatchedCommand: AtomicReference<Any?>,

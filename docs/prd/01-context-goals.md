@@ -17,7 +17,7 @@ Redis Stream Coordinator fills this gap by adapting the coordinator-managed reba
 ## Goals
 
 * Reduce Redis Stream BigKey risk by splitting traffic into multiple shard stream keys.
-* Support Redis Cluster-friendly key distribution.
+* Support Redis standalone, Redis Sentinel, and Redis Cluster data planes, with Cluster-friendly key distribution when Cluster is used.
 * Provide a dedicated coordinator server as the source of truth for group metadata, shard count and shard assignment.
 * Provide Spring Boot modules for consumer integration and producer routing/publishing.
 * Preserve sticky shard ownership when possible so rebalances move only the shards that need to move.
@@ -44,7 +44,7 @@ Redis Stream Coordinator fills this gap by adapting the coordinator-managed reba
 * Applications can choose a stable partition key for producer routing.
 * Duplicate delivery is acceptable at the infrastructure layer and must be handled by application idempotency where needed.
 * Operators can run the coordinator server with access to a durable metadata database.
-* Redis Cluster is used for the Redis Stream data plane. Redis-backed coordinator metadata is allowed only for development, tests, or non-critical deployments.
+* Redis standalone, Sentinel, or Cluster can be used for the Redis Stream data plane. Cluster deployments gain physical node distribution from the shard key hash-slot spread; standalone and Sentinel deployments use the same logical sharding to reduce single-key BigKey pressure.
 * Redis Stream data-plane reads, handler retries, DLQ policy, and ACK policy remain application-owned unless the optional starter polling adapter is enabled.
 * Bean-based `runtimeMaxConcurrency` is local worker capacity for one member; it is separate from annotation listener concurrency.
 

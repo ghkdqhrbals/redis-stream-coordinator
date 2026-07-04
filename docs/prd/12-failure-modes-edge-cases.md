@@ -336,7 +336,8 @@ Additional index behavior:
 | Cluster redirects expose unreachable addresses | Coordinator, consumer, producer | Use configured node mappings or fail with clear connection error |
 | ACL lacks stream commands | Consumer or producer | Fail startup or first command clearly |
 | ACL lacks metadata commands | Coordinator | Health degraded and mutations rejected |
-| Standalone/cluster mode mismatch | All Redis clients | Fail startup with clear mode mismatch |
+| Empty Cluster/Sentinel node property | Coordinator, consumer, producer | Treat empty node lists as absent and fall back to standalone instead of creating an empty topology |
+| Standalone/cluster mode mismatch | All Redis clients | Fail startup with clear mode mismatch when non-empty topology settings point at the wrong Redis deployment |
 
 ## Design Checklist for New Edge Cases
 

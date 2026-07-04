@@ -76,7 +76,7 @@ object RedisStreamShardKeys {
 private fun validateStreamPrefix(streamPrefix: String) {
     require(streamPrefix.isNotBlank()) { "streamPrefix must not be blank" }
     require('{' !in streamPrefix && '}' !in streamPrefix) {
-        "streamPrefix must not contain Redis Cluster hash tag braces"
+        "streamPrefix must not contain Redis hash tag braces"
     }
 }
 

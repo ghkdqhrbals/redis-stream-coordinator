@@ -49,7 +49,7 @@
 
 ### Redis Integration
 
-* [x] 외부 Redis Cluster를 바라보는 Docker pod/stress compose
+* [x] 외부 standalone/Sentinel/Cluster Redis를 바라보는 Docker pod/stress compose
 * [x] Memory state store
 * [x] Redis state store
 * [x] Redis group별 단일 metadata hash key
@@ -59,6 +59,7 @@
 * [x] Redis group별 단일 metadata hash key
 * [x] Lua metadata hash update
 * [x] Redis Cluster hash-slot-safe coordinator keys
+* [x] Standalone/Sentinel/Cluster Redis connection mode 지원과 빈 topology 값 무시
 * [x] Optional Redis Stream shard and consumer-group provisioning
 * [x] Coordinator Redis command template
 * [x] JVM Dockerfile
@@ -132,8 +133,9 @@ docker build -t redis-stream-coordinator/coordinator-server:jvm-ci .
 Redis integration tests:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
 REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
   --tests '*RedisCoordinatorStateStoreIntegrationTest' \
   --tests '*RedisStreamProvisioningIntegrationTest'

@@ -1,3 +1,4 @@
+com.redisstream.RedisConnectionDetailsAutoConfiguration
 com.redisstream.RedisStreamCoordinatorAutoConfiguration
 com.redisstream.consumer.CoordinatorConsumerAutoConfiguration
 com.redisstream.producer.ProducerRoutingAutoConfiguration

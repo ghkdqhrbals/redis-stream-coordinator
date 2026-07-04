@@ -17,7 +17,7 @@ Examples:
 | `orders` | `3` | `orders:0`, `orders:1`, `orders:2` |
 | `orders-blue` | `2` | `orders-blue:0`, `orders-blue:1` |
 
-`streamPrefix` must not contain Redis Cluster hash tag braces. Shard keys intentionally avoid hash tags so Redis Cluster can distribute them across hash slots.
+`streamPrefix` must not contain Redis hash tag braces. Shard keys intentionally avoid hash tags so Redis Cluster can distribute them across hash slots when Cluster is used.
 
 ## Producer Routing
 

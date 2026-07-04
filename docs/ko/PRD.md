@@ -2,7 +2,7 @@
 
 Redis Stream Coordinator는 Kafka KIP-848의 coordinator-managed rebalance 개념을 Redis Stream sharding에 맞게 재설계한 프로젝트이다. 이 프로젝트는 coordinator 전용 서버, Spring Boot consumer 통합 모듈, Spring Boot producer routing/publishing 모듈, 운영용 monitoring/API 문서를 함께 제공한다.
 
-이 모듈을 만든 이유는 명확하다. Redis Stream은 가벼운 append-only log로 쓰기 좋지만, 하나의 stream key는 BigKey가 될 수 있고 Redis Cluster에서도 하나의 hash slot과 하나의 primary node에 트래픽이 몰릴 수 있다. Redis 자체에는 logical stream을 여러 physical shard stream key로 나눈 뒤 producer routing metadata, consumer membership, shard ownership, revoke-before-assign handoff, resharding protocol을 중앙에서 관리하는 broker-side coordinator가 없다. Redis Stream BigKey 문제와 Redis Cluster 균등 분산, consumer ownership coordination을 함께 다루는 공개 레퍼런스도 거의 없다. 이 프로젝트는 그 공백을 재사용 가능한 오픈소스 control plane과 Spring Boot integration으로 제공하기 위해 만들어졌다.
+이 모듈을 만든 이유는 명확하다. Redis Stream은 가벼운 append-only log로 쓰기 좋지만, 하나의 stream key는 BigKey가 될 수 있고 Redis Cluster에서는 하나의 hash slot과 하나의 primary node에 트래픽이 몰릴 수 있다. Redis 자체에는 logical stream을 여러 physical shard stream key로 나눈 뒤 producer routing metadata, consumer membership, shard ownership, revoke-before-assign handoff, resharding protocol을 중앙에서 관리하는 broker-side coordinator가 없다. Redis Stream BigKey 문제와 선택적인 Redis Cluster 균등 분산, consumer ownership coordination을 함께 다루는 공개 레퍼런스도 거의 없다. 이 프로젝트는 그 공백을 재사용 가능한 오픈소스 control plane과 Spring Boot integration으로 제공하기 위해 만들어졌다.
 
 ## Design Index
 

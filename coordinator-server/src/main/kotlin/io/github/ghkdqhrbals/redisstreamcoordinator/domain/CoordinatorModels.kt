@@ -454,7 +454,7 @@ data class ProducerRoutingShard(
     val shardIndex: Int,
     @field:Schema(description = "Physical Redis Stream key.", example = "create-order:4")
     val streamKey: String,
-    @field:Schema(description = "Redis Cluster hash slot for the stream key.", example = "12345")
+    @field:Schema(description = "Redis hash slot for the stream key. Used for Cluster placement and retained as a stable diagnostic value for standalone Redis.", example = "12345")
     val redisSlot: Int,
 )
 
@@ -563,11 +563,11 @@ data class StreamShardOffset(
     val shard: ShardId,
     @field:Schema(description = "Physical Redis Stream key.", example = "create-order:4")
     val streamKey: String,
-    @field:Schema(description = "Redis Cluster slot for this stream key.")
+    @field:Schema(description = "Redis hash slot for this stream key. Cluster deployments use it for node placement; standalone deployments expose it as a diagnostic value.")
     val redisSlot: Int,
-    @field:Schema(description = "Redis node endpoint that owns this slot when cluster metadata is available.")
+    @field:Schema(description = "Redis node endpoint that owns this slot when Cluster metadata is available. Null for standalone and Sentinel deployments.")
     val redisNodeEndpoint: String?,
-    @field:Schema(description = "Redis cluster node id when available.")
+    @field:Schema(description = "Redis Cluster node id when available.")
     val redisNodeId: String?,
     val redisSlotRangeStart: Int?,
     val redisSlotRangeEnd: Int?,

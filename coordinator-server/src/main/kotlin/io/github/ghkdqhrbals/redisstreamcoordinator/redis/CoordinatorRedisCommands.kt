@@ -222,7 +222,7 @@ open class CoordinatorRedisCommands(
             return emptyMap()
         }
 
-        val ranges = runCatching { clusterSlotRangesWithNative() ?: clusterSlotRangesWithRawCommand() }
+        val ranges = runCatching { clusterSlotRangesWithNative().orEmpty() }
             .getOrDefault(emptyList())
         if (ranges.isEmpty()) {
             return emptyMap()
@@ -264,13 +264,6 @@ open class CoordinatorRedisCommands(
                 null
             }
         }
-
-    private fun clusterSlotRangesWithRawCommand(): List<RedisClusterSlotOwner> =
-        parseClusterSlots(
-            withConnection { connection ->
-                connection.execute("CLUSTER", "SLOTS".bytes())
-            },
-        )
 
     /**
      * Reads Redis Stream records in ascending id order.

@@ -10,6 +10,7 @@ Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을
 * group 식별자는 coordinator API의 `{streamPrefix, consumerGroup}` path/body에서 받는다.
 * member join/leave, metadata change, Coordinator Admin API로 요청된 shard count change를 group epoch 증가로 모델링한다.
 * topic partition에 해당하는 Redis Stream shard count는 Coordinator Admin API 요청으로만 생성/증감한다.
+* Redis Stream data plane은 standalone Redis, Redis Sentinel, Redis Cluster를 지원한다. Cluster를 사용할 때는 shard key hash slot 분산으로 node 분산 효과를 얻는다.
 * Annotation listener의 `concurrency = "N"`은 N개의 독립 coordinator member를 만드는 member fan-out이다. 각 member는 별도 heartbeat와 assignment state를 가진다.
 * Bean 기반 `runtimeMaxConcurrency`는 partition/shard 개수가 아니라 하나의 member 안에서 사용할 consumer worker 수이며, coordinator assignment weight로 쓰지 않는다.
 * target assignment는 coordinator가 계산하고 assignment epoch으로 versioning한다.
@@ -38,7 +39,7 @@ Redis Stream에는 Kafka broker coordinator가 없으므로, 동일한 개념을
 
 ## Assumptions
 
-* Redis는 stream data plane으로 사용한다.
+* Redis는 stream data plane으로 사용한다. Standalone/Sentinel에서는 logical sharding으로 단일 stream key BigKey 압력을 줄이고, Cluster에서는 같은 sharding이 hash slot 분산도 제공한다.
 * Coordinator metadata store는 Redis-backed 단일 metadata key이다.
 * 각 member는 runtime 시작 시 pod IP context에서 `memberId`를 직접 생성한다.
 * producer와 consumer는 coordinator가 Redis metadata key 기준으로 내려준 shard count을 source of truth로 사용한다.

@@ -31,12 +31,15 @@ python3 .github/scripts/test_docker_distribution.py
 
 ## Redis Integration Tests
 
-Redis integration tests are disabled by default. They require an external Redis Cluster:
+Redis integration tests are disabled by default. They require an external Redis instance. Standalone Redis is enough for command semantics and metadata-store tests:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
 ```
+
+To exercise Redis Cluster routing metadata, set `REDIS_CLUSTER_NODES` instead. Legacy `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD` remain accepted by the Docker smoke stack.
 
 Then run:
 
@@ -48,11 +51,12 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
 
 ## Docker Pod Smoke
 
-Use `compose.pods.yaml` to run the pod topology against an external Redis Cluster:
+Use `compose.pods.yaml` to run the pod topology against an external Redis deployment:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 ```
 

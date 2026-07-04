@@ -26,7 +26,7 @@ class MonitoringStreamController(
     @Operation(
         operationId = "getStreamShardOffsets",
         summary = "Read shard offsets and lag",
-        description = "Returns per-shard stream length, Redis consumer-group lag, pending count, memory usage, Redis Cluster node placement, and live owner members.",
+        description = "Returns per-shard stream length, Redis consumer-group lag, pending count, memory usage, optional Redis Cluster node placement, and live owner members.",
         responses = [
             ApiResponse(responseCode = "200", description = "Shard offset snapshot."),
             ApiResponse(responseCode = "404", description = "The group does not exist."),

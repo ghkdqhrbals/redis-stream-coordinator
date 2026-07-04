@@ -17,7 +17,7 @@ streamKey = "{streamPrefix}:{shardIndex}"
 | `orders` | `3` | `orders:0`, `orders:1`, `orders:2` |
 | `orders-blue` | `2` | `orders-blue:0`, `orders-blue:1` |
 
-`streamPrefix`에는 Redis Cluster hash tag brace를 포함할 수 없다. Shard key는 hash tag를 쓰지 않아 Redis Cluster가 hash slot 기준으로 분산할 수 있게 한다.
+`streamPrefix`에는 Redis hash tag brace를 포함할 수 없다. Shard key는 hash tag를 쓰지 않아 Redis Cluster 사용 시 hash slot 기준으로 분산할 수 있게 한다.
 
 ## Producer Routing
 

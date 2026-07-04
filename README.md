@@ -6,14 +6,14 @@ Redis Stream Coordinator is a design project for managing Redis Stream sharding 
 
 Redis Stream stores messages under stream keys. As traffic grows, a single stream key can easily become a BigKey. Even when Redis Cluster is used, one stream key belongs to one hash slot, so the load cannot be evenly distributed across cluster nodes unless the stream is split into multiple keys.
 
-In practice, solving this requires application-level sharding: splitting stream keys, routing producer writes, assigning shard ownership to consumers, and safely changing shard counts over time. However, there are very few public references for managing custom Redis Stream sharding specifically to avoid BigKey issues and achieve even distribution in Redis Cluster.
+In practice, solving this requires application-level sharding: splitting stream keys, routing producer writes, assigning shard ownership to consumers, and safely changing shard counts over time. However, there are very few public references for managing custom Redis Stream sharding specifically to avoid BigKey issues and, when Redis Cluster is used, achieve even distribution across cluster slots.
 
 This project was created to fill that gap. It adapts the coordinator-managed rebalance ideas from Kafka KIP-848 to Redis Stream, using a Redis-backed coordinator as the source of truth for shard metadata and consumer assignments.
 
 ## Core Ideas
 
 * Split Redis Stream data into shard keys to reduce BigKey risk.
-* Design shard keys so they can be distributed evenly across Redis Cluster hash slots.
+* Design shard keys so they reduce single-key pressure on standalone Redis and can be distributed evenly across Redis Cluster hash slots.
 * Route producer writes using coordinator-managed shard routing metadata.
 * Let consumer runtime members heartbeat to the coordinator and converge on coordinator-managed target assignments.
 * Rebalance only the shards that need to move when members join, leave, expire, or when shard counts change.
@@ -248,6 +248,8 @@ During Spring bean initialization, managed consumers validate coordinator routin
 * [Published Scalar API Reference](https://ghkdqhrbals.github.io/redis-stream-coordinator/design-docs/latest/api.html)
 * [Design PRD](docs/PRD.md)
 * [Design PRD (Korean)](docs/ko/PRD.md)
+* [Release 0.3.5](docs/releases/0.3.5.md)
+* [Release 0.3.5 (Korean)](docs/ko/releases/0.3.5.md)
 * [Release 0.3.4](docs/releases/0.3.4.md)
 * [Release 0.3.4 (Korean)](docs/ko/releases/0.3.4.md)
 * [Release 0.3.3](docs/releases/0.3.3.md)
@@ -276,7 +278,7 @@ During Spring bean initialization, managed consumers validate coordinator routin
 The public Maven coordinates use the verified GitHub namespace:
 
 ```kotlin
-implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.3.4")
+implementation("io.github.ghkdqhrbals:redisstream-spring-boot-starter:0.3.5")
 ```
 
 Published library artifacts:
@@ -297,8 +299,9 @@ Maven Central publishing is manual through the `Maven Central` GitHub Actions wo
 ## Docker Quick Start
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 
 RSC_TOKEN="$(
@@ -312,11 +315,11 @@ curl -H "Authorization: Bearer ${RSC_TOKEN}" \
   http://localhost:8080/coord/v1/monitoring/health
 ```
 
-The Docker quick start uses the external Redis Cluster declared through `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD`; this repository no longer keeps a local Redis Cluster compose file. The coordinator console is available under `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default.
+The Docker quick start can use standalone Redis, Redis Sentinel, or Redis Cluster through Spring Boot Redis properties. For Cluster, set `REDIS_CLUSTER_NODES`; legacy `AWS_REDIS_CLUSTER_NODES` and `AWS_REDIS_PASSWORD` are still accepted. The coordinator console is available under `http://localhost:8080/console`. The local default login is `admin` / `password`; API automation should call `/coord/v1/auth/login` and then send `Authorization: Bearer <token>`. Tokens expire after seven days by default.
 
 The runtime API reference is available at `http://localhost:8080/scalar`. The published static API reference is generated from `docs/openapi/coordinator.v1.yaml`.
 
-Run a full pod smoke stack with your configured external Redis, coordinator, two consumer pods, and one auto-publishing pod:
+Run a full pod smoke stack with your configured Redis, coordinator, two consumer pods, and one auto-publishing pod:
 
 ```bash
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build

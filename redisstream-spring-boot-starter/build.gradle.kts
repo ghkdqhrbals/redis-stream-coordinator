@@ -27,10 +27,12 @@ dependencies {
     api("org.springframework:spring-context")
     api("org.springframework:spring-web")
 
+    compileOnly("org.springframework.boot:spring-boot-data-redis")
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-data-redis")
     testImplementation(kotlin("test"))
 }
 

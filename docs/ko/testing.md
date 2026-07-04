@@ -31,12 +31,15 @@ python3 .github/scripts/test_docker_distribution.py
 
 ## Redis Integration Tests
 
-Redis integration tests는 기본 비활성화되어 있다. 외부 Redis Cluster 정보를 먼저 설정한다.
+Redis integration tests는 기본 비활성화되어 있다. 외부 Redis 인스턴스 정보를 먼저 설정한다. command semantics와 metadata store 테스트는 standalone Redis만으로도 충분하다.
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
 ```
+
+Redis Cluster routing metadata까지 확인하려면 `REDIS_CLUSTER_NODES`를 설정한다. Docker smoke stack은 기존 `AWS_REDIS_CLUSTER_NODES`, `AWS_REDIS_PASSWORD`도 계속 허용한다.
 
 그 다음:
 
@@ -48,11 +51,12 @@ REDIS_COORDINATOR_INTEGRATION_TESTS=true ./gradlew :coordinator-server:test \
 
 ## Docker Pod Smoke
 
-외부 Redis Cluster를 바라보는 pod topology를 Docker로 실행:
+외부 Redis 배포를 바라보는 pod topology를 Docker로 실행:
 
 ```bash
-export AWS_REDIS_CLUSTER_NODES=3.39.42.28:6379
-export AWS_REDIS_PASSWORD='your-redis-password'
+export REDIS_HOST=127.0.0.1
+export REDIS_PORT=6379
+export REDIS_PASSWORD='your-redis-password'
 docker compose -f compose.pods.yaml -p rsc-pods up -d --build
 ```
 

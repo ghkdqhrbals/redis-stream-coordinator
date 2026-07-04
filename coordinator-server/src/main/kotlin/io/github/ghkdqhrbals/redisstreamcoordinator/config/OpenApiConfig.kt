@@ -33,7 +33,7 @@ class OpenApiConfig {
                         """
                         Control-plane API for Redis Stream shard groups, member heartbeats, producer routing, resharding, monitoring, ACL, and audit operations.
 
-                        Redis Stream Coordinator exists because a single Redis Stream key can become a BigKey and a Redis Cluster hash-slot hotspot. The coordinator treats one logical stream as multiple physical shard streams and owns the membership, assignment, revoke-before-assign, producer routing, and monitoring protocol around those shards.
+                        Redis Stream Coordinator exists because a single Redis Stream key can become a BigKey and, on Redis Cluster, a hash-slot hotspot. The coordinator treats one logical stream as multiple physical shard streams and owns the membership, assignment, revoke-before-assign, producer routing, and monitoring protocol around those shards. The Redis data plane can run on standalone Redis, Sentinel, or Cluster.
                         """.trimIndent(),
                     ),
             )
